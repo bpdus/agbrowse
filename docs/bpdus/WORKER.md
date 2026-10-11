@@ -5,7 +5,7 @@ title: bpdus agbrowse 전용 에이전트 워커
 status: draft
 summary: 전용 Chrome 프로필과 디버깅 파이프를 쓰는 포그라운드 워커의 조회·cart 경계, 종료, 한계와 되돌리기를 적는다.
 created: 2026-10-11
-updated: 2026-10-11
+updated: 2026-10-12
 language: ko
 render_target: github
 project: bpdus/agbrowse
@@ -38,6 +38,14 @@ node skills/browser/agent-worker.mjs
 ## 수동 로그인
 
 Chrome 창이 열리면 사용자가 그 창에서 직접 로그인한다. 장바구니 도구는 로그인 화면을 감지하면 `LOGIN_REQUIRED`를 반환한다. 자격 증명을 읽거나 입력하지 않고, 로그인 주소를 따라가거나 재시도하지 않는다. CAPTCHA나 차단 화면에서는 `HUMAN_REQUIRED`를 반환한다. 로그인 상태는 전용 프로필에 남고, 일상 Chrome 프로필로 복사하지 않는다.
+
+Naver 로그인이 필요하면 저장소 루트에서 `bin/bpdus/login-naver.sh`를 실행한다. 워커가 실행 중이면 기본 동작은 거부한다. `bin/bpdus/login-naver.sh --stop-worker`는 워커 프로세스에만 `SIGTERM`을 보내고 최대 15초 기다린다. Chrome은 전경에서 열리며, 종료된 뒤 워커 재시작 안내를 출력한다. 로그인 쿠키는 전용 프로필에 남으므로 다음 워커 실행에서도 사용할 수 있다.
+
+이 프로필에서는 Naver만 방문한다. Google에 로그인하거나 Chrome Sync를 켜지 않는다. 전용 프로필만으로 URL 차단 정책을 보장할 수는 없다. `URLBlocklist`와 `URLAllowlist`는 관리형 설정이 필요하므로 이 변경에서는 Chrome 관리 정책을 바꾸지 않는다. [Chrome 정책 문서](https://support.google.com/chrome/a/answer/7532419?hl=en)를 참고한다.
+
+로그인 스크립트는 `~/.agbrowse-bpdus/profile.lock`, `profile.lock.reclaiming`, 프로필의 `SingletonLock`, `SingletonSocket`, `SingletonCookie`가 있으면 실행을 거부한다. 잠금을 자동으로 지우지 않는다. Chrome의 마지막 창만 닫아도 macOS에서 Chrome 프로세스가 남을 수 있으므로, 워커를 다시 시작하기 전에 Chrome 메뉴에서 **Quit Google Chrome**을 선택한다.
+
+worker와 gateway가 모두 멈춰 있으면 `~/.agbrowse-bpdus/bin/start-in-herdr.sh`로 다시 시작한다. gateway가 계속 실행 중이면 전체 launcher가 거부하므로 기존 herdr worker pane에서 `node skills/browser/agent-worker.mjs`만 다시 실행한다.
 
 ## 파이프 전송
 
