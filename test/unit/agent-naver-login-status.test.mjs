@@ -28,6 +28,18 @@ describe('Naver login status adapter', () => {
             .toEqual({ status: 'logged_in', evidence: 'logout_link' });
     });
 
+    it.each([
+        'http://nid.naver.com/nidlogin.logout',
+        'ftp://nid.naver.com/nidlogin.logout',
+        'https://attacker.test@nid.naver.com/nidlogin.logout',
+    ])('returns unknown for an unsafe auth URL: %s', (href) => {
+        const dom = new JSDOM('<a></a>', { url: LOGIN_STATUS_URL });
+        dom.window.document.querySelector('a').setAttribute('href', href);
+
+        expect(readLoginStatusFromDocument(dom.window.document))
+            .toEqual({ status: 'unknown', evidence: 'none' });
+    });
+
     it('never returns fixture names, email addresses, or page-derived values', () => {
         for (const name of ['logged-in', 'logged-out', 'unknown', 'both']) {
             const result = readLoginStatusFromDocument(fixtureDocument(name));

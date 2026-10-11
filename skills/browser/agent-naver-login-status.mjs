@@ -41,7 +41,11 @@ export function readLoginStatusFromDocument(doc) {
                 if (!value) return false;
                 try {
                     const url = new URL(value, root.defaultView?.location?.href || 'https://www.naver.com/');
-                    return url.host === 'nid.naver.com' && url.pathname === pathname;
+                    return url.protocol === 'https:'
+                        && !url.username
+                        && !url.password
+                        && url.host === 'nid.naver.com'
+                        && url.pathname === pathname;
                 } catch {
                     return false;
                 }
