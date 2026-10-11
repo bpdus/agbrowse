@@ -308,6 +308,8 @@ macOS Keychain 접근 방식과 박스의 키 저장 방식은 확인 필요다.
       "protocol_version": "0.1.0",
       "request_id": "req_decide_88",
       "session_id": "bs_01",
+      "operation_id": "op_72",
+      "idempotency_key": "idem_decide_88",
       "approval_id": "ap_72",
       "event_id": "ae_88",
       "decision": "approve",
@@ -367,7 +369,11 @@ macOS Keychain 접근 방식과 박스의 키 저장 방식은 확인 필요다.
   "approval_id": "ap_72",
   "state": "DENIED",
   "binding_hash": "sha256:<canonical-intent-hash>",
-  "decision": "deny"
+  "decision": "deny",
+  "error": {
+    "code": "APPROVAL_DENIED",
+    "message": "사용자가 승인을 거절했습니다."
+  }
 }
 ```
 
