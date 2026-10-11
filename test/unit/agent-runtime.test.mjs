@@ -757,13 +757,17 @@ describe('agent-runtime', () => {
         const handler = made.context.routes[0].handler;
         const decisions = [];
 
-        async function request(url, { page, method = 'GET', navigation = false, redirectedFrom } = {}) {
+        async function request(url, { page, method = 'GET', navigation = false, redirectedFrom, fetchResponses = [] } = {}) {
             const decision = { url, page: page.targetId, method, navigation, fetched: 0, aborted: false };
             const routedRequest = makeRoutedRequest(url, { page, method, navigation, redirectedFrom });
+            const responses = [...fetchResponses];
             await handler({
                 request: () => routedRequest,
                 async abort() { decision.aborted = true; },
-                async fetch() { decision.fetched += 1; return { status: () => 200, headers: () => ({}) }; },
+                async fetch() {
+                    decision.fetched += 1;
+                    return responses.shift() ?? { status: () => 200, headers: () => ({}) };
+                },
                 async fulfill() {},
                 async continue() {},
             });
@@ -771,9 +775,17 @@ describe('agent-runtime', () => {
             return decision;
         }
 
+        let redirectTo = 'https://nid.naver.com/nidlogin.login';
         pages[0].goto = async (url) => {
             const initial = makeRoutedRequest(url, { page: pages[0], navigation: true });
-            await request(url, { page: pages[0], navigation: true });
+            await request(url, {
+                page: pages[0],
+                navigation: true,
+                fetchResponses: [
+                    { status: () => 302, headers: () => ({ location: redirectTo }) },
+                    { status: () => 200, headers: () => ({}) },
+                ],
+            });
             await request('https://ssl.pstatic.net/static/home.css', { page: pages[0] });
             await request('https://evil.example/pixel', { page: pages[0] });
             await request('https://www.naver.com/write', { page: pages[0], method: 'POST', navigation: true, redirectedFrom: () => initial });
@@ -781,7 +793,7 @@ describe('agent-runtime', () => {
             await request('https://nid.naver.com/nidlogin.login', { page: pages[0], navigation: true, redirectedFrom: () => initial });
             await request('https://evil.example/redirected', { page: pages[0], navigation: true, redirectedFrom: () => initial });
             await request('https://www.naver.com/redirected/path', { page: pages[0], navigation: true, redirectedFrom: () => initial });
-            pages[0].currentUrl = 'https://nid.naver.com/nidlogin.login';
+            pages[0].currentUrl = 'https://nid.naver.com/user2/help/myInfo';
         };
         pages[0].evaluate = async (fn) => {
             throw new Error(`page content must not be read for a recognized URL: ${fn.name}`);
@@ -789,12 +801,17 @@ describe('agent-runtime', () => {
 
         const result = await runtime.dispatchRead('naver.login_status', { session_id: first.sessionId });
         expect(result).toEqual({ status: 'logged_out', evidence: 'redirect_login' });
+        expect(pages[0].url()).toBe('https://nid.naver.com/user2/help/myInfo');
         expect(decisions.slice(0, 2).map(({ fetched, aborted }) => ({ fetched, aborted })))
-            .toEqual([{ fetched: 1, aborted: false }, { fetched: 1, aborted: false }]);
+            .toEqual([{ fetched: 2, aborted: false }, { fetched: 1, aborted: false }]);
         expect(decisions.slice(2, 5).every(({ fetched, aborted }) => fetched === 0 && aborted)).toBe(true);
         expect(decisions[5]).toMatchObject({ fetched: 1, aborted: false, url: 'https://nid.naver.com/nidlogin.login' });
         expect(decisions[6]).toMatchObject({ fetched: 0, aborted: true, url: 'https://evil.example/redirected' });
         expect(decisions[7]).toMatchObject({ fetched: 1, aborted: false, url: 'https://www.naver.com/redirected/path' });
+
+        redirectTo = 'https://evil.example/redirected';
+        expect(await runtime.dispatchRead('naver.login_status', { session_id: first.sessionId }))
+            .toEqual({ status: 'unknown', evidence: 'none' });
 
         const afterCall = await request('https://www.naver.com/static/after.css', { page: pages[0] });
         expect(afterCall).toMatchObject({ fetched: 0, aborted: true });

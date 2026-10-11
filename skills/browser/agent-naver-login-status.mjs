@@ -129,8 +129,9 @@ export function readLoginStatusFromDocument(doc) {
  * Navigate through a page-like port, inspect only its final URL first, then
  * fall back to the existing link-only document check when that URL is unknown.
  * @param {{ goto?: (url: string, options?: { waitUntil?: string }) => Promise<unknown>, url?: () => string, evaluate?: (fn: (doc?: ParentNode) => unknown) => Promise<unknown> }} page
+ * @param {{ getValidatedFinalUrl?: () => string | null, requireValidatedFinalUrl?: boolean }} [options]
  */
-export async function readLoginStatusFromPage(page) {
+export async function readLoginStatusFromPage(page, options = {}) {
     let navigationSucceeded = false;
     if (typeof page?.goto === 'function') {
         try {
@@ -141,8 +142,17 @@ export async function readLoginStatusFromPage(page) {
         }
     }
 
+    const validatedFinalUrl = typeof options.getValidatedFinalUrl === 'function'
+        ? options.getValidatedFinalUrl()
+        : null;
+    if (options.requireValidatedFinalUrl && !validatedFinalUrl) {
+        return { status: 'unknown', evidence: 'none' };
+    }
+
     const primary = navigationSucceeded
-        ? readLoginStatusFromFinalUrl(typeof page?.url === 'function' ? page.url() : '')
+        ? readLoginStatusFromFinalUrl(options.requireValidatedFinalUrl
+            ? validatedFinalUrl
+            : (typeof page?.url === 'function' ? page.url() : ''))
         : null;
     if (primary) return primary;
 

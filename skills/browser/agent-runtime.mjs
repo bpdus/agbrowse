@@ -384,6 +384,9 @@ async function guardRequest(route, pagePolicies) {
         try { page = request.frame?.().page?.() ?? null; } catch { page = null; }
         const pagePolicy = page && pagePolicies.get(page);
         const policy = pagePolicy?.requestPolicy ?? productionSearchPolicy();
+        const loginStatusTopLevelNavigation = pagePolicy?.requestPolicy?.operation === 'naver.login_status'
+            && requestIsNavigation(request)
+            && !requestRedirectedFrom(request);
         if (chainHasWebSocket(request)) {
             await abortRoute(route);
             return;
@@ -451,6 +454,7 @@ async function guardRequest(route, pagePolicies) {
             const status = typeof response.status === 'function' ? response.status() : 0;
             if (status < 300 || status >= 400) {
                 await route.fulfill({ response });
+                if (loginStatusTopLevelNavigation && pagePolicy) pagePolicy.loginStatusFinalUrl = nextUrl;
                 return;
             }
             if (followed >= MAX_REDIRECTS) {
@@ -533,7 +537,7 @@ export function createAgentRuntime(config) {
     let lockedDir = null;
     /** @type {Map<string, { page: import('playwright-core').Page, targetId: string, epoch: number, seenPageEpoch: number, policyApplied: boolean }>} */
     const sessions = new Map();
-    /** @type {WeakMap<object, { mode: 'read' | 'cart', mutationPermit: any, blockedReason: string | null, requestPolicy?: ReturnType<typeof loginStatusPolicy> }>} */
+    /** @type {WeakMap<object, { mode: 'read' | 'cart', mutationPermit: any, blockedReason: string | null, requestPolicy?: ReturnType<typeof loginStatusPolicy>, loginStatusFinalUrl?: string | null }>} */
     const pagePolicies = new WeakMap();
     let intentionalStop = false;
     let disconnectNoted = false;
@@ -711,7 +715,7 @@ export function createAgentRuntime(config) {
         let page;
         try {
             page = await ctx.newPage();
-            pagePolicies.set(page, { mode: 'read', mutationPermit: null, blockedReason: null });
+            pagePolicies.set(page, { mode: 'read', mutationPermit: null, blockedReason: null, loginStatusFinalUrl: null });
             const targetId = await readTargetId(page);
             if (disconnectNoted || state !== 'running' || intentionalStop) {
                 throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
@@ -957,9 +961,14 @@ export function createAgentRuntime(config) {
                     const statusPolicy = loginStatusPolicy();
                     const previousPolicy = pagePolicy.requestPolicy;
                     pagePolicy.requestPolicy = statusPolicy;
+                    pagePolicy.loginStatusFinalUrl = null;
                     try {
-                        return await readLoginStatusFromPage(binding.page);
+                        return await readLoginStatusFromPage(binding.page, {
+                            getValidatedFinalUrl: () => pagePolicy.loginStatusFinalUrl ?? null,
+                            requireValidatedFinalUrl: true,
+                        });
                     } finally {
+                        pagePolicy.loginStatusFinalUrl = null;
                         if (previousPolicy === undefined) delete pagePolicy.requestPolicy;
                         else pagePolicy.requestPolicy = previousPolicy;
                     }
