@@ -191,7 +191,7 @@ describe('agent-runtime', () => {
 
     it('returns only the lifecycle methods', () => {
         const runtime = createAgentRuntime();
-        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'inspectSession', 'openSession', 'start', 'stop']);
+        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
     });
 
     it('rejects a foreign profile or endpoint before launch', async () => {

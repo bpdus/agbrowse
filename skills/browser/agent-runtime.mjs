@@ -10,6 +10,14 @@ import * as path from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { acquireProfileLock, releaseProfileLock } from './profile-lock.mjs';
+import { AgentReadError, READ_ERROR_MESSAGES, readError } from './agent-read-error.mjs';
+import {
+    classifyRequest,
+    productionSearchPolicy,
+    readListingFromDocument,
+    runListing,
+    runObserve,
+} from './agent-naver-search.mjs';
 
 const WORKER_DIR_NAME = '.agbrowse-bpdus';
 const PROFILE_DIR_NAME = 'agent-profile';
@@ -191,6 +199,30 @@ function launchOptions() {
 }
 
 /**
+ * Fixed page script. It records document mutations and is not caller input.
+ */
+function installEpochWatch() {
+    const root = /** @type {any} */ (globalThis);
+    if (root.__agbrowseEpochWatch) return root.__agbrowseDocumentEpoch || 1;
+    root.__agbrowseDocumentEpoch = 1;
+    const bump = () => {
+        root.__agbrowseDocumentEpoch += 1;
+    };
+    const Observer = root.MutationObserver;
+    if (typeof Observer === 'function' && root.document && root.document.documentElement) {
+        const observer = new Observer(bump);
+        observer.observe(root.document.documentElement, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            characterData: true,
+        });
+    }
+    root.__agbrowseEpochWatch = true;
+    return root.__agbrowseDocumentEpoch;
+}
+
+/**
  * @param {unknown} [config]
  */
 export function createAgentRuntime(config) {
@@ -205,7 +237,7 @@ export function createAgentRuntime(config) {
     let lockToken = null;
     /** @type {string | null} */
     let lockedDir = null;
-    /** @type {Map<string, { page: import('playwright-core').Page, targetId: string }>} */
+    /** @type {Map<string, { page: import('playwright-core').Page, targetId: string, epoch: number, policyApplied: boolean }>} */
     const sessions = new Map();
     let intentionalStop = false;
     let disconnectNoted = false;
@@ -367,67 +399,266 @@ export function createAgentRuntime(config) {
         });
     }
 
-    async function openSession() {
-        return enqueue(async () => {
-            assertRunning();
-            const ctx = context;
-            if (!ctx) throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
-            /** @type {import('playwright-core').Page | undefined} */
-            let page;
-            try {
-                page = await ctx.newPage();
-                const targetId = await readTargetId(page);
-                if (disconnectNoted || state !== 'running' || intentionalStop) {
-                    throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
-                }
-                const sessionId = `ses_${randomBytes(8).toString('hex')}`;
-                sessions.set(sessionId, { page, targetId });
-                return { sessionId, targetId };
-            } catch (error) {
-                if (page) {
-                    try { await page.close(); } catch { /* already closed */ }
-                }
-                if (error instanceof AgentRuntimeError) throw error;
-                if (disconnectNoted || state !== 'running' || intentionalStop) {
-                    throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
-                }
-                throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+    async function openSessionUnlocked() {
+        assertRunning();
+        const ctx = context;
+        if (!ctx) throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
+        /** @type {import('playwright-core').Page | undefined} */
+        let page;
+        try {
+            page = await ctx.newPage();
+            const targetId = await readTargetId(page);
+            if (disconnectNoted || state !== 'running' || intentionalStop) {
+                throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
             }
-        });
+            const sessionId = `ses_${randomBytes(8).toString('hex')}`;
+            sessions.set(sessionId, { page, targetId, epoch: 1, policyApplied: false });
+            return { sessionId, targetId };
+        } catch (error) {
+            if (page) {
+                try { await page.close(); } catch { /* already closed */ }
+            }
+            if (error instanceof AgentRuntimeError) throw error;
+            if (disconnectNoted || state !== 'running' || intentionalStop) {
+                throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
+            }
+            throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+        }
+    }
+
+    async function openSession() {
+        return enqueue(() => openSessionUnlocked());
+    }
+
+    /**
+     * @param {string} sessionId
+     */
+    function requireBinding(sessionId) {
+        const binding = sessions.get(sessionId);
+        if (!binding) throw new AgentRuntimeError('SESSION_NOT_FOUND', 'Session was not found.');
+        if (typeof binding.page.isClosed === 'function' && binding.page.isClosed()) {
+            sessions.delete(sessionId);
+            throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+        }
+        return binding;
+    }
+
+    /**
+     * @param {string} sessionId
+     */
+    async function inspectSessionUnlocked(sessionId) {
+        assertRunning();
+        const binding = requireBinding(sessionId);
+        return { sessionId, targetId: binding.targetId };
     }
 
     /**
      * @param {string} sessionId
      */
     async function inspectSession(sessionId) {
-        return enqueue(async () => {
-            assertRunning();
-            const binding = sessions.get(sessionId);
-            if (!binding) throw new AgentRuntimeError('SESSION_NOT_FOUND', 'Session was not found.');
-            if (typeof binding.page.isClosed === 'function' && binding.page.isClosed()) {
-                sessions.delete(sessionId);
-                throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
-            }
-            return { sessionId, targetId: binding.targetId };
-        });
+        return enqueue(() => inspectSessionUnlocked(sessionId));
+    }
+
+    /**
+     * @param {string} sessionId
+     */
+    async function closeSessionUnlocked(sessionId) {
+        assertRunning();
+        const binding = sessions.get(sessionId);
+        if (!binding) throw new AgentRuntimeError('SESSION_NOT_FOUND', 'Session was not found.');
+        sessions.delete(sessionId);
+        if (typeof binding.page.isClosed === 'function' && binding.page.isClosed()) {
+            throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+        }
+        try {
+            await binding.page.close();
+        } catch {
+            throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+        }
     }
 
     /**
      * @param {string} sessionId
      */
     async function closeSession(sessionId) {
+        return enqueue(() => closeSessionUnlocked(sessionId));
+    }
+
+    /**
+     * @param {import('playwright-core').Page} page
+     * @param {{ epoch: number, policyApplied: boolean }} binding
+     */
+    async function applyReadPolicy(page, binding) {
+        if (binding.policyApplied) return;
+        binding.policyApplied = true;
+        const policy = productionSearchPolicy();
+        if (typeof page.on === 'function') {
+            page.on('popup', (popup) => {
+                if (popup && typeof popup.close === 'function') {
+                    Promise.resolve(popup.close()).catch(() => {});
+                }
+            });
+            page.on('framenavigated', () => {
+                binding.epoch += 1;
+            });
+        }
+        if (typeof page.route === 'function') {
+            await page.route('**/*', async (route) => {
+                try {
+                    const request = route.request();
+                    const method = typeof request.method === 'function' ? request.method() : 'GET';
+                    const rawUrl = typeof request.url === 'function' ? request.url() : '';
+                    const navigation = typeof request.isNavigationRequest === 'function' && request.isNavigationRequest();
+                    const decision = classifyRequest(rawUrl, method, navigation ? 'navigation' : 'resource', policy);
+                    if (decision === 'allow') {
+                        await route.continue();
+                        return;
+                    }
+                    await route.abort('blockedbyclient');
+                } catch {
+                    try { await route.abort('blockedbyclient'); } catch { /* already settled */ }
+                }
+            });
+        }
+        if (typeof page.evaluate === 'function') {
+            await page.evaluate(installEpochWatch);
+        }
+    }
+
+    /**
+     * @param {import('playwright-core').Page} page
+     * @param {{ epoch: number }} binding
+     * @param {string} url
+     */
+    async function gotoAllowed(page, binding, url) {
+        const policy = productionSearchPolicy();
+        if (classifyRequest(url, 'GET', 'navigation', policy) !== 'allow') throw readError('DOMAIN_DENIED');
+        if (typeof page.goto !== 'function') throw readError('NOT_RUNNING');
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
+        binding.epoch += 1;
+        const finalUrl = typeof page.url === 'function' ? page.url() : url;
+        if (classifyRequest(finalUrl, 'GET', 'navigation', policy) !== 'allow') throw readError('DOMAIN_DENIED');
+        return { finalUrl };
+    }
+
+    /**
+     * @param {import('playwright-core').Page} page
+     * @param {{ epoch: number }} binding
+     */
+    async function inspectPage(page, binding) {
+        /** @type {{ blocked?: boolean, reason?: string | null, results?: Array<{ rank: number, title: string, snippet: string, href: string }> }} */
+        let extracted = { blocked: false, reason: 'SITE_UNSUPPORTED', results: [] };
+        if (typeof page.evaluate === 'function') {
+            const value = await page.evaluate(readListingFromDocument);
+            if (value && typeof value === 'object') extracted = value;
+            const watched = await page.evaluate(() => {
+                const epoch = /** @type {any} */ (globalThis).__agbrowseDocumentEpoch;
+                return typeof epoch === 'number' ? epoch : 1;
+            });
+            if (Number.isInteger(watched) && watched > binding.epoch) binding.epoch = watched;
+        }
+        const title = typeof page.title === 'function' ? await page.title() : '';
+        const finalUrl = typeof page.url === 'function' ? page.url() : '';
+        return {
+            blocked: Boolean(extracted.blocked),
+            reason: extracted.reason ?? null,
+            results: Array.isArray(extracted.results) ? extracted.results : [],
+            title: typeof title === 'string' ? title : '',
+            finalUrl: typeof finalUrl === 'string' ? finalUrl : '',
+            epoch: binding.epoch,
+        };
+    }
+
+    /**
+     * @param {import('playwright-core').Page} page
+     * @param {{ epoch: number, policyApplied: boolean }} binding
+     */
+    function readPort(page, binding) {
+        return {
+            async applyPolicy() {
+                await applyReadPolicy(page, binding);
+            },
+            async goto(url) {
+                return gotoAllowed(page, binding, url);
+            },
+            async inspect() {
+                return inspectPage(page, binding);
+            },
+            url() {
+                return typeof page.url === 'function' ? page.url() : '';
+            },
+        };
+    }
+
+    /**
+     * @param {unknown} error
+     * @returns {never}
+     */
+    function asPublicReadError(error) {
+        if (error instanceof AgentReadError) throw error;
+        if (error instanceof AgentRuntimeError) {
+            if (Object.hasOwn(READ_ERROR_MESSAGES, error.code)) throw readError(error.code);
+            throw error;
+        }
+        if (disconnectNoted || state !== 'running' || intentionalStop) {
+            throw readError('BROWSER_DISCONNECTED');
+        }
+        throw readError('SESSION_CLOSED');
+    }
+
+    /**
+     * One queued read operation. Caller policy is ignored.
+     * @param {string} op
+     * @param {Record<string, unknown>} [payload]
+     */
+    async function dispatchRead(op, payload = {}) {
         return enqueue(async () => {
-            assertRunning();
-            const binding = sessions.get(sessionId);
-            if (!binding) throw new AgentRuntimeError('SESSION_NOT_FOUND', 'Session was not found.');
-            sessions.delete(sessionId);
-            if (typeof binding.page.isClosed === 'function' && binding.page.isClosed()) {
-                throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
-            }
             try {
-                await binding.page.close();
-            } catch {
-                throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+                assertRunning();
+                if (op === 'browser.session.open') {
+                    const opened = await openSessionUnlocked();
+                    return {
+                        session_id: opened.sessionId,
+                        tab_id: opened.targetId,
+                        frame_id: 'frame_main',
+                        document_epoch: 1,
+                    };
+                }
+                const sessionId = payload.session_id;
+                if (typeof sessionId !== 'string') throw readError('INVALID_ARGUMENTS');
+                if (op === 'browser.session.close') {
+                    await closeSessionUnlocked(sessionId);
+                    return { closed: true };
+                }
+                const binding = requireBinding(sessionId);
+                const port = readPort(binding.page, binding);
+                const policy = productionSearchPolicy();
+                if (op === 'browser.observe' || op === 'naver.search.result.read') {
+                    const observed = await runObserve(port, policy);
+                    return {
+                        ...observed,
+                        session_id: sessionId,
+                        tab_id: binding.targetId,
+                        frame_id: 'frame_main',
+                    };
+                }
+                if (op === 'naver.search.list') {
+                    if (typeof payload.query !== 'string') throw readError('INVALID_ARGUMENTS');
+                    const listed = await runListing(port, {
+                        query: payload.query,
+                        policy,
+                        maxNodes: typeof payload.max_nodes === 'number' ? payload.max_nodes : undefined,
+                    });
+                    return {
+                        ...listed,
+                        session_id: sessionId,
+                        tab_id: binding.targetId,
+                        frame_id: 'frame_main',
+                    };
+                }
+                throw readError('ACTION_DENIED');
+            } catch (error) {
+                throw asPublicReadError(error);
             }
         });
     }
@@ -450,5 +681,5 @@ export function createAgentRuntime(config) {
         });
     }
 
-    return { start, openSession, inspectSession, closeSession, stop };
+    return { start, openSession, inspectSession, closeSession, stop, dispatchRead };
 }

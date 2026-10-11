@@ -233,7 +233,9 @@ describe('loopback auth gateway', () => {
             body: '{}',
         });
         expect(plain.status).toBe(415);
-        expect((await request(port, { path: '/mcp', method: 'POST', headers: { host } })).status).toBe(404);
+        const mcp = await request(port, { path: '/mcp', method: 'POST', headers: { host } });
+        expect(mcp.status).toBe(401);
+        expect(JSON.parse(mcp.body).error.code).toBe('AUTH_INVALID');
         expect((await request(port, { path: '/auth/pair', method: 'GET', headers: { host } })).status).toBe(405);
         expect((await request(port, { path: '/healthz?x=1', headers: { host } })).status).toBe(404);
         const source = readFileSync(SCRIPT, 'utf8');
