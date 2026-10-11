@@ -42,6 +42,22 @@ describe('Naver top-bar sanitizer', () => {
         expect([...sanitized.querySelectorAll('iframe')]).toHaveLength(1);
     });
 
+    it('masks sensitive identifier tokens and encoded user path segments', () => {
+        const dom = new JSDOM(`<!doctype html>
+            <header id="header" class="topbar alice@example.test session-cookie-secret" role="banner">
+                <a id="session-cookie-secret" class="account" data-clk="session-cookie-secret"
+                    href="https://www.naver.com/users/Alice%20Smith">Account</a>
+            </header>`, { url: 'https://www.naver.com/' });
+
+        const html = sanitizeNaverTopbarStructure(dom.window.document);
+
+        expect(html).toContain('<header class="topbar X X" id="header" role="banner">');
+        expect(html).toContain('href="https://www.naver.com/users/:x"');
+        for (const secret of ['alice@example.test', 'session-cookie-secret', 'Alice%20Smith', '/users/Alice%20Smith']) {
+            expect(html).not.toContain(secret);
+        }
+    });
+
     it('caps serialization at 4000 elements', () => {
         const children = '<span>safe</span>'.repeat(4100);
         const dom = new JSDOM(`<header>${children}</header>`);

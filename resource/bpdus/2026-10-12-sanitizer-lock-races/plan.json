@@ -1,0 +1,62 @@
+{
+  "schema_version": 2,
+  "domain": "code",
+  "summary": "Mask sensitive Naver top-bar attributes and make stale writer-lock recovery race-safe.",
+  "status": "READY",
+  "questions": [],
+  "verification": [
+    "npx vitest run test/unit/agent-auth-store.test.mjs test/unit/agent-naver-topbar.test.mjs test/unit/agent-mcp-client.test.mjs"
+  ],
+  "risks": [
+    "Sensitive DOM identifiers could be serialized unless every copied token is filtered.",
+    "Concurrent lock recovery could remove a live writer lock unless stale-lock removal is atomic."
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Filter sensitive top-bar attribute tokens",
+      "files": [
+        "skills/browser/agent-naver-topbar.mjs",
+        "test/unit/agent-naver-topbar.test.mjs"
+      ],
+      "target": "sanitizeNaverTopbarStructure",
+      "depends_on": "none",
+      "change": "Mask invalid or sensitive class, id, and data-clk tokens; keep only ARIA roles; reduce href paths to safe segments; add the reported email, session secret, and encoded user path regression case.",
+      "effect": "The reproduction values are absent from serialized output while safe tokens and URL origins remain.",
+      "estimated_loc": 65,
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "The serializer can expose personal data and session secrets to downstream agent context.",
+        "test_decision": "add",
+        "test_reason": "Current tests do not cover copied identifier secrets or encoded path segments.",
+        "subject": "top-bar attribute and href sanitization",
+        "procedure": "Run the requested Vitest command and assert the direct reproduction values are absent.",
+        "pass_criterion": "All targeted tests pass and none of the reproduction values appear in sanitizer output."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Recover stale locks atomically",
+      "files": [
+        "skills/browser/agent-auth-store.mjs",
+        "test/unit/agent-auth-store.test.mjs"
+      ],
+      "target": "acquireLock stale-lock recovery",
+      "depends_on": "none",
+      "change": "Atomically move the stale pathname to a unique temporary name, recheck its inode and dead PID, remove only the verified stale file, and restore a changed live lock only when the original pathname can be claimed without replacement; add an interleaved recoverer regression test.",
+      "effect": "A concurrent recoverer cannot unlink another writer's live lock.",
+      "estimated_loc": 75,
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "Deleting a live lock permits concurrent writes to persistent authentication state.",
+        "test_decision": "add",
+        "test_reason": "Existing lock tests do not exercise the check-to-unlink race between recoverers.",
+        "subject": "concurrent stale-lock recovery",
+        "procedure": "Interleave a second recovery at the first recoverer's atomic lock mutation and verify the second writer's lock remains present and owned.",
+        "pass_criterion": "The losing recovery fails closed with STATE_UNSAFE and the active writer lock remains intact."
+      }
+    }
+  ]
+}

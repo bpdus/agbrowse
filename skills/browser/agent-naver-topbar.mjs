@@ -35,15 +35,41 @@ export function sanitizeNaverTopbarStructure(doc) {
         });
         let elementCount = 0;
         const maxElements = 4000;
+        const safeTokenPattern = /^[A-Za-z][A-Za-z0-9_-]{0,39}$/;
+        const safePathSegmentPattern = /^[A-Za-z][A-Za-z0-9_.-]{0,30}$/;
+        const ariaRoles = new Set([
+            'alert', 'alertdialog', 'application', 'article', 'banner', 'blockquote', 'button', 'caption',
+            'cell', 'checkbox', 'code', 'columnheader', 'combobox', 'complementary', 'contentinfo',
+            'definition', 'deletion', 'dialog', 'directory', 'document', 'emphasis', 'feed', 'figure',
+            'form', 'generic', 'grid', 'gridcell', 'group', 'heading', 'img', 'insertion', 'link', 'list',
+            'listbox', 'listitem', 'log', 'main', 'marquee', 'math', 'menu', 'menubar', 'menuitem',
+            'menuitemcheckbox', 'menuitemradio', 'meter', 'navigation', 'none', 'note', 'option',
+            'paragraph', 'presentation', 'progressbar', 'radio', 'radiogroup', 'region', 'row', 'rowgroup',
+            'rowheader', 'scrollbar', 'search', 'searchbox', 'separator', 'slider', 'spinbutton', 'status',
+            'strong', 'subscript', 'superscript', 'switch', 'tab', 'table', 'tablist', 'tabpanel', 'term',
+            'textbox', 'timer', 'toolbar', 'tooltip', 'tree', 'treegrid', 'treeitem',
+        ]);
 
         /** @param {string} value */
         const escapeAttribute = (value) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        /** @param {string} value */
+        const safeToken = (value) => safeTokenPattern.test(value)
+            && !(/[@%]|\d{6}|secret|session|token|cookie|auth/i.test(value))
+            ? value
+            : 'X';
         /** @param {string} value */
         const reducedHref = (value) => {
             try {
                 const url = new URL(value, root.baseURI || 'https://www.naver.com/');
                 if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-                return `${url.origin}${url.pathname}`;
+                const pathname = url.pathname.split('/').map((segment) => {
+                    if (segment === '') return '';
+                    return safePathSegmentPattern.test(segment)
+                        && !(/[@%]|\d{6}|secret|session|token|cookie|auth/i.test(segment))
+                        ? segment
+                        : ':x';
+                }).join('/');
+                return `${url.origin}${pathname}`;
             } catch {
                 return null;
             }
@@ -77,6 +103,14 @@ export function sanitizeNaverTopbarStructure(doc) {
                 if (!element.hasAttribute(name)) continue;
                 let value = element.getAttribute(name) || '';
                 if (name === 'aria-label') value = 'LABEL';
+                if (name === 'class') {
+                    value = value.trim().split(/\s+/).filter(Boolean).map(safeToken).join(' ') || 'X';
+                }
+                if (name === 'id' || name === 'data-clk') value = safeToken(value);
+                if (name === 'role') {
+                    value = value.toLowerCase();
+                    if (!ariaRoles.has(value)) continue;
+                }
                 if (name === 'href') {
                     const href = reducedHref(value);
                     if (href === null) continue;

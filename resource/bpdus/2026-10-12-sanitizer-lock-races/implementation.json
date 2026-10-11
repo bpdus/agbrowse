@@ -1,0 +1,73 @@
+{
+  "schema_version": 2,
+  "status": "DONE_WITH_CONCERNS",
+  "summary": "Sanitizer values are filtered and stale-lock recovery preserves a competing live lock; the requested test command had three sandbox loopback failures.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-sanitizer-lock-races/plan.json",
+  "tasks": [
+    {
+      "task_id": 1,
+      "status": "DONE",
+      "changed_files": [
+        "skills/browser/agent-naver-topbar.mjs",
+        "test/unit/agent-naver-topbar.test.mjs"
+      ]
+    },
+    {
+      "task_id": 2,
+      "status": "DONE",
+      "changed_files": [
+        "skills/browser/agent-auth-store.mjs",
+        "test/unit/agent-auth-store.test.mjs"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-sanitizer-lock-races/plan.json",
+      "sha256": "f749016966b7013ad53b95f29bd3695ca98e5d4d854e1f36c00cb425b720294b"
+    },
+    {
+      "path": "/home/box/src/agbrowse/package.json",
+      "sha256": "73ef56616a6dcb5aec3d8fc61893925431f227d245800cde661919e7b6513f99"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-auth-store.mjs",
+      "sha256": "a6ced6fb93c82e0a50016e629d660ff456b21e7d3a68951a7f302d8fdbbffc4f"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-naver-topbar.mjs",
+      "sha256": "00cb61b5613dc957f9f84ee94cb08895d26f482a39898bd0440814fc15d8b64e"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-auth-store.test.mjs",
+      "sha256": "823b2c0b9d686cde6252ad995ee55b68da749f37f667339e9c9f8a19fbc6f85b"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-naver-topbar.test.mjs",
+      "sha256": "ced24b307a1bf2bdc3a10b29a0c5b57768227a04dc4a76d644203132377f0740"
+    }
+  ],
+  "checks": [
+    {
+      "name": "tests",
+      "status": "FAIL",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-sanitizer-lock-races/evidence/vitest-20261012.log",
+      "evidence_sha256": "ba6da000514415e9de6c010c2c6a7febd36224adb64ca8ca6c55c343cbdd8244"
+    },
+    {
+      "name": "verification",
+      "status": "FAIL",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-sanitizer-lock-races/evidence/vitest-20261012.log",
+      "evidence_sha256": "ba6da000514415e9de6c010c2c6a7febd36224adb64ca8ca6c55c343cbdd8244"
+    },
+    {
+      "name": "self_review",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-sanitizer-lock-races/evidence/self-review.md",
+      "evidence_sha256": "33e95c30267b0fcf79207fdba1b621685bf28ab481b7fbc7378f5b4cb70e107f"
+    }
+  ],
+  "concerns": [
+    "The requested command exited nonzero because three agent-mcp-client tests could not open 127.0.0.1 listeners in the sandbox (listen EPERM); both modified test files passed."
+  ]
+}

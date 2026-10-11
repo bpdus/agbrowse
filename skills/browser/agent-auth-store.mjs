@@ -216,11 +216,51 @@ function acquireLock(io, directory) {
             } catch (error) {
                 if (/** @type {{ code?: string }} */ (error).code !== 'ESRCH') return false;
             }
-            const current = io.lstatSync(lockPath);
-            if (current.isSymbolicLink() || !current.isFile() || current.uid !== process.getuid()
-                || (current.mode & 0o777) !== 0o600 || current.dev !== original.dev || current.ino !== original.ino) return false;
-            io.unlinkSync(lockPath);
-            return true;
+            const stalePath = path.join(directory, `.${LOCK_NAME}.${crypto.randomBytes(12).toString('hex')}.stale`);
+            io.renameSync(lockPath, stalePath);
+
+            let stillDeadStaleLock = false;
+            let staleFd;
+            try {
+                const moved = io.lstatSync(stalePath);
+                if (!moved.isSymbolicLink() && moved.isFile() && moved.uid === process.getuid()
+                    && (moved.mode & 0o777) === 0o600 && moved.dev === original.dev && moved.ino === original.ino) {
+                    staleFd = io.openSync(stalePath, io.constants.O_RDONLY | io.constants.O_NOFOLLOW);
+                    const movedOpen = io.fstatSync(staleFd);
+                    const movedContent = String(io.readFileSync(staleFd, 'utf8'));
+                    const movedMatch = /^([1-9]\d*)\n?$/.exec(movedContent);
+                    if (movedOpen.isFile() && movedOpen.uid === process.getuid() && (movedOpen.mode & 0o777) === 0o600
+                        && movedOpen.dev === original.dev && movedOpen.ino === original.ino
+                        && movedMatch && Number(movedMatch[1]) === pid) {
+                        try {
+                            process.kill(pid, 0);
+                        } catch (error) {
+                            stillDeadStaleLock = /** @type {{ code?: string }} */ (error).code === 'ESRCH';
+                        }
+                    }
+                }
+            } catch { /* restore a changed or unverifiable file below */ }
+            finally {
+                if (staleFd !== undefined) {
+                    try { io.closeSync(staleFd); } catch { /* already closed */ }
+                }
+            }
+
+            if (stillDeadStaleLock) {
+                io.unlinkSync(stalePath);
+                return true;
+            }
+
+            // linkSync claims the original name atomically without replacing a live lock.
+            try {
+                const moved = io.lstatSync(stalePath);
+                if (!moved.isSymbolicLink() && moved.isFile() && moved.uid === process.getuid()
+                    && (moved.mode & 0o777) === 0o600) {
+                    io.linkSync(stalePath, lockPath);
+                    io.unlinkSync(stalePath);
+                }
+            } catch { /* original is occupied or restoration is unsafe */ }
+            return false;
         } catch {
             return false;
         } finally {

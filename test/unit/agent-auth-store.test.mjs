@@ -1,3 +1,4 @@
+import * as nodeFs from 'node:fs';
 import { chmodSync, lstatSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -46,5 +47,46 @@ describe('agent auth store writer lock', () => {
         expect(() => createDevFileKeyStore({ directory: paths.directory }))
             .toThrow(expect.objectContaining({ code: 'STATE_UNSAFE' }));
         expect(readFileSync(paths.lockPath, 'utf8')).toBe(`${process.pid}\n`);
+    });
+
+    it('preserves a live lock when two stale-lock recoverers interleave', () => {
+        const paths = keyDirectory();
+        const initial = createDevFileKeyStore({ directory: paths.directory });
+        initial.close();
+        writeFileSync(paths.lockPath, '2147483647\n', { mode: 0o600 });
+        chmodSync(paths.lockPath, 0o600);
+
+        let interleave = true;
+        let competingStore;
+        let competingInode;
+        const injectedFs = {
+            ...nodeFs,
+            renameSync(from, to) {
+                if (interleave && from === paths.lockPath) {
+                    interleave = false;
+                    competingStore = createDevFileKeyStore({ directory: paths.directory, fs: injectedFs });
+                    competingInode = lstatSync(paths.lockPath).ino;
+                }
+                return nodeFs.renameSync(from, to);
+            },
+            unlinkSync(filePath) {
+                if (interleave && filePath === paths.lockPath) {
+                    interleave = false;
+                    competingStore = createDevFileKeyStore({ directory: paths.directory, fs: injectedFs });
+                    competingInode = lstatSync(paths.lockPath).ino;
+                }
+                return nodeFs.unlinkSync(filePath);
+            },
+        };
+
+        try {
+            expect(() => createDevFileKeyStore({ directory: paths.directory, fs: injectedFs }))
+                .toThrow(expect.objectContaining({ code: 'STATE_UNSAFE' }));
+            expect(competingStore).toBeDefined();
+            expect(readFileSync(paths.lockPath, 'utf8')).toBe(`${process.pid}\n`);
+            expect(lstatSync(paths.lockPath).ino).toBe(competingInode);
+        } finally {
+            competingStore?.close();
+        }
     });
 });
