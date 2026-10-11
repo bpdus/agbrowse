@@ -226,5 +226,5 @@ fi
 chrome_status=$?
 
 echo "Chrome exited. macOS may keep Chrome running after its last window closes; choose Quit Chrome before restarting the worker."
-echo "When both services are stopped, restart with ~/.agbrowse-bpdus/bin/start-in-herdr.sh. If the gateway remains running, restart only node skills/browser/agent-worker.mjs in the existing herdr worker pane."
+echo "When both services are stopped, restart with ~/.agbrowse-bpdus/bin/start-in-herdr.sh. If the gateway remains running, restart only with: cd ~/.agbrowse-bpdus/src && node skills/browser/agent-worker.mjs 2>&1 | tee -a ~/.agbrowse-bpdus/logs/worker.log"
 exit "$chrome_status"
