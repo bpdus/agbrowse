@@ -1,0 +1,473 @@
+import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { state, locks, trace } = vi.hoisted(() => ({
+    state: { home: '' },
+    locks: {
+        acquire: vi.fn(),
+        release: vi.fn(),
+    },
+    trace: {
+        loads: 0,
+        launches: [],
+        connectOverCDP: 0,
+        browserLaunch: 0,
+        launchImpl: null,
+    },
+}));
+
+vi.mock('node:os', async () => {
+    const actual = await vi.importActual('node:os');
+    return { ...actual, homedir: () => state.home };
+});
+
+vi.mock('../../skills/browser/profile-lock.mjs', () => ({
+    acquireProfileLock: (...args) => locks.acquire(...args),
+    releaseProfileLock: (...args) => locks.release(...args),
+}));
+
+vi.mock('playwright-core', () => {
+    trace.loads += 1;
+    return {
+        chromium: {
+            async launchPersistentContext(userDataDir, options) {
+                trace.launches.push({ userDataDir, options });
+                if (!trace.launchImpl) throw new Error('launchImpl not set');
+                return trace.launchImpl(userDataDir, options);
+            },
+            async connectOverCDP() {
+                trace.connectOverCDP += 1;
+                throw new Error('connectOverCDP');
+            },
+            async launch() {
+                trace.browserLaunch += 1;
+                throw new Error('chromium.launch');
+            },
+        },
+    };
+});
+
+const { createAgentRuntime } = await import('../../skills/browser/agent-runtime.mjs');
+
+const runtimeSource = readFileSync(new URL('../../skills/browser/agent-runtime.mjs', import.meta.url), 'utf8');
+const loadsAtImport = trace.loads;
+const acquireAtImport = locks.acquire.mock.calls.length;
+const ENV_KEYS = ['BROWSER_AGENT_HOME', 'CDP_PORT', 'AGBROWSE_CHROME_FLAGS', 'DEBUG', 'PWDEBUG', 'DEBUG_FILE'];
+const ORIGINAL_ENV = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+
+function restoreEnv() {
+    for (const key of ENV_KEYS) {
+        const value = ORIGINAL_ENV[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+    }
+}
+
+function workerDir() {
+    return join(state.home, '.agbrowse-bpdus');
+}
+
+function profileDir() {
+    return join(workerDir(), 'agent-profile');
+}
+
+function makePage(targetId, url = 'about:blank') {
+    return {
+        targetId,
+        currentUrl: url,
+        closed: false,
+        cdpAttached: 0,
+        focused: false,
+        url() { return this.currentUrl; },
+        isClosed() { return this.closed; },
+        async close() { this.closed = true; },
+        async bringToFront() { this.focused = true; },
+    };
+}
+
+function makeContext(events) {
+    const order = [];
+    const closeListeners = [];
+    const disconnectListeners = [];
+    let seq = 0;
+    const browser = {
+        on(event, fn) {
+            if (event !== 'disconnected') throw new Error(`unexpected browser event ${event}`);
+            disconnectListeners.push(fn);
+        },
+        emitDisconnected() {
+            for (const fn of [...disconnectListeners]) fn();
+        },
+    };
+    const context = {
+        order,
+        closed: false,
+        newPageCalls: [],
+        async newPage(...args) {
+            this.newPageCalls.push(args);
+            seq += 1;
+            const page = makePage(`target-${seq}`);
+            order.push(page);
+            return page;
+        },
+        pages() {
+            throw new Error('pages() must not decide the session target');
+        },
+        async newCDPSession(page) {
+            page.cdpAttached += 1;
+            return {
+                async send(method) {
+                    if (method !== 'Target.getTargetInfo') throw new Error(`unexpected CDP ${method}`);
+                    return { targetInfo: { targetId: page.targetId, url: page.currentUrl } };
+                },
+                async detach() {
+                    page.cdpAttached -= 1;
+                },
+            };
+        },
+        async close() {
+            events.push('close');
+            this.closed = true;
+            for (const fn of [...closeListeners]) fn();
+            browser.emitDisconnected();
+        },
+        browser: () => browser,
+        on(event, fn) {
+            if (event === 'page') throw new Error('restored tabs must not be enrolled');
+            if (event !== 'close') throw new Error(`unexpected context event ${event}`);
+            closeListeners.push(fn);
+        },
+    };
+    return { context, browser, order };
+}
+
+describe('agent-runtime', () => {
+    /** @type {string[]} */
+    let events;
+    /** @type {{ stop: () => Promise<void> } | null} */
+    let active;
+
+    beforeEach(() => {
+        restoreEnv();
+        state.home = realpathSync(mkdtempSync(join(tmpdir(), 'agb-agent-')));
+        events = [];
+        active = null;
+        trace.launches.length = 0;
+        trace.connectOverCDP = 0;
+        trace.browserLaunch = 0;
+        trace.launchImpl = () => makeContext(events).context;
+        locks.acquire.mockReset();
+        locks.release.mockReset();
+        let tokenNo = 0;
+        locks.acquire.mockImplementation((dir) => {
+            tokenNo += 1;
+            return { pid: process.pid, token: `tok-${tokenNo}`, path: join(dir, 'profile.lock') };
+        });
+        locks.release.mockImplementation(() => {
+            events.push('release');
+        });
+    });
+
+    afterEach(async () => {
+        if (active) await active.stop().catch(() => {});
+        restoreEnv();
+        if (state.home) {
+            for (const dir of [profileDir(), workerDir()]) {
+                try { chmodSync(dir, 0o755); } catch { /* absent */ }
+            }
+            rmSync(state.home, { recursive: true, force: true });
+        }
+    });
+
+    it('does nothing on import', () => {
+        expect(loadsAtImport).toBe(0);
+        expect(acquireAtImport).toBe(0);
+        expect(runtimeSource).not.toMatch(/process\.argv|console\.(log|error|warn|info)/);
+        expect(runtimeSource).not.toMatch(/browser\.mjs|tab-manager|web-ai\/cli\.mjs|web-ai\/mcp-server\.mjs|adaptive-fetch|connectOverCDP|remote-debugging-port|createServer/);
+        expect(existsSync(workerDir())).toBe(false);
+    });
+
+    it('returns only the lifecycle methods', () => {
+        const runtime = createAgentRuntime();
+        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'inspectSession', 'openSession', 'start', 'stop']);
+    });
+
+    it('rejects a foreign profile or endpoint before launch', async () => {
+        const owner = { closed: false };
+        expect(() => createAgentRuntime({
+            profile: join(state.home, '.browser-agent', 'browser-profile'),
+            endpoint: 'http://127.0.0.1:9222',
+            port: 9222,
+            userDataDir: '/tmp/default-profile',
+            args: ['--remote-debugging-port=9222'],
+            channel: 'chromium',
+            headless: true,
+            executablePath: '/usr/bin/chrome',
+        })).toThrowError(expect.objectContaining({ code: 'INVALID_CONFIG' }));
+        expect(trace.launches).toHaveLength(0);
+        expect(trace.connectOverCDP).toBe(0);
+        expect(trace.browserLaunch).toBe(0);
+        expect(locks.acquire).not.toHaveBeenCalled();
+        expect(locks.release).not.toHaveBeenCalled();
+        expect(owner.closed).toBe(false);
+        expect(existsSync(workerDir())).toBe(false);
+    });
+
+    it('refuses a symlinked dedicated profile and does not fall back', async () => {
+        const elsewhere = mkdtempSync(join(tmpdir(), 'agb-link-target-'));
+        symlinkSync(elsewhere, workerDir());
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await expect(runtime.start()).rejects.toMatchObject({ code: 'PROFILE_UNSAFE' });
+        expect(trace.launches).toHaveLength(0);
+        expect(locks.acquire).not.toHaveBeenCalled();
+        expect(existsSync(join(state.home, '.browser-agent'))).toBe(false);
+        expect(lstatSync(workerDir()).isSymbolicLink()).toBe(true);
+        rmSync(elsewhere, { recursive: true, force: true });
+    });
+
+    it('refuses an unwritable dedicated profile and does not fall back', async () => {
+        mkdirSync(profileDir(), { recursive: true });
+        chmodSync(profileDir(), 0o555);
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await expect(runtime.start()).rejects.toMatchObject({ code: 'PROFILE_UNWRITABLE' });
+        expect(trace.launches).toHaveLength(0);
+        expect(locks.acquire).not.toHaveBeenCalled();
+        expect(existsSync(join(state.home, '.browser-agent'))).toBe(false);
+    });
+
+    it('launches installed Chrome over the debugging pipe', async () => {
+        process.env.BROWSER_AGENT_HOME = '/tmp/legacy-secret-home';
+        process.env.CDP_PORT = '9222';
+        process.env.AGBROWSE_CHROME_FLAGS = '--remote-debugging-port=9222 --user-data-dir=/tmp/secret-profile';
+        process.env.DEBUG = 'pw:api SECRET_DEBUG_TOKEN';
+        let debugAtLaunch;
+        const made = makeContext(events);
+        trace.launchImpl = () => {
+            debugAtLaunch = process.env.DEBUG;
+            return made.context;
+        };
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        expect(locks.acquire).toHaveBeenCalledTimes(1);
+        expect(locks.acquire.mock.calls[0][0]).toBe(workerDir());
+        expect(trace.launches).toHaveLength(1);
+        const launch = trace.launches[0];
+        expect(launch.userDataDir).toBe(profileDir());
+        expect(launch.options.channel).toBe('chrome');
+        expect(launch.options.headless).toBe(false);
+        expect(launch.options.args).toBeUndefined();
+        expect(launch.options.cdpPort).toBeUndefined();
+        expect(launch.options.handleSIGINT).toBe(false);
+        expect(launch.options.handleSIGTERM).toBe(false);
+        expect(launch.options.handleSIGHUP).toBe(false);
+        expect(launch.options.logger.isEnabled()).toBe(false);
+        expect(launch.options.env.BROWSER_AGENT_HOME).toBeUndefined();
+        expect(launch.options.env.CDP_PORT).toBeUndefined();
+        expect(launch.options.env.AGBROWSE_CHROME_FLAGS).toBeUndefined();
+        expect(launch.options.env.DEBUG).toBeUndefined();
+        expect(JSON.stringify(launch.options)).not.toMatch(/remote-debugging-port|remote-debugging-address|9222|legacy-secret-home|secret-profile/);
+        expect(trace.connectOverCDP).toBe(0);
+        expect(trace.browserLaunch).toBe(0);
+        expect(debugAtLaunch).toBeUndefined();
+        expect(made.context.newPageCalls).toHaveLength(0);
+    });
+
+    it('keeps two sessions on their own targets when tabs move', async () => {
+        const made = makeContext(events);
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const first = await runtime.openSession();
+        const second = await runtime.openSession();
+        expect(Object.keys(first).sort()).toEqual(['sessionId', 'targetId']);
+        expect(first.targetId).toBe('target-1');
+        expect(second.targetId).toBe('target-2');
+        expect(first.sessionId).not.toBe(second.sessionId);
+        expect(made.order[0].cdpAttached).toBe(0);
+        expect(made.order[1].cdpAttached).toBe(0);
+        expect(made.context.newPageCalls).toEqual([[], []]);
+        made.order.reverse();
+        await made.order[0].bringToFront();
+        made.order[0].focused = true;
+        expect(await runtime.inspectSession(first.sessionId)).toEqual(first);
+        expect(await runtime.inspectSession(second.sessionId)).toEqual(second);
+        made.context.emit?.('page', makePage('restored-target'));
+        expect(await runtime.inspectSession(first.sessionId)).toEqual({ sessionId: first.sessionId, targetId: 'target-1' });
+    });
+
+    it('fails a closed target without substituting another tab', async () => {
+        const made = makeContext(events);
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const first = await runtime.openSession();
+        const second = await runtime.openSession();
+        await made.order[0].close();
+        await expect(runtime.inspectSession(first.sessionId)).rejects.toMatchObject({ code: 'SESSION_CLOSED' });
+        expect(await runtime.inspectSession(second.sessionId)).toEqual(second);
+        await expect(runtime.inspectSession('ses_missing')).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+        await runtime.closeSession(second.sessionId);
+        expect(made.order[1].closed).toBe(true);
+        expect(made.context.closed).toBe(false);
+        await expect(runtime.inspectSession(second.sessionId)).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+    });
+
+    it('clears bindings on disconnect and does not relaunch or replay', async () => {
+        const made = makeContext(events);
+        trace.launchImpl = () => made.context;
+        let disconnected;
+        const disconnectedPromise = new Promise((resolve) => { disconnected = resolve; });
+        const runtime = createAgentRuntime({ onDisconnected: () => disconnected() });
+        active = runtime;
+        await runtime.start();
+        const first = await runtime.openSession();
+        made.browser.emitDisconnected();
+        await disconnectedPromise;
+        await expect(runtime.inspectSession(first.sessionId)).rejects.toMatchObject({ code: 'BROWSER_DISCONNECTED' });
+        await expect(runtime.openSession()).rejects.toMatchObject({ code: 'BROWSER_DISCONNECTED' });
+        expect(trace.launches).toHaveLength(1);
+        expect(events).toEqual(['close', 'release']);
+        expect(locks.release).toHaveBeenCalledWith(workerDir(), 'tok-1');
+    });
+
+    it('closes Chrome before releasing the lock and rejects old ids after restart', async () => {
+        const contexts = [makeContext(events), makeContext(events)];
+        let n = 0;
+        trace.launchImpl = () => contexts[n++].context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const first = await runtime.openSession();
+        await runtime.stop();
+        expect(events).toEqual(['close', 'release']);
+        expect(locks.release).toHaveBeenCalledWith(workerDir(), 'tok-1');
+        await runtime.stop();
+        expect(locks.release).toHaveBeenCalledTimes(1);
+        await runtime.start();
+        const second = await runtime.openSession();
+        expect(second.sessionId).not.toBe(first.sessionId);
+        await expect(runtime.inspectSession(first.sessionId)).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+        expect(trace.launches).toHaveLength(2);
+        expect(await runtime.inspectSession(second.sessionId)).toEqual(second);
+    });
+
+    it('leaves an existing lock owner untouched and cleans up a failed launch', async () => {
+        const owner = { token: 'owner-token', closed: false };
+        locks.acquire.mockImplementation(() => {
+            throw new Error(`profile.lock held by pid 4242 cookie=${owner.token}`);
+        });
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await expect(runtime.start()).rejects.toMatchObject({
+            code: 'LOCK_HELD',
+            message: 'Profile lock is held.',
+        });
+        expect(trace.launches).toHaveLength(0);
+        expect(locks.release).not.toHaveBeenCalled();
+        expect(owner.closed).toBe(false);
+        expect(events).toEqual([]);
+
+        locks.acquire.mockImplementation((dir) => ({ pid: 7, token: 'tok-fail', path: join(dir, 'profile.lock') }));
+        trace.launchImpl = async () => {
+            throw new Error('cookie=super-secret-cookie-value https://evil.example/private?token=sekret --user-data-dir=/tmp/secret-profile');
+        };
+        const failed = await runtime.start().catch((error) => error);
+        expect(failed.code).toBe('STARTUP_FAILED');
+        expect(failed.message).toBe('Browser launch failed.');
+        expect(String(failed.message)).not.toMatch(/super-secret-cookie-value|evil\.example|secret-profile/);
+        expect(failed.cause).toBeUndefined();
+        expect(locks.release).toHaveBeenCalledTimes(1);
+        expect(locks.release).toHaveBeenCalledWith(workerDir(), 'tok-fail');
+        expect(events).not.toContain('close');
+        expect(trace.connectOverCDP).toBe(0);
+    });
+
+    it('does not enroll a page that is not about:blank', async () => {
+        const made = makeContext(events);
+        made.context.newPage = async () => {
+            const page = makePage('foreign-target', 'https://evil.example/private');
+            made.order.push(page);
+            return page;
+        };
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        await expect(runtime.openSession()).rejects.toMatchObject({ code: 'SESSION_CLOSED' });
+        expect(made.order[0].closed).toBe(true);
+        expect(made.order[0].cdpAttached).toBe(0);
+    });
+
+    it('turns a secret-bearing page creation failure into a stable code', async () => {
+        const made = makeContext(events);
+        const secret = 'super-secret-cookie-value https://evil.example/private?token=sekret';
+        made.context.newPage = async () => {
+            const error = new Error(`Playwright newPage failed ${secret} --user-data-dir=/tmp/secret-profile`);
+            error.stack = `${error.message}\n    at newPage (/tmp/secret-profile/playwright.js:1:1)`;
+            throw error;
+        };
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const error = await runtime.openSession().catch((caught) => caught);
+        expect(error).toMatchObject({ code: 'SESSION_CLOSED', message: 'Session target is closed.' });
+        expect(error.cause).toBeUndefined();
+        expect(`${error.message}\n${error.stack}`).not.toMatch(/super-secret-cookie-value|evil\.example|secret-profile|Playwright/);
+        await expect(runtime.inspectSession('ses_missing')).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+        expect(trace.launches).toHaveLength(1);
+        expect(locks.release).not.toHaveBeenCalled();
+    });
+
+    it('keeps the profile lock when close fails and retries shutdown before restart', async () => {
+        const made = makeContext(events);
+        const secret = 'super-secret-cookie-value';
+        let attempts = 0;
+        const originalClose = made.context.close.bind(made.context);
+        made.context.close = async () => {
+            attempts += 1;
+            if (attempts === 1) {
+                const error = new Error(`browser still open cookie=${secret} https://evil.example/private`);
+                error.stack = `${error.message}\n    at close (/tmp/secret-profile/playwright.js:4:1)`;
+                throw error;
+            }
+            await originalClose();
+        };
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const first = await runtime.openSession();
+        const failed = await runtime.stop().catch((caught) => caught);
+        expect(failed).toMatchObject({ code: 'SHUTDOWN_FAILED', message: 'Browser shutdown failed.' });
+        expect(failed.cause).toBeUndefined();
+        expect(`${failed.message}\n${failed.stack}`).not.toMatch(/super-secret-cookie-value|evil\.example|secret-profile/);
+        expect(locks.release).not.toHaveBeenCalled();
+        expect(events).not.toContain('close');
+        expect(trace.launches).toHaveLength(1);
+        await expect(runtime.start()).rejects.toMatchObject({ code: 'ALREADY_RUNNING' });
+        expect(trace.launches).toHaveLength(1);
+        expect(locks.acquire).toHaveBeenCalledTimes(1);
+
+        await runtime.stop();
+        expect(events).toEqual(['close', 'release']);
+        expect(locks.release).toHaveBeenCalledTimes(1);
+        expect(locks.release).toHaveBeenCalledWith(workerDir(), 'tok-1');
+
+        const restarted = makeContext(events);
+        trace.launchImpl = () => restarted.context;
+        await runtime.start();
+        const second = await runtime.openSession();
+        expect(second.sessionId).not.toBe(first.sessionId);
+        await expect(runtime.inspectSession(first.sessionId)).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+        expect(await runtime.inspectSession(second.sessionId)).toEqual(second);
+        expect(trace.launches).toHaveLength(2);
+    });
+});
