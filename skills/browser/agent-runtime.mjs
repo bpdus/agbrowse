@@ -195,6 +195,7 @@ function launchOptions() {
         handleSIGHUP: false,
         logger: SILENT_LOGGER,
         env: browserLaunchEnv(),
+        serviceWorkers: 'block',
     };
 }
 
@@ -222,6 +223,153 @@ function installEpochWatch() {
     return root.__agbrowseDocumentEpoch;
 }
 
+const MAX_REDIRECTS = 4;
+
+/**
+ * @param {import('playwright-core').Request | { method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, redirectedFrom?: () => unknown }} request
+ */
+function requestMethod(request) {
+    const method = typeof request.method === 'function' ? request.method() : 'GET';
+    return String(method || 'GET').toUpperCase();
+}
+
+/**
+ * @param {import('playwright-core').Request | { url?: () => string }} request
+ */
+function requestUrl(request) {
+    return typeof request.url === 'function' ? request.url() : '';
+}
+
+/**
+ * @param {import('playwright-core').Request | { isNavigationRequest?: () => boolean }} request
+ */
+function requestIsNavigation(request) {
+    return typeof request.isNavigationRequest === 'function' && request.isNavigationRequest();
+}
+
+/**
+ * @param {import('playwright-core').Request | { redirectedFrom?: () => unknown }} request
+ */
+function requestRedirectedFrom(request) {
+    if (typeof request.redirectedFrom !== 'function') return null;
+    return request.redirectedFrom() || null;
+}
+
+/**
+ * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean }} request
+ * @param {ReturnType<typeof productionSearchPolicy>} policy
+ */
+function hopAllowed(request, policy) {
+    const method = requestMethod(request);
+    const url = requestUrl(request);
+    const navigation = requestIsNavigation(request);
+    if (navigation && method !== 'GET') return false;
+    return classifyRequest(url, method, navigation ? 'navigation' : 'resource', policy) === 'allow';
+}
+
+/**
+ * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, redirectedFrom?: () => unknown }} request
+ * @param {ReturnType<typeof productionSearchPolicy>} policy
+ */
+function redirectChainAllowed(request, policy) {
+    const seen = new Set();
+    /** @type {unknown} */
+    let current = request;
+    while (current && typeof current === 'object' && !seen.has(current)) {
+        seen.add(current);
+        const hop = /** @type {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, redirectedFrom?: () => unknown }} */ (current);
+        if (!hopAllowed(hop, policy)) return false;
+        current = requestRedirectedFrom(hop);
+    }
+    return true;
+}
+
+/**
+ * @param {{ abort: (errorCode?: string) => Promise<void> }} route
+ */
+async function abortRoute(route) {
+    try {
+        await route.abort('blockedbyclient');
+    } catch {
+        /* already settled */
+    }
+}
+
+/**
+ * Classify the current request and every prior redirect before any fetch.
+ * A 3xx Location is classified before the next hop is requested.
+ * @param {import('playwright-core').Route} route
+ */
+async function guardRequest(route) {
+    const policy = productionSearchPolicy();
+    try {
+        const request = route.request();
+        const method = requestMethod(request);
+        const url = requestUrl(request);
+        if (url === 'about:blank' && method === 'GET' && !requestRedirectedFrom(request)) {
+            await route.continue();
+            return;
+        }
+        if (!redirectChainAllowed(request, policy)) {
+            await abortRoute(route);
+            return;
+        }
+        const navigation = requestIsNavigation(request);
+        let nextMethod = method;
+        let nextUrl = url;
+        let response = await route.fetch({ maxRedirects: 0 });
+        for (let followed = 0; ; followed += 1) {
+            const status = typeof response.status === 'function' ? response.status() : 0;
+            if (status < 300 || status >= 400) {
+                await route.fulfill({ response });
+                return;
+            }
+            if (followed >= MAX_REDIRECTS) {
+                await abortRoute(route);
+                return;
+            }
+            const headers = typeof response.headers === 'function' ? response.headers() : null;
+            const location = headers && (headers.location || headers.Location);
+            if (typeof location !== 'string' || location.length === 0) {
+                await route.fulfill({ response });
+                return;
+            }
+            let resolved;
+            try {
+                resolved = new URL(location, nextUrl).toString();
+            } catch {
+                await abortRoute(route);
+                return;
+            }
+            const followMethod = status === 307 || status === 308 ? nextMethod : 'GET';
+            if (navigation && followMethod !== 'GET') {
+                await abortRoute(route);
+                return;
+            }
+            if (classifyRequest(resolved, followMethod, navigation ? 'navigation' : 'resource', policy) !== 'allow') {
+                await abortRoute(route);
+                return;
+            }
+            nextMethod = followMethod;
+            nextUrl = resolved;
+            response = await route.fetch({ url: resolved, method: followMethod, maxRedirects: 0 });
+        }
+    } catch {
+        await abortRoute(route);
+    }
+}
+
+/**
+ * @param {import('playwright-core').BrowserContext} ctx
+ */
+async function installContextGuards(ctx) {
+    if (typeof ctx.route !== 'function' || typeof ctx.addInitScript !== 'function') {
+        throw new AgentRuntimeError('STARTUP_FAILED', 'Browser launch failed.');
+    }
+    await ctx.route('**/*', (route) => guardRequest(route));
+    await ctx.addInitScript(installEpochWatch);
+}
+
 /**
  * @param {unknown} [config]
  */
@@ -237,7 +385,7 @@ export function createAgentRuntime(config) {
     let lockToken = null;
     /** @type {string | null} */
     let lockedDir = null;
-    /** @type {Map<string, { page: import('playwright-core').Page, targetId: string, epoch: number, policyApplied: boolean }>} */
+    /** @type {Map<string, { page: import('playwright-core').Page, targetId: string, epoch: number, seenPageEpoch: number, policyApplied: boolean }>} */
     const sessions = new Map();
     let intentionalStop = false;
     let disconnectNoted = false;
@@ -390,6 +538,10 @@ export function createAgentRuntime(config) {
                 if (disconnectNoted) {
                     throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
                 }
+                await installContextGuards(context);
+                if (disconnectNoted) {
+                    throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
+                }
                 state = 'running';
             } catch (error) {
                 await discardLaunch();
@@ -412,7 +564,7 @@ export function createAgentRuntime(config) {
                 throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
             }
             const sessionId = `ses_${randomBytes(8).toString('hex')}`;
-            sessions.set(sessionId, { page, targetId, epoch: 1, policyApplied: false });
+            sessions.set(sessionId, { page, targetId, epoch: 1, seenPageEpoch: 0, policyApplied: false });
             return { sessionId, targetId };
         } catch (error) {
             if (page) {
@@ -486,42 +638,26 @@ export function createAgentRuntime(config) {
 
     /**
      * @param {import('playwright-core').Page} page
-     * @param {{ epoch: number, policyApplied: boolean }} binding
+     * @param {{ epoch: number, seenPageEpoch: number, policyApplied: boolean }} binding
      */
     async function applyReadPolicy(page, binding) {
         if (binding.policyApplied) return;
         binding.policyApplied = true;
-        const policy = productionSearchPolicy();
         if (typeof page.on === 'function') {
             page.on('popup', (popup) => {
                 if (popup && typeof popup.close === 'function') {
                     Promise.resolve(popup.close()).catch(() => {});
                 }
             });
-            page.on('framenavigated', () => {
+            page.on('framenavigated', (frame) => {
+                const main = typeof page.mainFrame === 'function' ? page.mainFrame() : null;
+                if (main && frame && frame !== main) return;
                 binding.epoch += 1;
-            });
-        }
-        if (typeof page.route === 'function') {
-            await page.route('**/*', async (route) => {
-                try {
-                    const request = route.request();
-                    const method = typeof request.method === 'function' ? request.method() : 'GET';
-                    const rawUrl = typeof request.url === 'function' ? request.url() : '';
-                    const navigation = typeof request.isNavigationRequest === 'function' && request.isNavigationRequest();
-                    const decision = classifyRequest(rawUrl, method, navigation ? 'navigation' : 'resource', policy);
-                    if (decision === 'allow') {
-                        await route.continue();
-                        return;
-                    }
-                    await route.abort('blockedbyclient');
-                } catch {
-                    try { await route.abort('blockedbyclient'); } catch { /* already settled */ }
+                binding.seenPageEpoch = 0;
+                if (typeof page.evaluate === 'function') {
+                    Promise.resolve(page.evaluate(installEpochWatch)).catch(() => {});
                 }
             });
-        }
-        if (typeof page.evaluate === 'function') {
-            await page.evaluate(installEpochWatch);
         }
     }
 
@@ -535,7 +671,6 @@ export function createAgentRuntime(config) {
         if (classifyRequest(url, 'GET', 'navigation', policy) !== 'allow') throw readError('DOMAIN_DENIED');
         if (typeof page.goto !== 'function') throw readError('NOT_RUNNING');
         await page.goto(url, { waitUntil: 'domcontentloaded' });
-        binding.epoch += 1;
         const finalUrl = typeof page.url === 'function' ? page.url() : url;
         if (classifyRequest(finalUrl, 'GET', 'navigation', policy) !== 'allow') throw readError('DOMAIN_DENIED');
         return { finalUrl };
@@ -543,7 +678,7 @@ export function createAgentRuntime(config) {
 
     /**
      * @param {import('playwright-core').Page} page
-     * @param {{ epoch: number }} binding
+     * @param {{ epoch: number, seenPageEpoch: number }} binding
      */
     async function inspectPage(page, binding) {
         /** @type {{ blocked?: boolean, reason?: string | null, results?: Array<{ rank: number, title: string, snippet: string, href: string }> }} */
@@ -555,7 +690,10 @@ export function createAgentRuntime(config) {
                 const epoch = /** @type {any} */ (globalThis).__agbrowseDocumentEpoch;
                 return typeof epoch === 'number' ? epoch : 1;
             });
-            if (Number.isInteger(watched) && watched > binding.epoch) binding.epoch = watched;
+            if (Number.isInteger(watched) && watched > binding.seenPageEpoch) {
+                binding.epoch += watched - binding.seenPageEpoch;
+                binding.seenPageEpoch = watched;
+            }
         }
         const title = typeof page.title === 'function' ? await page.title() : '';
         const finalUrl = typeof page.url === 'function' ? page.url() : '';
@@ -571,7 +709,7 @@ export function createAgentRuntime(config) {
 
     /**
      * @param {import('playwright-core').Page} page
-     * @param {{ epoch: number, policyApplied: boolean }} binding
+     * @param {{ epoch: number, seenPageEpoch: number, policyApplied: boolean }} binding
      */
     function readPort(page, binding) {
         return {

@@ -165,4 +165,38 @@ describe('agent snapshots', () => {
         })).toThrow(expect.objectContaining({ code: 'STALE_REF' }));
         expect(() => commit(store, { frameId: 'frame_other' })).toThrow(expect.objectContaining({ code: 'ACTION_DENIED' }));
     });
+
+    it('rejects a replaced element that publishes the same fields', () => {
+        const store = createSnapshotStore();
+        const snap = commit(store, {
+            nodes: [
+                { rank: 1, title: 'Alpha', snippet: 'Snippet', url: 'https://news.example/a', node_id: 'n_1' },
+                { rank: 2, title: 'Beta', snippet: 'Second', url: 'https://news.example/b', node_id: 'n_2' },
+            ],
+        });
+        expect(snap.nodes[0]).not.toHaveProperty('node_id');
+        expect(JSON.stringify(snap.nodes)).not.toContain('node_id');
+        const same = store.resolve({
+            ref: snap.nodes[0].ref,
+            deviceId: 'dev_a',
+            epoch: 1,
+            sessionId,
+            action: 'naver.search.result.read',
+            currentNodes: [
+                { rank: 1, title: 'Alpha', snippet: 'Snippet', url: 'https://news.example/a', node_id: 'n_1' },
+            ],
+        });
+        expect(same).toMatchObject({ title: 'Alpha', url: 'https://news.example/a' });
+        expect(same).not.toHaveProperty('node_id');
+        expect(() => store.resolve({
+            ref: snap.nodes[0].ref,
+            deviceId: 'dev_a',
+            epoch: 1,
+            sessionId,
+            action: 'naver.search.result.read',
+            currentNodes: [
+                { rank: 1, title: 'Alpha', snippet: 'Snippet', url: 'https://news.example/a', node_id: 'n_9' },
+            ],
+        })).toThrow(expect.objectContaining({ code: 'STATE_CHANGED', message: 'The document changed.' }));
+    });
 });

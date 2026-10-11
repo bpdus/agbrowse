@@ -110,4 +110,21 @@ describe('naver search adapter', () => {
         await expect(runObserve(unknownPage, policy)).rejects.toMatchObject({ code: 'SITE_UNSUPPORTED' });
         expect(fixture.counts()).toEqual({ mutations: 0, popupFetches: 0 });
     });
+
+    it('assigns a new node id when the same listing text is a new element', () => {
+        const dom = new JSDOM(readFileSync(listingPath, 'utf8'));
+        const first = readListingFromDocument(dom.window.document);
+        const link = dom.window.document.querySelector('a.link_tit');
+        link.replaceWith(link.cloneNode(true));
+        const second = readListingFromDocument(dom.window.document);
+        expect(second.results[0].title).toBe(first.results[0].title);
+        expect(second.results[0].href).toBe(first.results[0].href);
+        expect(first.results[0].node_id).toMatch(/^n_[a-f0-9]{1,32}$/);
+        expect(second.results[0].node_id).toMatch(/^n_[a-f0-9]{1,32}$/);
+        expect(second.results[0].node_id).not.toBe(first.results[0].node_id);
+        expect(second.results[1].node_id).toBe(first.results[1].node_id);
+        const published = publishResults(second.results, 'https://search.naver.com/search.naver', productionSearchPolicy());
+        expect(published[0].node_id).toBe(second.results[0].node_id);
+        expect(published[1].node_id).toBe(second.results[1].node_id);
+    });
 });

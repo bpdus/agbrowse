@@ -175,6 +175,19 @@ function singleHeader(req, name) {
     return value;
 }
 
+const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
+
+/**
+ * @param {import('node:http').IncomingMessage} req
+ * @returns {string}
+ */
+function bearerToken(req) {
+    const header = singleHeader(req, 'authorization');
+    if (!header) return '';
+    const match = BEARER.exec(header);
+    return match ? match[1] : '';
+}
+
 /**
  * @param {{
  *   auth: {
@@ -261,6 +274,13 @@ export function createGateway(options) {
             }
             const route = url.pathname === '/auth/pair' || url.pathname === '/auth/challenge' || url.pathname === '/auth/token';
             if (!route) {
+                req.resume();
+                const token = bearerToken(req);
+                if (!token) {
+                    sendError(res, authError('AUTH_INVALID'), 401);
+                    return;
+                }
+                await options.auth.authenticate(token);
                 sendError(res, authError('AUTH_INVALID'), 404);
                 return;
             }

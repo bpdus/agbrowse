@@ -101,12 +101,36 @@ export function buildSearchUrl(query, policy) {
  * @param {ParentNode | undefined} doc
  */
 export function readListingFromDocument(doc) {
+    /**
+     * Stable for one element in this document. A replacement gets a new id.
+     * @param {ParentNode} root
+     * @param {Element} element
+     */
+    function listingNodeId(root, element) {
+        const view = /** @type {any} */ (
+            /** @type {{ defaultView?: unknown }} */ (root).defaultView
+            || /** @type {{ ownerDocument?: { defaultView?: unknown } }} */ (root).ownerDocument?.defaultView
+            || globalThis
+        );
+        if (!view.__agbrowseNodes) {
+            view.__agbrowseNodes = new WeakMap();
+            view.__agbrowseNodeSeq = 0;
+        }
+        let id = view.__agbrowseNodes.get(element);
+        if (!id) {
+            view.__agbrowseNodeSeq += 1;
+            id = `n_${view.__agbrowseNodeSeq.toString(16)}`;
+            view.__agbrowseNodes.set(element, id);
+        }
+        return id;
+    }
+
     const root = doc && typeof doc.querySelectorAll === 'function' ? doc : globalThis.document;
     const blocked = root.querySelector('input[type="password"], input[name="otp"], input[autocomplete="one-time-code"], #captcha, .captcha, [data-captcha], [data-agent-block]');
     if (blocked) return { blocked: true, reason: 'HUMAN_REQUIRED', results: [] };
     const containers = [...root.querySelectorAll('.total_wrap, li.bx')];
     if (containers.length === 0) return { blocked: false, reason: 'SITE_UNSUPPORTED', results: [] };
-    /** @type {Array<{ rank: number, title: string, snippet: string, href: string }>} */
+    /** @type {Array<{ rank: number, title: string, snippet: string, href: string, node_id: string }>} */
     const results = [];
     for (const container of containers) {
         const link = container.querySelector('a.link_tit');
@@ -116,7 +140,13 @@ export function readListingFromDocument(doc) {
         const snippetNode = container.querySelector('.total_dsc, .api_txt_lines');
         const snippet = snippetNode ? (snippetNode.textContent || '').replace(/\s+/g, ' ').trim() : '';
         if (!title || !href) continue;
-        results.push({ rank: results.length + 1, title, snippet, href });
+        results.push({
+            rank: results.length + 1,
+            title,
+            snippet,
+            href,
+            node_id: listingNodeId(root, link),
+        });
     }
     if (results.length === 0) return { blocked: false, reason: 'SITE_UNSUPPORTED', results: [] };
     return { blocked: false, reason: null, results };
@@ -137,13 +167,22 @@ function publicPage(finalUrl, title, policy) {
     };
 }
 
+const NODE_ID = /^n_[a-f0-9]{1,32}$/;
+
 /**
- * @param {Array<{ rank: number, title: string, snippet: string, href: string }>} results
+ * @param {unknown} value
+ */
+function copyNodeId(value) {
+    return typeof value === 'string' && NODE_ID.test(value) ? value : '';
+}
+
+/**
+ * @param {Array<{ rank: number, title: string, snippet: string, href: string, node_id?: string }>} results
  * @param {string} pageUrl
  * @param {{ harnessOrigin: string | null }} policy
  */
 export function publishResults(results, pageUrl, policy) {
-    /** @type {Array<{ rank: number, title: string, snippet: string, url: string }>} */
+    /** @type {Array<{ rank: number, title: string, snippet: string, url: string, node_id: string }>} */
     const published = [];
     for (const item of results) {
         let absolute = item.href;
@@ -159,6 +198,7 @@ export function publishResults(results, pageUrl, policy) {
             title: redactText(item.title, 180),
             snippet: redactText(item.snippet, 240),
             url,
+            node_id: copyNodeId(item.node_id),
         });
     }
     return published;

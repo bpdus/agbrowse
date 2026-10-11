@@ -32,8 +32,18 @@ function newId(prefix, bytes) {
     return `${prefix}${randomBytes(bytes).toString('hex')}`;
 }
 
+const NODE_ID = /^n_[a-f0-9]{1,32}$/;
+
 /**
- * @param {{ rank: number, title: string, snippet: string, url: string }} node
+ * @param {{ node_id?: unknown }} node
+ */
+function nodeIdOf(node) {
+    return typeof node.node_id === 'string' && NODE_ID.test(node.node_id) ? node.node_id : '';
+}
+
+/**
+ * Field text plus the document element id. A replaced node does not match.
+ * @param {{ rank: number, title: string, snippet: string, url: string, node_id?: string }} node
  */
 function identityOf(node) {
     return createHash('sha256').update(JSON.stringify({
@@ -41,15 +51,28 @@ function identityOf(node) {
         title: node.title,
         snippet: node.snippet,
         url: node.url,
+        node_id: nodeIdOf(node),
     })).digest('hex');
 }
 
 /**
+ * @param {{ rank: number, title: string, snippet: string, url: string }} node
+ */
+function clientNode(node) {
+    return {
+        rank: node.rank,
+        title: node.title,
+        snippet: node.snippet,
+        url: node.url,
+    };
+}
+
+/**
  * @param {unknown} value
- * @returns {{ rank: number, title: string, snippet: string, url: string }}
+ * @returns {{ rank: number, title: string, snippet: string, url: string, node_id: string }}
  */
 function publicNode(value) {
-    const node = /** @type {{ rank?: unknown, title?: unknown, snippet?: unknown, url?: unknown }} */ (value);
+    const node = /** @type {{ rank?: unknown, title?: unknown, snippet?: unknown, url?: unknown, node_id?: unknown }} */ (value);
     if (!Number.isInteger(node.rank) || /** @type {number} */ (node.rank) < 1) throw readError('INVALID_ARGUMENTS');
     if (typeof node.url !== 'string' || node.url.length === 0) throw readError('INVALID_ARGUMENTS');
     return {
@@ -57,13 +80,14 @@ function publicNode(value) {
         title: redactText(node.title, 180),
         snippet: redactText(node.snippet, 240),
         url: node.url,
+        node_id: nodeIdOf(node),
     };
 }
 
 export function createSnapshotStore() {
     /** @type {Map<string, { deviceId: string, epoch: number, sessionId: string, tabId: string, frameId: string, documentEpoch: number, snapshotId: string | null, truncated: boolean, refIds: string[] }>} */
     const sessions = new Map();
-    /** @type {Map<string, { ref: string, deviceId: string, epoch: number, sessionId: string, tabId: string, frameId: string, documentEpoch: number, snapshotId: string, truncated: boolean, identity: string, node: { rank: number, title: string, snippet: string, url: string } }>} */
+    /** @type {Map<string, { ref: string, deviceId: string, epoch: number, sessionId: string, tabId: string, frameId: string, documentEpoch: number, snapshotId: string, truncated: boolean, identity: string, node: { rank: number, title: string, snippet: string, url: string, node_id: string } }>} */
     const refs = new Map();
 
     /**
@@ -92,7 +116,7 @@ export function createSnapshotStore() {
     }
 
     /**
-     * @param {{ deviceId: string, epoch: number, sessionId: string, tabId: string, frameId: string, documentEpoch: number, requestId: string, baseSnapshotId?: string | null, page: { origin: string, url: string, title: string }, nodes: Array<{ rank: number, title: string, snippet: string, url: string }>, maxNodes: number }} input
+     * @param {{ deviceId: string, epoch: number, sessionId: string, tabId: string, frameId: string, documentEpoch: number, requestId: string, baseSnapshotId?: string | null, page: { origin: string, url: string, title: string }, nodes: Array<{ rank: number, title: string, snippet: string, url: string, node_id?: string }>, maxNodes: number }} input
      */
     function commit(input) {
         if (input.frameId !== FRAME_MAIN) throw readError('ACTION_DENIED');
@@ -178,7 +202,7 @@ export function createSnapshotStore() {
     /**
      * Structural checks. A current node list, when supplied, must contain the
      * same identity. A different element is never returned in its place.
-     * @param {{ ref: string, deviceId: string, epoch: number, sessionId: string, tabId?: string, frameId?: string, action: string, currentNodes?: Array<{ rank: number, title: string, snippet: string, url: string }> | null, currentEpoch?: number | null }} input
+     * @param {{ ref: string, deviceId: string, epoch: number, sessionId: string, tabId?: string, frameId?: string, action: string, currentNodes?: Array<{ rank: number, title: string, snippet: string, url: string, node_id?: string }> | null, currentEpoch?: number | null }} input
      */
     function resolve(input) {
         const record = refs.get(input.ref);
@@ -197,9 +221,9 @@ export function createSnapshotStore() {
             const current = input.currentNodes.map((node) => publicNode(node));
             const match = current.find((node) => identityOf(node) === record.identity);
             if (!match) throw readError('STATE_CHANGED');
-            return { ...match, ref: record.ref, session_id: record.sessionId };
+            return { ...clientNode(match), ref: record.ref, session_id: record.sessionId };
         }
-        return { ...record.node, ref: record.ref, session_id: record.sessionId };
+        return { ...clientNode(record.node), ref: record.ref, session_id: record.sessionId };
     }
 
     /**
