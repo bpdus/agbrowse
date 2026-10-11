@@ -209,7 +209,127 @@ describe('agent-runtime', () => {
 
     it('returns only the lifecycle methods', () => {
         const runtime = createAgentRuntime();
-        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
+        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchCart', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
+    });
+
+    it('serializes cart inspection through the runtime queue and fails live layouts closed', async () => {
+        const made = makeContext(events);
+        const pages = [makePage('cart-one'), makePage('cart-two')];
+        let pageIndex = 0;
+        made.context.newPage = async () => pages[pageIndex++];
+        let releaseFirst;
+        const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+        let activeEvaluations = 0;
+        let maxActive = 0;
+        let evaluationCount = 0;
+        pages[0].evaluate = async () => {
+            evaluationCount += 1;
+            activeEvaluations += 1;
+            maxActive = Math.max(maxActive, activeEvaluations);
+            await firstGate;
+            activeEvaluations -= 1;
+            return { login: false, human: false };
+        };
+        pages[1].evaluate = async () => {
+            evaluationCount += 1;
+            activeEvaluations += 1;
+            maxActive = Math.max(maxActive, activeEvaluations);
+            activeEvaluations -= 1;
+            return { login: false, human: false };
+        };
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const first = await runtime.openSession();
+        const second = await runtime.openSession();
+        pages[0].currentUrl = 'https://shopping.naver.com/products/one';
+        pages[1].currentUrl = 'https://shopping.naver.com/products/two';
+        const payload = (session_id) => ({
+            session_id,
+            mcp_session_id: `mcp_${'b'.repeat(16)}`,
+            device_id: 'dev_test',
+            epoch: 1,
+            worker_id: `wrk_${'a'.repeat(16)}`,
+        });
+        const pendingOne = runtime.dispatchCart('naver.cart.read', payload(first.sessionId));
+        await new Promise((resolve) => setImmediate(resolve));
+        const pendingTwo = runtime.dispatchCart('naver.cart.read', payload(second.sessionId));
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(evaluationCount).toBe(1);
+        releaseFirst();
+        const outcomes = await Promise.allSettled([pendingOne, pendingTwo]);
+        expect(outcomes.every((outcome) => outcome.status === 'rejected' && outcome.reason.code === 'SITE_UNSUPPORTED')).toBe(true);
+        expect(evaluationCount).toBe(2);
+        expect(maxActive).toBe(1);
+    });
+
+    it('returns LOGIN_REQUIRED for a recognized login form without reading its value', async () => {
+        const made = makeContext(events);
+        const page = makePage('cart-login');
+        page.evaluate = async () => ({ login: true, human: false, value: 'canary-password-value' });
+        made.context.newPage = async () => page;
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const opened = await runtime.openSession();
+        page.currentUrl = 'https://shopping.naver.com/products/one';
+        await expect(runtime.dispatchCart('naver.product.read', {
+            session_id: opened.sessionId, mcp_session_id: `mcp_${'b'.repeat(16)}`,
+            device_id: 'dev_test', epoch: 1, worker_id: `wrk_${'a'.repeat(16)}`,
+        })).rejects.toMatchObject({ code: 'LOGIN_REQUIRED' });
+    });
+
+    it('blocks Naver login redirects before fetching them and records blocked order attempts', async () => {
+        const made = makeContext(events);
+        const loginPage = makePage('cart-login-redirect');
+        const orderPage = makePage('cart-order-attempt');
+        loginPage.evaluate = async () => { throw new Error('login destination must not be inspected'); };
+        orderPage.evaluate = async () => ({ login: false, human: false });
+        const pages = [loginPage, orderPage];
+        let index = 0;
+        made.context.newPage = async () => pages[index++];
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const loginSession = await runtime.openSession();
+        const orderSession = await runtime.openSession();
+        loginPage.currentUrl = 'https://shopping.naver.com/products/one';
+        orderPage.currentUrl = 'https://shopping.naver.com/products/two';
+        const handler = made.context.routes[0].handler;
+        const loginFetches = [];
+        let loginAbort = null;
+        await handler({
+            request: () => makeRoutedRequest('https://nid.naver.com/nidlogin.login', { page: loginPage }),
+            async abort(reason) { loginAbort = reason; },
+            async fetch(options) { loginFetches.push(options); return { status: () => 200 }; },
+            async fulfill() {},
+            async continue() {},
+        });
+        expect(loginAbort).toBe('blockedbyclient');
+        expect(loginFetches).toEqual([]);
+        await expect(runtime.dispatchCart('naver.product.read', {
+            session_id: loginSession.sessionId, mcp_session_id: `mcp_${'b'.repeat(16)}`,
+            device_id: 'dev_test', epoch: 1, worker_id: `wrk_${'a'.repeat(16)}`,
+        })).rejects.toMatchObject({ code: 'LOGIN_REQUIRED' });
+
+        let orderAbort = null;
+        const orderFetches = [];
+        await handler({
+            request: () => makeRoutedRequest('https://shopping.naver.com/checkout', { page: orderPage }),
+            async abort(reason) { orderAbort = reason; },
+            async fetch(options) { orderFetches.push(options); return { status: () => 200 }; },
+            async fulfill() {},
+            async continue() {},
+        });
+        expect(orderAbort).toBe('blockedbyclient');
+        expect(orderFetches).toEqual([]);
+        await expect(runtime.dispatchCart('naver.cart.set', {
+            session_id: orderSession.sessionId, mcp_session_id: `mcp_${'b'.repeat(16)}`,
+            device_id: 'dev_test', epoch: 1, worker_id: `wrk_${'a'.repeat(16)}`,
+        })).rejects.toMatchObject({ code: 'ORDER_CREATION_DETECTED' });
     });
 
     it('rejects a foreign profile or endpoint before launch', async () => {
@@ -753,7 +873,7 @@ describe('agent-runtime', () => {
 
 /**
  * @param {string} url
- * @param {{ method?: string, navigation?: boolean, redirectedFrom?: () => unknown }} [options]
+ * @param {{ method?: string, navigation?: boolean, redirectedFrom?: () => unknown, page?: object }} [options]
  */
 function makeRoutedRequest(url, options = {}) {
     const method = options.method || 'GET';
@@ -766,6 +886,7 @@ function makeRoutedRequest(url, options = {}) {
         isNavigationRequest: () => navigation,
         redirectedFrom,
         resourceType: () => resourceType,
+        ...(options.page ? { frame: () => ({ page: () => options.page, parentFrame: () => null }) } : {}),
     };
 }
 

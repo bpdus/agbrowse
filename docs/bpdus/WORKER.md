@@ -3,7 +3,7 @@ note_type: guide
 content_mode: how_to
 title: bpdus agbrowse 전용 에이전트 워커
 status: draft
-summary: 전용 Chrome 프로필과 디버깅 파이프를 쓰는 포그라운드 워커의 실행, 종료, 한계, 되돌리기를 적는다.
+summary: 전용 Chrome 프로필과 디버깅 파이프를 쓰는 포그라운드 워커의 조회·cart 경계, 종료, 한계와 되돌리기를 적는다.
 created: 2026-10-11
 updated: 2026-10-11
 language: ko
@@ -17,7 +17,7 @@ related_notes:
 
 # bpdus agbrowse 전용 에이전트 워커
 
-이 문서는 로컬에서 직접 켜는 포그라운드 워커의 실행 방법을 적는다. 워커는 설치된 Google Chrome 하나를 전용 프로필로 띄우는 실행 기반이다. 조회, 장바구니, 승인, MCP 게이트웨이는 아직 없다.
+이 문서는 로컬에서 직접 켜는 포그라운드 워커의 실행 방법과 안전 경계를 적는다. 워커는 설치된 Google Chrome 하나를 전용 프로필로 띄운다. 읽기 전용 브라우저 MCP와 네이버 cart 도구 네 개를 제공하지만, 실제 Naver cart layout과 mutation endpoint가 검증되지 않아 live cart 작업은 `SITE_UNSUPPORTED`로 닫힌다. 승인과 결제 기능은 없다.
 
 Copyright (c) 2026 bpdus. 원 소프트웨어 저작권은 [루트 LICENSE](../../LICENSE)의 `Copyright (c) 2026 lidge-jun`을 따른다. 이 표시는 원 저작권을 대체하지 않는다.
 
@@ -37,20 +37,26 @@ node skills/browser/agent-worker.mjs
 
 ## 수동 로그인
 
-Chrome 창이 열리면 사용자가 그 창에서 직접 로그인한다. 이 워커는 페이지 이동, 클릭, 입력, 업로드를 하지 않는다. 로그인 상태는 전용 프로필에 남고, 일상 Chrome 프로필로 복사하지 않는다.
+Chrome 창이 열리면 사용자가 그 창에서 직접 로그인한다. 장바구니 도구는 로그인 화면을 감지하면 `LOGIN_REQUIRED`를 반환한다. 자격 증명을 읽거나 입력하지 않고, 로그인 주소를 따라가거나 재시도하지 않는다. CAPTCHA나 차단 화면에서는 `HUMAN_REQUIRED`를 반환한다. 로그인 상태는 전용 프로필에 남고, 일상 Chrome 프로필로 복사하지 않는다.
 
 ## 파이프 전송
 
-Chrome과는 디버깅 파이프로만 통신한다. 원격 디버깅 TCP 포트를 열지 않으므로 다른 기기에서 CDP로 접속할 수 없다. 기존 CLI의 포트 접속 경로는 바꾸지 않는다.
+Chrome과는 디버깅 파이프로만 통신한다. 원격 디버깅 TCP 포트를 열지 않으므로 다른 기기에서 CDP로 접속할 수 없다. owner-only Unix socket은 고정된 read 도구와 cart 도구 네 개만 받는다. 임의 브라우저 평가나 요청 인자는 허용하지 않는다. 기존 CLI의 포트 접속 경로는 바꾸지 않는다.
+
+## Cart 상태와 지원 범위
+
+준비 intent와 idempotency 기록은 `~/.agbrowse-bpdus/cart-state`에 둔다. 디렉터리는 `0700`, 상태 파일과 잠금 파일은 `0600`을 요구한다. 쓰기는 잠금, 임시 파일, flush, 원자적 rename 순서로 저장한다. 안전하지 않은 경로나 쓰기 실패가 있으면 요청을 실패로 닫는다.
+
+작업을 보내기 전에 `DISPATCHING` 상태를 저장한다. 워커가 재시작했을 때 이 상태가 남아 있으면 `OUTCOME_UNKNOWN`으로 바꾸고 같은 account의 새 쓰기를 막는다. 결과가 불분명한 작업은 자동 재전송하지 않는다. 조회와 dry-run은 현재 DOM만 읽으며 페이지 이동, 옵션 선택, 입력, 클릭, 제출을 하지 않는다. 이 checkout에는 검증된 production cart layout이나 endpoint가 없으므로 어떤 live cart write도 실행되지 않는다.
 
 ## 종료와 재시작
 
-`SIGINT` 또는 `SIGTERM`을 받으면 새 작업을 받지 않고 Chrome을 닫은 다음 프로필 잠금을 푼다. 같은 신호를 여러 번 보내도 정리는 한 번만 한다. 프로세스를 다시 실행하면 새 세션 ID를 만들며 이전 세션 작업을 재개하지 않는다. 브라우저 연결이 끊기면 워커는 종료되고, 자동으로 다시 띄우지 않는다.
+`SIGINT` 또는 `SIGTERM`을 받으면 새 작업을 받지 않고 Chrome을 닫은 다음 프로필 잠금을 푼다. 같은 신호를 여러 번 보내도 정리는 한 번만 한다. 프로세스를 다시 실행하면 새 세션 ID를 만들며 이전 브라우저 세션을 재개하지 않는다. 저장된 cart intent는 binding과 만료 시각을 다시 검사한다. 브라우저 연결이 끊기면 워커는 종료되고, 자동으로 다시 띄우지 않는다.
 
 ## 한계
 
-워커는 포그라운드 프로세스다. 소켓, HTTP 서버, 표준입력 명령, Node IPC, MCP 등록, 페어링, 승인 저장소, LaunchAgent를 만들지 않는다. 세션 목록은 프로세스 메모리에만 있고, 탭을 자동으로 등록하지 않는다.
+워커는 포그라운드 프로세스다. HTTP 서버, 표준입력 명령, Node IPC, MCP 게이트웨이 등록, 페어링, 승인 저장소, LaunchAgent를 만들지 않는다. owner-only Unix socket과 cart intent/idempotency 저장소만 사용한다. 세션 목록은 프로세스 메모리에만 있고, 탭을 자동으로 등록하지 않는다.
 
 ## 되돌리기
 
-워커를 멈춘 뒤 PR 1 변경을 revert한다. `~/.agbrowse-bpdus` 프로필은 따로 지우라고 하기 전까지 남긴다. 일상 Chrome과 그 프로필은 멈추거나 삭제하지 않는다.
+`cart:write`를 회수하려면 기기를 폐기한 뒤 `browser:read`만 승인해 다시 페어링한다. 코드 변경을 되돌릴 때에는 워커를 멈춘 뒤 이 PR을 revert한다. `~/.agbrowse-bpdus` 프로필과 cart 상태는 별도 요청이 있기 전까지 남긴다. 일상 Chrome과 그 프로필은 멈추거나 삭제하지 않는다.

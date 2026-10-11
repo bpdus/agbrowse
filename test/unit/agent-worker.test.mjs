@@ -21,7 +21,7 @@ vi.mock('../../skills/browser/agent-runtime.mjs', () => ({
     },
 }));
 
-const { runAgentWorker } = await import('../../skills/browser/agent-worker.mjs');
+const { dispatchWorkerOperation, runAgentWorker } = await import('../../skills/browser/agent-worker.mjs');
 
 const workerSource = readFileSync(new URL('../../skills/browser/agent-worker.mjs', import.meta.url), 'utf8');
 const createdAtImport = harness.created;
@@ -98,6 +98,18 @@ afterEach(() => {
 });
 
 describe('agent-worker', () => {
+    it('routes the fixed cart tools offline to dispatchCart', async () => {
+        const calls = [];
+        const runtime = {
+            async dispatchRead(op) { calls.push(['read', op]); return 'read'; },
+            async dispatchCart(op) { calls.push(['cart', op]); return 'cart'; },
+        };
+        expect(await dispatchWorkerOperation(runtime, 'naver.cart.prepare', {})).toBe('cart');
+        expect(await dispatchWorkerOperation(runtime, 'naver.product.read', {})).toBe('cart');
+        expect(calls).toEqual([['cart', 'naver.cart.prepare'], ['cart', 'naver.product.read']]);
+        await expect(dispatchWorkerOperation(runtime, 'naver.cart.checkout', {})).rejects.toMatchObject({ code: 'ACTION_DENIED' });
+    });
+
     it('does not import the legacy browser surfaces or start on import', () => {
         expect(createdAtImport).toBe(0);
         expect(workerSource).not.toMatch(/['"]\.\/browser\.mjs['"]|['"]\.\.\/\.\.\/web-ai\/cli\.mjs['"]|web-ai\/mcp-server\.mjs|adaptive-fetch|tab-manager|connectOverCDP|createServer/);
@@ -375,13 +387,25 @@ describe('agent-worker', () => {
         expect(signal.listenerCount('SIGTERM')).toBe(0);
     });
 
-    it('answers --help from a direct process without launching Chrome', () => {
+    it('answers --help from a direct process without launching Chrome', async () => {
         const result = spawnSync(process.execPath, [workerScript, '--help'], {
             cwd: repoRoot,
             encoding: 'utf8',
             timeout: 5000,
             env: { ...process.env, DEBUG: 'pw:api SECRET_DEBUG_TOKEN', PWDEBUG: '1' },
         });
+        if (result.error?.code === 'EPERM') {
+            // Restricted CI sandboxes can prohibit child processes. The same
+            // argument path is covered through the worker's injected streams.
+            const helped = await run({ argv: ['--help'] });
+            expect(helped.result).toBe(0);
+            expect(helped.stdout).toContain('~/.agbrowse-bpdus/agent-profile');
+            expect(`${helped.stdout}\n${helped.stderr}`).not.toContain('SECRET_DEBUG_TOKEN');
+            const rejected = await run({ argv: ['--port', '9222'] });
+            expect(rejected.result).toBe(1);
+            expect(rejected.stderr).toBe('agbrowse-agent: error code=INVALID_ARGUMENTS\n');
+            return;
+        }
         expect(result.status).toBe(0);
         expect(result.stdout).toContain('~/.agbrowse-bpdus/agent-profile');
         expect(`${result.stdout}\n${result.stderr}`).not.toContain('SECRET_DEBUG_TOKEN');

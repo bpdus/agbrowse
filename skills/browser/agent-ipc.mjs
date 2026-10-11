@@ -20,8 +20,16 @@ const ALLOWED_OPS = new Set([
     'browser.session.open',
     'naver.search.list',
     'naver.search.result.read',
+    'naver.product.read',
+    'naver.cart.read',
+    'naver.cart.prepare',
+    'naver.cart.set',
     'worker.hello',
 ]);
+
+export function isAllowedWorkerOperation(op) {
+    return typeof op === 'string' && ALLOWED_OPS.has(op);
+}
 
 /**
  * @param {string} [home]
@@ -101,7 +109,7 @@ function parseMessage(line) {
     }
     if (!message || typeof message !== 'object' || Array.isArray(message)) throw readError('INVALID_ARGUMENTS');
     if (typeof message.id !== 'string' || !/^[a-f0-9]{16}$/.test(message.id)) throw readError('INVALID_ARGUMENTS');
-    if (typeof message.op !== 'string' || !ALLOWED_OPS.has(message.op)) throw readError('ACTION_DENIED');
+    if (!isAllowedWorkerOperation(message.op)) throw readError('ACTION_DENIED');
     if (message.payload === null || typeof message.payload !== 'object' || Array.isArray(message.payload)) {
         throw readError('INVALID_ARGUMENTS');
     }

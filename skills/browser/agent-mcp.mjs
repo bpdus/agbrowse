@@ -6,7 +6,7 @@
  * This module does not import Playwright or open a CDP port.
  */
 
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { AgentAuthError } from './agent-auth-store.mjs';
 import { KeyedMutex } from './keyed-mutex.mjs';
 import { READ_ERROR_MESSAGES, readError } from './agent-read-error.mjs';
@@ -16,6 +16,7 @@ import { READ_ACTION, createSnapshotStore } from './agent-snapshot.mjs';
 export const MCP_PROTOCOL_VERSION = '2025-11-25';
 export const DOMAIN_PROTOCOL_VERSION = '0.1.0';
 export const READ_SCOPE = 'browser:read';
+export const CART_WRITE_SCOPE = 'cart:write';
 
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,64}$/;
 const SESSION_ID = /^ses_[a-f0-9]{16}$/;
@@ -24,6 +25,9 @@ const SNAPSHOT_ID = /^snap_[a-f0-9]{16}$/;
 const TAB_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 const MCP_SESSION_ID = /^mcp_[a-f0-9]{16}$/;
 const WORKER_ID = /^wrk_[a-f0-9]{16}$/;
+const PRODUCT_REF = /^pref_[a-f0-9]{24}$/;
+const CART_INTENT_ID = /^ci_[a-f0-9]{24}$/;
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{1,64}$/;
 const QUERY_TEXT = /^[^\u0000-\u001f\u007f<>"'`\\]{1,80}$/u;
 
 const TOOL_NAMES = [
@@ -32,7 +36,13 @@ const TOOL_NAMES = [
     'browser.observe',
     'naver.search.list',
     'naver.search.result.read',
+    'naver.product.read',
+    'naver.cart.read',
+    'naver.cart.prepare',
+    'naver.cart.set',
 ];
+
+const CART_TOOL_NAMES = new Set(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set']);
 
 const TOOLS = [
     {
@@ -67,6 +77,36 @@ const TOOLS = [
         description: 'Read one listing item already present in the current snapshot. Does not open the destination.',
         inputSchema: schema(['protocol_version', 'request_id', 'session_id', 'ref'], {}),
     },
+    {
+        name: 'naver.product.read',
+        description: 'Inspect the currently open supported product page. Read-only; requires browser:read and cart:write.',
+        inputSchema: schema(['protocol_version', 'request_id', 'session_id'], {}),
+    },
+    {
+        name: 'naver.cart.read',
+        description: 'Inspect the currently open supported cart page. Read-only; requires browser:read and cart:write.',
+        inputSchema: schema(['protocol_version', 'request_id', 'session_id'], {}),
+    },
+    {
+        name: 'naver.cart.prepare',
+        description: 'Prepare an absolute target cart quantity. Inspection-only dry-run by default.',
+        inputSchema: schema(['protocol_version', 'request_id', 'session_id', 'product_ref', 'option_ids', 'quantity', 'expected_unit_price'], {
+            product_ref: { type: 'string', pattern: '^pref_[a-f0-9]{24}$' },
+            option_ids: { type: 'array', maxItems: 12, items: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,128}$' } },
+            quantity: { type: 'integer', minimum: 1, maximum: 99 },
+            expected_unit_price: { type: 'integer', minimum: 0 },
+            dry_run: { type: 'boolean', default: true },
+        }),
+    },
+    {
+        name: 'naver.cart.set',
+        description: 'Set an absolute target quantity from a prepared intent. Inspection-only dry-run by default.',
+        inputSchema: schema(['protocol_version', 'request_id', 'session_id', 'intent_id', 'idempotency_key'], {
+            intent_id: { type: 'string', pattern: '^ci_[a-f0-9]{24}$' },
+            idempotency_key: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9._:-]{1,64}$' },
+            dry_run: { type: 'boolean', default: true },
+        }),
+    },
 ];
 
 /**
@@ -80,8 +120,8 @@ function schema(required, extra) {
         required,
         properties: {
             protocol_version: { const: DOMAIN_PROTOCOL_VERSION },
-            request_id: { type: 'string' },
-            session_id: { type: 'string' },
+            request_id: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,64}$' },
+            session_id: { type: 'string', pattern: '^ses_[a-f0-9]{16}$' },
             query: { type: 'string' },
             ref: { type: 'string' },
             ...extra,
@@ -338,7 +378,7 @@ export function createMcpDispatcher(options) {
      * @param {any} mcpSession
      * @param {any} message
      */
-    async function callTool(principal, mcpSession, message) {
+    async function callTool(principal, mcpSession, message, refreshPrincipal) {
         const tool = typeof message?.params?.name === 'string' ? message.params.name : '';
         if (!TOOL_NAMES.includes(tool)) return rpcError(message.id, -32602, 'Invalid params', mcpSession.id);
         const args = message?.params?.arguments;
@@ -350,6 +390,10 @@ export function createMcpDispatcher(options) {
         if (!requestId) return toolFailure(message.id, '-', undefined, 'INVALID_ARGUMENTS', mcpSession.id, tool);
         if (record.protocol_version !== DOMAIN_PROTOCOL_VERSION) {
             return toolFailure(message.id, requestId, undefined, 'VERSION_UNSUPPORTED', mcpSession.id, tool);
+        }
+        if (CART_TOOL_NAMES.has(tool)
+            && (!Array.isArray(principal?.scopes) || !principal.scopes.includes(READ_SCOPE) || !principal.scopes.includes(CART_WRITE_SCOPE))) {
+            return authOutcome(403, 'SCOPE_DENIED', mcpSession.id, tool, requestId);
         }
         try {
             if (tool === 'browser.session.open') {
@@ -391,6 +435,70 @@ export function createMcpDispatcher(options) {
             }
             if (record.tab_id !== undefined && record.tab_id !== binding.tabId) return authOutcome(403, 'ACTION_DENIED', mcpSession.id, tool, requestId);
             if (record.frame_id !== undefined && record.frame_id !== 'frame_main') return authOutcome(403, 'ACTION_DENIED', mcpSession.id, tool, requestId);
+
+            if (CART_TOOL_NAMES.has(tool)) {
+                const accepted = ['protocol_version', 'request_id', 'session_id'];
+                /** @type {Record<string, unknown>} */
+                const cartPayload = {
+                    session_id: sessionId,
+                    mcp_session_id: mcpSession.id,
+                    device_id: principal.device_id,
+                    epoch: principal.epoch,
+                };
+                if (tool === 'naver.cart.prepare') {
+                    accepted.push('product_ref', 'option_ids', 'quantity', 'expected_unit_price', 'dry_run');
+                    if (typeof record.product_ref !== 'string' || !PRODUCT_REF.test(record.product_ref)
+                        || !Array.isArray(record.option_ids) || record.option_ids.length > 12
+                        || !record.option_ids.every((id) => typeof id === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(id))) {
+                        throw readError('INVALID_ARGUMENTS');
+                    }
+                    if (!Number.isInteger(record.quantity) || /** @type {number} */ (record.quantity) < 1 || /** @type {number} */ (record.quantity) > 99) {
+                        throw readError('QUANTITY_INVALID');
+                    }
+                    if (!Number.isSafeInteger(record.expected_unit_price) || /** @type {number} */ (record.expected_unit_price) < 0
+                        || (record.dry_run !== undefined && typeof record.dry_run !== 'boolean')) throw readError('INVALID_ARGUMENTS');
+                    Object.assign(cartPayload, {
+                        product_ref: record.product_ref,
+                        option_ids: record.option_ids,
+                        quantity: record.quantity,
+                        expected_unit_price: record.expected_unit_price,
+                        dry_run: record.dry_run !== false,
+                    });
+                } else if (tool === 'naver.cart.set') {
+                    accepted.push('intent_id', 'idempotency_key', 'dry_run');
+                    if (typeof record.intent_id !== 'string' || !CART_INTENT_ID.test(record.intent_id)
+                        || typeof record.idempotency_key !== 'string' || !IDEMPOTENCY_KEY.test(record.idempotency_key)
+                        || (record.dry_run !== undefined && typeof record.dry_run !== 'boolean')) throw readError('INVALID_ARGUMENTS');
+                    const dryRun = record.dry_run !== false;
+                    const digest = createHash('sha256').update(JSON.stringify({
+                        intent_id: record.intent_id,
+                        dry_run: dryRun,
+                    })).digest('hex');
+                    Object.assign(cartPayload, {
+                        intent_id: record.intent_id,
+                        idempotency_key: record.idempotency_key,
+                        dry_run: dryRun,
+                        request_digest: digest,
+                    });
+                }
+                if (unknownField(record, accepted)) throw readError('INVALID_ARGUMENTS');
+
+                // Check before the worker's durable idempotency lookup, then again
+                // after waiting for the shared per-session queue.
+                await assertCartPrincipal(refreshPrincipal, principal);
+                const result = await mutex.runExclusive(sessionId, async () => {
+                    requireBinding(principal, mcpSession.id, sessionId);
+                    await assertCartPrincipal(refreshPrincipal, principal);
+                    const output = await invoke(tool, { ...cartPayload, worker_id: workerId });
+                    return output;
+                });
+                return toolOutcome(message.id, {
+                    protocol_version: DOMAIN_PROTOCOL_VERSION,
+                    request_id: requestId,
+                    session_id: sessionId,
+                    ...result,
+                }, false, mcpSession.id, requestId, tool);
+            }
 
             if (tool === 'browser.session.close') {
                 if (unknownField(record, ['protocol_version', 'request_id', 'session_id'])) throw readError('INVALID_ARGUMENTS');
@@ -510,7 +618,8 @@ export function createMcpDispatcher(options) {
             const safeTool = names.has(tool) ? tool : 'unknown';
             const safeId = REQUEST_ID.test(requestId) ? requestId : '-';
             const elapsed = Date.now() - started;
-            log(`agbrowse-mcp: tool=${safeTool} status=${status} ms=${elapsed} request=${safeId}\n`);
+            const correlation = randomBytes(8).toString('hex');
+            log(`agbrowse-mcp: tool=${safeTool} status=${status} ms=${elapsed} correlation=${correlation}\n`);
         }
     }
 
@@ -623,9 +732,24 @@ export function createMcpDispatcher(options) {
                 body: { jsonrpc: '2.0', id: rpcId ?? null, result: { tools: TOOLS } },
             };
         }
-        if (message.method === 'tools/call') return callTool(principal, mcpSession, message);
+        if (message.method === 'tools/call') {
+            const refreshPrincipal = async () => {
+                try { return await request.authenticate(token); } catch { throw readError('SCOPE_DENIED'); }
+            };
+            return callTool(principal, mcpSession, message, refreshPrincipal);
+        }
         return rpcError(rpcId ?? null, -32601, 'Method not found', mcpSession.id);
     }
 
     return { handle, dropMcpSession, dropAll };
+}
+
+/** Revalidate both scopes and the device epoch after any queue wait. */
+async function assertCartPrincipal(refreshPrincipal, original) {
+    let current;
+    try { current = await refreshPrincipal(); } catch { throw readError('SCOPE_DENIED'); }
+    if (current?.device_id !== original.device_id || current?.epoch !== original.epoch) throw readError('ACTION_DENIED');
+    if (!Array.isArray(current?.scopes) || !current.scopes.includes(READ_SCOPE) || !current.scopes.includes(CART_WRITE_SCOPE)) {
+        throw readError('SCOPE_DENIED');
+    }
 }

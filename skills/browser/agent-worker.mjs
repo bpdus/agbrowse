@@ -7,6 +7,7 @@
 
 import { pathToFileURL } from 'node:url';
 import { startReadEndpoint } from './agent-ipc.mjs';
+import { readError } from './agent-read-error.mjs';
 
 const DEBUG_ENV_KEYS = ['DEBUG', 'PWDEBUG', 'DEBUG_FILE'];
 const ALLOWED_ERROR_CODES = new Set([
@@ -23,6 +24,14 @@ const ALLOWED_ERROR_CODES = new Set([
     'ALREADY_RUNNING',
     'SHUTDOWN_FAILED',
     'STATE_UNSAFE',
+]);
+const CART_OPERATIONS = new Set(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set']);
+const READ_OPERATIONS = new Set([
+    'browser.observe',
+    'browser.session.close',
+    'browser.session.open',
+    'naver.search.list',
+    'naver.search.result.read',
 ]);
 
 const HELP = [
@@ -79,6 +88,17 @@ function restoreInheritedDebug(saved) {
  */
 function writeError(stream, code) {
     stream.write(`agbrowse-agent: error code=${code}\n`);
+}
+
+/** Route only fixed worker operations to the matching runtime dispatcher. */
+export async function dispatchWorkerOperation(runtime, op, payload) {
+    if (CART_OPERATIONS.has(op)) {
+        if (typeof runtime.dispatchCart !== 'function') throw readError('ACTION_DENIED');
+        return runtime.dispatchCart(op, payload);
+    }
+    if (!READ_OPERATIONS.has(op)) throw readError('ACTION_DENIED');
+    if (typeof runtime.dispatchRead !== 'function') throw readError('ACTION_DENIED');
+    return runtime.dispatchRead(op, payload);
 }
 
 /**
@@ -166,7 +186,7 @@ export async function runAgentWorker(options = {}) {
             if (typeof runtime.dispatchRead === 'function') {
                 endpoint = await startReadEndpoint({
                     ...(options.socketPath ? { socketPath: options.socketPath } : {}),
-                    dispatch: (op, payload) => runtime.dispatchRead(op, payload),
+                    dispatch: (op, payload) => dispatchWorkerOperation(runtime, op, payload),
                 });
             }
         } catch (error) {

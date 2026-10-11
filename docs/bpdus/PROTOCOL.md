@@ -3,7 +3,7 @@ note_type: spec
 content_mode: reference
 title: Agent Browser Gateway Protocol draft v0
 status: draft
-summary: 구현된 paired-device-v1 인증 계약과, 아직 구현하지 않은 MCP·승인 제안을 구분한다.
+summary: 구현된 paired-device-v1 인증·브라우저 MCP·fail-closed cart 계약과 미구현 승인 제안을 구분한다.
 created: 2026-10-11
 updated: 2026-10-11
 language: ko
@@ -20,7 +20,7 @@ related_notes:
 
 # Agent Browser Gateway Protocol draft v0
 
-이 문서는 에이전트와 iMac 브라우저 게이트웨이 사이의 통신 표준 **draft v0**이다. 도메인 버전은 `0.1.0`이다. `paired-device-v1` 인증은 현재 checkout에 구현되어 있다. MCP 도구, snapshot, 승인 상태 머신은 아직 제안이며 이 저장소에 없다. 정식 명칭은 확인 필요다.
+이 문서는 에이전트와 iMac 브라우저 게이트웨이 사이의 통신 표준 **draft v0**이다. 도메인 버전은 `0.1.0`이다. `paired-device-v1` 인증과 읽기 전용 MCP 브리지, 네이버 cart 도구 계약이 구현되어 있다. 승인 상태 머신은 아직 제안이다. 네이버 cart 도구는 fixture 계약만 검증했으며, 실제 네이버 레이아웃과 쓰기 경로는 검증되지 않아 운영 브라우저에서 `SITE_UNSUPPORTED`로 닫힌다. 정식 명칭은 확인 필요다.
 
 Copyright (c) 2026 bpdus. 원 소프트웨어 저작권은 [루트 LICENSE](../../LICENSE)의 `Copyright (c) 2026 lidge-jun`을 따른다. 이 표시는 원 저작권을 대체하지 않는다.
 
@@ -56,7 +56,7 @@ Host와 Origin을 검증한다. 임의 CORS를 허용하지 않는다. Tailscale
 | `POST /auth/challenge` | 활성 기기의 challenge |
 | `POST /auth/token` | proof가 맞으면 접속 토큰 |
 
-`/mcp`, 브라우저·세션 조작, 승인 경로는 없다. 페어링 창을 열고 닫기, 확인 코드 대조, 폐기는 프로세스 안 운영자 API다. 인증되지 않은 HTTP 관리 엔드포인트로 열지 않는다. 확인 코드는 응답 데이터로만 돌아가며 라이브러리 로그에 찍지 않는다.
+인증된 MCP 경로는 `/mcp`다. 승인·checkout·payment 경로는 없다. 페어링 창을 열고 닫기, 확인 코드 대조, 폐기는 프로세스 안 운영자 API다. 인증되지 않은 HTTP 관리 엔드포인트로 열지 않는다. 확인 코드는 응답 데이터로만 돌아가며 라이브러리 로그에 찍지 않는다.
 
 Tailscale 신원 헤더는 믿지 않는다. Host는 허용 목록과 정확히 같아야 한다. Origin이 있으면 허용된 값만 받는다. CORS 헤더는 붙이지 않는다. 본문은 JSON만 받고 16 KiB를 넘기면 거부한다. `aud`와 `resource`는 서버 설정값에 묶이며 요청 Host로 정하지 않는다.
 
@@ -100,21 +100,58 @@ challenge payload 순서: `protocol_version`, `purpose`, `gateway_id`, `aud`, `d
 
 ## 요청 공통 필드
 
-모든 도메인 요청은 다음 필드를 포함한다. 쓰기와 승인 관련 호출에는 `operation_id`와 `idempotency_key`를 둔다.
+모든 도메인 요청은 다음 필드를 포함한다. 쓰기와 승인 관련 호출에는 `operation_id`와 `idempotency_key`를 둔다. MCP 전송의 `request_id`는 각 호출을 식별하지만, 장바구니 중복 처리는 이 값을 사용하지 않는다.
 
 | 필드 | 의미 |
 |---|---|
 | `protocol_version` | 도메인 버전. 현재 제안값은 `"0.1.0"`이다. |
-| `request_id` | 호출 단위 ID. 로그와 오류 상관에 쓴다. |
+| `request_id` | 호출 단위 ID. 응답과 오류를 상관시키며 로그에는 기록하지 않는다. |
 | `session_id` | 브라우저 세션 ID. 인증된 세션 소유권과 대조한다. |
 | `operation_id` | 장바구니·승인·실행처럼 상태가 있는 작업 ID. |
 | `idempotency_key` | 같은 쓰기 요청의 중복 제출을 합친다. |
 
 인자의 `device_id`, `user_id`, `conversation_id`는 힌트일 수 있다. 권한 결정은 인증 문맥의 기기와 등록된 권한으로 한다.
 
+## 네이버 장바구니 도구
+
+PR 4는 다음 네 MCP 도구를 추가한다. 네 도구 모두 `browser:read`와 `cart:write`를 함께 요구한다. `cart:write`는 사람이 페어링 과정에서 명시적으로 승인해야 한다. 기존 기기에는 자동으로 추가하지 않는다. `cart:write`를 회수하려면 해당 기기를 폐기한 뒤 이 scope 없이 다시 페어링한다.
+
+| 도구 | 전용 인자 | 동작 |
+|---|---|---|
+| `naver.product.read` | 없음 | 현재 열려 있는 지원 상품 페이지에서 상품·옵션·가격·재고와 상태 지문을 읽는다. |
+| `naver.cart.read` | 없음 | 현재 열려 있는 지원 장바구니에서 opaque line ref, 상품·variant ID, 수량·단가와 상태 지문을 읽는다. |
+| `naver.cart.prepare` | `product_ref`, `option_ids`, `quantity`, `expected_unit_price`, `dry_run` | 정확한 옵션 조합을 확인하고 절대 목표 수량을 5분 유효 intent에 묶는다. `dry_run` 기본값은 `true`다. |
+| `naver.cart.set` | `intent_id`, `idempotency_key`, `dry_run` | 준비된 intent를 적용하거나 기본값인 inspection-only 예측 결과를 반환한다. `dry_run` 기본값은 `true`다. |
+
+네 도구의 입력 스키마는 추가 속성을 허용하지 않는다. 모든 호출은 `protocol_version: "0.1.0"`, bounded `request_id`, 현재 브라우저 `session_id`를 포함한다. `quantity`는 1부터 99까지의 정수이며, 해당 상품과 variant의 **절대 목표 수량**이다. 다른 수량을 더하는 값이 아니다. 품절, 모호한 variant, 구독형 상품, 임의 옵션 조합은 거부한다.
+
+현재 checkout에는 실제 네이버 상품·장바구니 DOM이나 변경 endpoint를 확인할 수 있는 위생 처리된 증거가 없다. 테스트는 별도의 synthetic fixture 표식만 읽는다. 운영 runtime에는 live 호환성 capability가 없으므로 네이버 페이지가 fixture와 비슷해 보여도 cart 작업을 수행하지 않는다. 제품·장바구니 조회, 준비, 실행은 로그인/사람 확인 화면을 제외하면 `SITE_UNSUPPORTED`로 닫힌다. live 지원을 추가하려면 sanitized layout evidence와 cart-only 응답·readback 검증을 확인하고 별도 변경에서 capability를 명시적으로 구현해야 한다.
+
+기본 dry-run은 기존 DOM을 읽기만 한다. 탐색, 옵션 선택, 입력, 클릭, 제출, mutation permit은 사용하지 않으며 `DRY_RUN`, `site_changed: false`, `order_created: false`, `verification_basis: "no_mutation_dispatched"`를 반환한다. 실행 intent는 기기와 epoch, MCP/browser session, worker incarnation, 전용 프로필 account key, 상품/variant, 수량, 가격, layout 및 cart fingerprint에 묶인다. 가격이나 관련 상태가 바뀌거나 5분이 지나면 다시 준비해야 한다.
+
+중복 키는 기기와 worker-owned account key 조합 안에서 유일하다. digest는 transport `request_id`를 제외한 작업 내용으로 계산한다. 같은 키와 내용은 저장된 작업 결과를 돌려주고, 다른 내용은 `IDEMPOTENCY_CONFLICT`로 거부한다. worker는 첫 mutation보다 먼저 `DISPATCHING`을 저장한다. 재시작 뒤 이 상태가 남아 있으면 `OUTCOME_UNKNOWN`으로 바꾸며 자동 재전송하지 않는다. account의 불명 작업은 조정될 때까지 새 쓰기를 막는다.
+
+실제 실행을 훗날 활성화할 때에도 정확한 cart-only 응답과 cart readback이 모두 일치해야 성공으로 기록할 수 있다. checkout/order/payment 경로, 승인 우회, 광범위한 Naver POST는 허용할 수 없다. 주문 생성 응답이나 차단된 주문 시도가 감지되면 adapter를 비활성화한다. 구매·결제 기능은 이 도구 범위에 포함되지 않는다.
+
+### 장바구니 오류 코드
+
+scope와 소유권 오류는 HTTP 403으로 반환한다. 동작 오류는 MCP `isError: true`와 고정 메시지를 사용한다.
+
+| 코드 | 의미 |
+|---|---|
+| `LOGIN_REQUIRED` | 로그인 화면이 감지되어 사용자의 수동 로그인이 필요하다. 로그인 주소를 따라가거나 자격 증명을 읽고 입력하지 않는다. |
+| `OPTION_INVALID` | 옵션 조합이 없거나 정확히 하나로 결정되지 않는다. |
+| `QUANTITY_INVALID` / `OUT_OF_STOCK` | 수량이 허용 범위를 벗어나거나 재고보다 많다. |
+| `PRICE_CHANGED` / `STATE_CHANGED` | 준비 뒤 가격 또는 관련 상태가 달라졌다. |
+| `INTENT_EXPIRED` | intent가 만료되었거나 binding과 맞지 않는다. |
+| `IDEMPOTENCY_CONFLICT` | 같은 기기/account 키를 다른 작업 내용에 재사용했다. |
+| `CART_CONFIRMATION_FAILED` | cart-only 응답과 정확한 readback이 일치하지 않는다. |
+| `ORDER_CREATION_DETECTED` | 주문·checkout 동작이 감지되어 차단했다. |
+| `OUTCOME_UNKNOWN` / `ACCOUNT_BLOCKED` | dispatch 뒤 결과가 불명확해 계정 쓰기를 막았다. |
+
 ## 제안 JSON 예시
 
-아래 challenge·token 예시는 구현된 인증 본문이다. 그 다음 MCP 예시는 아직 구현하지 않은 제안이다. 인증 요청에 없는 필드를 넣으면 거부한다.
+아래 challenge·token 예시는 구현된 인증 본문이다. 관찰과 snapshot 예시는 draft 계약이며, cart 도구의 현재 구현 경계는 위 절에 적었다. 인증 요청에 없는 필드를 넣으면 거부한다.
 
 ### `POST /auth/challenge` 응답의 서명 payload
 
@@ -459,10 +496,10 @@ ref는 그 snapshot에 종속된다. 새 snapshot, 탐색, 새로고침, 관련 
 | `RATE_LIMITED` | pending, challenge 저장, 발급 속도를 넘겼다. | 새로 만들지 않는다. |
 | `STATE_UNSAFE` | 경로, 권한, 잠금, 상태 내용이 안전하지 않다. | 성공으로 보고하지 않는다. |
 | `KEY_UNAVAILABLE` | 서명 키를 쓸 수 없다. | 파일 저장소로 자동 전환하지 않는다. |
-| `DOMAIN_DENIED` | origin이 허용 목록 밖이다. | 작업을 중단한다. 승인 제안용이며 인증 게이트웨이는 구현하지 않았다. |
-| `ACTION_DENIED` | 도구 또는 동작이 권한 밖이다. | 작업을 중단한다. 승인 제안용이며 인증 게이트웨이는 구현하지 않았다. |
+| `DOMAIN_DENIED` | origin이 허용 목록 밖이다. | 작업을 중단한다. |
+| `ACTION_DENIED` | 도구 또는 동작이 권한 밖이다. | 작업을 중단한다. |
 | `STALE_REF` | ref가 현재 snapshot에 속하지 않는다. | 다시 관찰한다. |
-| `STATE_CHANGED` | 문서나 checkout이 바뀌었다. | 다시 관찰한다. 승인과 다르면 재승인한다. |
+| `STATE_CHANGED` | 문서나 cart가 바뀌었다. | 다시 관찰하고 cart intent를 준비한다. |
 | `APPROVAL_REQUIRED` | 쓰기에 승인이 필요하다. | `AWAITING_APPROVAL`과 `approval_id`를 반환한다. |
 | `APPROVAL_EXPIRED` | pending 또는 토큰이 만료됐다. | 해당 승인으로 실행하지 않는다. |
 | `APPROVAL_CONSUMED` | 토큰이 이미 쓰였다. | 해당 승인으로 실행하지 않는다. |
@@ -471,7 +508,7 @@ ref는 그 snapshot에 종속된다. 새 snapshot, 탐색, 새로고침, 관련 
 | `TRUST_EVIDENCE_INSUFFICIENT` | 중계 경로의 사용자 증거가 부족하다. | 토큰을 발급하지 않는다. |
 | `HUMAN_REQUIRED` | 로그인, MFA, 캡차 등 사람 조작이 필요하다. | 자동화로 우회하지 않는다. |
 | `SITE_UNSUPPORTED` | 검증하지 않은 흐름이다. | 사람에게 넘긴다. |
-| `OUTCOME_UNKNOWN` | 쓰기 결과를 확인하지 못했다. | 자동 재시도하지 않고 주문·전송을 조회한다. 승인 제안용이며 인증 게이트웨이는 구현하지 않았다. |
+| `OUTCOME_UNKNOWN` | dispatch 뒤 쓰기 결과를 확인하지 못했다. | 자동 재시도하지 않는다. 계정 쓰기를 막고 작업자가 상태를 확인한다. |
 
 인증 실패는 HTTP 401로 둘 수 있다. 권한 부족은 적절한 HTTP 권한 오류와 위 코드로 함께 표현한다.
 
@@ -485,4 +522,4 @@ MCP 전송 버전 협상은 MCP 채택 버전이 정해진 뒤에 별도로 적�
 
 읽기 관찰은 새 `request_id`로 다시 호출할 수 있다. 장바구니 추가, 승인 소비, 결제는 `idempotency_key`가 같더라도 결과가 `OUTCOME_UNKNOWN`이면 자동 재시도하지 않는다. 재시작 직후 실행 중이던 결제를 다시 누르지 않는다.
 
-감사 로그에는 호출자, 기기, 대화, 세션, 사이트, 동작, 정책 판단, `approval_id`, 결과를 남긴다. Authorization, Cookie, 서명 proof, 승인 토큰, 비밀번호, OTP는 제거한다.
+현재 MCP와 worker 로그에는 허용 목록의 도구/operation, 고정 코드, 처리 시간과 생성된 correlation ID만 남긴다. caller `request_id`, 기기·세션 정보, 사이트 주소, payload, DOM, headers, 토큰, raw exception은 기록하지 않는다.

@@ -116,6 +116,25 @@ function directTransport(auth) {
 }
 
 describe('paired-device auth', () => {
+    it('does not add cart:write to an existing browser:read device', async () => {
+        const box = harness();
+        const { confirmed } = await pair(box);
+        await expect(box.auth.issueChallenge({
+            deviceId: confirmed.device_id,
+            requestedScopes: ['browser:read', 'cart:write'],
+        })).rejects.toMatchObject({ code: 'SCOPE_DENIED' });
+        const challenge = await box.auth.issueChallenge({
+            deviceId: confirmed.device_id,
+            requestedScopes: ['browser:read'],
+        });
+        const token = await box.auth.exchangeProof({
+            challengeId: challenge.challenge_id,
+            deviceId: confirmed.device_id,
+            proof: proofFor(box, challenge.payload),
+        });
+        expect((await box.auth.authenticate(token.token)).scopes).toEqual(['browser:read']);
+    });
+
     it('pairs a device when the code and fingerprint match', async () => {
         const box = harness();
         const { pending, confirmed } = await pair(box);
