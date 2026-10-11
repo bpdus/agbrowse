@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { acquireProfileLock, releaseProfileLock } from './profile-lock.mjs';
 import { AgentReadError, READ_ERROR_MESSAGES, readError } from './agent-read-error.mjs';
+import { createCartStore } from './agent-cart-store.mjs';
 import {
     classifyRequest,
     productionSearchPolicy,
@@ -18,12 +19,16 @@ import {
     runListing,
     runObserve,
 } from './agent-naver-search.mjs';
+import { classifyCartRequest } from './agent-naver-cart.mjs';
 
 const WORKER_DIR_NAME = '.agbrowse-bpdus';
 const PROFILE_DIR_NAME = 'agent-profile';
 const ALLOWED_CONFIG_KEYS = new Set(['onDisconnected']);
 const SUPPRESSED_ENV_KEYS = ['DEBUG', 'PWDEBUG', 'DEBUG_FILE'];
 const IGNORED_ENV_KEYS = ['BROWSER_AGENT_HOME', 'CDP_PORT', 'AGBROWSE_CHROME_FLAGS'];
+const CART_OPERATIONS = new Set(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set']);
+// No sanitized production layout or mutation endpoint evidence has been verified.
+const LIVE_CART_COMPATIBILITY_VERIFIED = false;
 
 const SILENT_LOGGER = {
     isEnabled() {
@@ -355,18 +360,67 @@ async function abortRoute(route) {
  * A 3xx Location is classified before the next hop is requested.
  * @param {import('playwright-core').Route} route
  */
-async function guardRequest(route) {
+async function guardRequest(route, pagePolicies) {
     const policy = productionSearchPolicy();
     try {
         const request = route.request();
         const method = requestMethod(request);
         const url = requestUrl(request);
+        let page = null;
+        try { page = request.frame?.().page?.() ?? null; } catch { page = null; }
+        const pagePolicy = page && pagePolicies.get(page);
         if (chainHasWebSocket(request)) {
             await abortRoute(route);
             return;
         }
+        let parsedUrl;
+        try { parsedUrl = new URL(url); } catch { await abortRoute(route); return; }
+        const naverHost = /(^|\.)naver\.com$/i.test(parsedUrl.hostname) || /(^|\.)naver\.me$/i.test(parsedUrl.hostname);
+        if (naverHost) {
+            const pageGate = /(?:^|\/)(?:login|nidlogin)(?:[./_-]|$)/i.test(parsedUrl.pathname)
+                ? 'LOGIN_REQUIRED'
+                : /(?:^|\/)(?:captcha|block)(?:[./_-]|$)/i.test(parsedUrl.pathname)
+                    ? 'HUMAN_REQUIRED'
+                    : /(?:^|\/)(?:checkout|order|payment|pay)(?:[./_-]|$)/i.test(parsedUrl.pathname)
+                        ? 'ORDER_CREATION_DETECTED'
+                        : null;
+            if (pageGate) {
+                if (pagePolicy) pagePolicy.blockedReason = pageGate;
+                await abortRoute(route);
+                return;
+            }
+            if (pagePolicy && requestIsNavigation(request)) pagePolicy.blockedReason = null;
+        }
         if (url === 'about:blank' && method === 'GET' && !requestRedirectedFrom(request)) {
             await route.continue();
+            return;
+        }
+        if (requestIsNavigation(request)) {
+            try {
+                const frame = request.frame?.();
+                if (frame && typeof frame.parentFrame === 'function' && frame.parentFrame()) {
+                    await abortRoute(route);
+                    return;
+                }
+            } catch { await abortRoute(route); return; }
+        }
+        if (method !== 'GET' && method !== 'HEAD') {
+            const permit = pagePolicy?.mutationPermit ?? null;
+            let payload = null;
+            try { payload = request.postDataJSON?.(); } catch { payload = null; }
+            const decision = pagePolicy?.mode === 'cart' ? classifyCartRequest({ url, method, payload, permit }) : 'deny';
+            if (decision !== 'allow-once') {
+                await abortRoute(route);
+                return;
+            }
+            // A mutation redirect is ambiguous and is never followed.
+            const response = await route.fetch({ maxRedirects: 0 });
+            const status = typeof response.status === 'function' ? response.status() : 0;
+            if (status >= 300 && status < 400) {
+                await abortRoute(route);
+                return;
+            }
+            await route.fulfill({ response });
             return;
         }
         if (!redirectChainAllowed(request, policy)) {
@@ -433,11 +487,11 @@ async function guardWebSocket(ws) {
 /**
  * @param {import('playwright-core').BrowserContext} ctx
  */
-async function installContextGuards(ctx) {
+async function installContextGuards(ctx, pagePolicies) {
     if (typeof ctx.route !== 'function' || typeof ctx.addInitScript !== 'function') {
         throw new AgentRuntimeError('STARTUP_FAILED', 'Browser launch failed.');
     }
-    await ctx.route('**/*', (route) => guardRequest(route));
+    await ctx.route('**/*', (route) => guardRequest(route, pagePolicies));
     if (typeof ctx.routeWebSocket === 'function') {
         /** @type {(url: URL) => boolean} */
         const allWebSockets = () => true;
@@ -463,11 +517,15 @@ export function createAgentRuntime(config) {
     let lockedDir = null;
     /** @type {Map<string, { page: import('playwright-core').Page, targetId: string, epoch: number, seenPageEpoch: number, policyApplied: boolean }>} */
     const sessions = new Map();
+    /** @type {WeakMap<object, { mode: 'read' | 'cart', mutationPermit: any, blockedReason: string | null }>} */
+    const pagePolicies = new WeakMap();
     let intentionalStop = false;
     let disconnectNoted = false;
     /** @type {Record<string, string | undefined> | null} */
     let savedDebug = null;
     let chain = Promise.resolve();
+    /** @type {ReturnType<typeof createCartStore> | null} */
+    let cartStore = null;
 
     /**
      * @param {() => Promise<void> | void} task
@@ -608,13 +666,15 @@ export function createAgentRuntime(config) {
                 }
                 lockToken = lock.token;
                 lockedDir = workerDir;
+                cartStore = createCartStore({ directory: path.join(workerDir, 'cart-state') });
+                cartStore.recoverInterruptedOperations();
                 const playwright = await import('playwright-core');
                 context = await playwright.chromium.launchPersistentContext(profileDir, launchOptions());
                 watchContext(context);
                 if (disconnectNoted) {
                     throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
                 }
-                await installContextGuards(context);
+                await installContextGuards(context, pagePolicies);
                 if (disconnectNoted) {
                     throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
                 }
@@ -635,6 +695,7 @@ export function createAgentRuntime(config) {
         let page;
         try {
             page = await ctx.newPage();
+            pagePolicies.set(page, { mode: 'read', mutationPermit: null, blockedReason: null });
             const targetId = await readTargetId(page);
             if (disconnectNoted || state !== 'running' || intentionalStop) {
                 throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
@@ -804,6 +865,23 @@ export function createAgentRuntime(config) {
         };
     }
 
+    /** Private port bound to a worker-owned page; its live write capability is disabled. */
+    function cartPagePort(page) {
+        return {
+            liveCompatibilityVerified: LIVE_CART_COMPATIBILITY_VERIFIED,
+            async inspect() {
+                if (typeof page.evaluate !== 'function') throw readError('SITE_UNSUPPORTED');
+                return page.evaluate(() => ({
+                    login: Boolean(document.querySelector('input[type="password"], form[action*="login" i], [data-login-form]')),
+                    human: Boolean(document.querySelector('#captcha, .captcha, [data-captcha], [data-agent-block]')),
+                }));
+            },
+            async mutate() {
+                throw readError('SITE_UNSUPPORTED');
+            },
+        };
+    }
+
     /**
      * @param {unknown} error
      * @returns {never}
@@ -877,6 +955,52 @@ export function createAgentRuntime(config) {
         });
     }
 
+    /**
+     * Cart tools are routed separately from the read adapter. Production
+     * inspection recognizes login and human gates without navigating or
+     * reading form values; all other live layouts fail closed in this PR.
+     * @param {string} op
+     * @param {Record<string, unknown>} [payload]
+     */
+    async function dispatchCart(op, payload = {}) {
+        return enqueue(async () => {
+            try {
+                assertRunning();
+                if (!CART_OPERATIONS.has(op)) throw readError('ACTION_DENIED');
+                if (Object.keys(payload).some((key) => ![
+                    'session_id', 'mcp_session_id', 'device_id', 'epoch', 'worker_id', 'product_ref', 'option_ids',
+                    'quantity', 'expected_unit_price', 'dry_run', 'intent_id', 'idempotency_key', 'request_digest',
+                ].includes(key))) throw readError('INVALID_ARGUMENTS');
+                if (typeof payload.session_id !== 'string'
+                    || typeof payload.mcp_session_id !== 'string' || !/^mcp_[a-f0-9]{16}$/.test(payload.mcp_session_id)
+                    || typeof payload.device_id !== 'string'
+                    || !Number.isSafeInteger(payload.epoch)
+                    || typeof payload.worker_id !== 'string' || !/^wrk_[a-f0-9]{16}$/.test(payload.worker_id)) {
+                    throw readError('INVALID_ARGUMENTS');
+                }
+                const binding = requireBinding(payload.session_id);
+                const pagePolicy = pagePolicies.get(binding.page);
+                if (pagePolicy?.blockedReason) throw readError(pagePolicy.blockedReason);
+                const pageUrl = typeof binding.page.url === 'function' ? binding.page.url() : '';
+                let url;
+                try { url = new URL(pageUrl); } catch { throw readError('SITE_UNSUPPORTED'); }
+                const naverHost = /(^|\.)naver\.com$/i.test(url.hostname) || /(^|\.)naver\.me$/i.test(url.hostname);
+                if (naverHost && /(?:^|\/)(?:login|nidlogin)(?:[./_-]|$)/i.test(url.pathname)) throw readError('LOGIN_REQUIRED');
+                if (naverHost && /(?:^|\/)(?:captcha|block)(?:[./_-]|$)/i.test(url.pathname)) throw readError('HUMAN_REQUIRED');
+                const port = cartPagePort(binding.page);
+                const gate = await port.inspect();
+                if (gate?.login) throw readError('LOGIN_REQUIRED');
+                if (gate?.human) throw readError('HUMAN_REQUIRED');
+                if (!port.liveCompatibilityVerified) throw readError('SITE_UNSUPPORTED');
+                // Deliberately unreachable until sanitized live layout and endpoint evidence is reviewed.
+                if (!cartStore) throw readError('STATE_UNSAFE');
+                throw readError('SITE_UNSUPPORTED');
+            } catch (error) {
+                throw asPublicReadError(error);
+            }
+        });
+    }
+
     async function stop() {
         return enqueue(async () => {
             if (!context && !lockToken && state !== 'running' && state !== 'closing') return;
@@ -895,5 +1019,5 @@ export function createAgentRuntime(config) {
         });
     }
 
-    return { start, openSession, inspectSession, closeSession, stop, dispatchRead };
+    return { start, openSession, inspectSession, closeSession, stop, dispatchRead, dispatchCart };
 }

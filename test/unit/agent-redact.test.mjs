@@ -27,6 +27,15 @@ describe('agent redaction', () => {
         expect(JSON.stringify(value)).not.toMatch(/canary-password-value|canary-token-value|123456/);
     });
 
+    it('redacts secret canaries nested in cart operation fields', () => {
+        const result = redactValue({
+            operation: { status: 'OUTCOME_UNKNOWN', request: 'request_id=caller-safe' },
+            diagnostics: ['password=canary-password-value', 'cookie=canary-cookie-value', 'token=canary-token-value'],
+        });
+        expect(JSON.stringify(result)).not.toMatch(/canary-password-value|canary-cookie-value|canary-token-value/);
+        expect(result.operation.status).toBe('OUTCOME_UNKNOWN');
+    });
+
     it('keeps only public https destinations and drops secret query fields', () => {
         expect(sanitizeDestinationUrl('https://news.example/a?token=canary-token-value&ok=1#secret', {})).toBe('https://news.example/a?ok=1');
         expect(sanitizeDestinationUrl('https://user:pass@news.example/a', {})).toBeNull();

@@ -14,4 +14,17 @@ describe('agent read errors', () => {
         expect(hidden.message).toBe('The request failed.');
         expect(`${hidden.message}\n${hidden.stack}`).not.toContain('NO_SUCH_CODE');
     });
+
+    it('provides fixed messages for cart safety outcomes', () => {
+        for (const code of [
+            'LOGIN_REQUIRED', 'OPTION_INVALID', 'QUANTITY_INVALID', 'OUT_OF_STOCK', 'PRICE_CHANGED',
+            'INTENT_EXPIRED', 'IDEMPOTENCY_CONFLICT', 'CART_CONFIRMATION_FAILED', 'ORDER_CREATION_DETECTED',
+            'OUTCOME_UNKNOWN', 'ACCOUNT_BLOCKED',
+        ]) {
+            const error = readError(code);
+            expect(error.code).toBe(code);
+            expect(error.message).toBe(READ_ERROR_MESSAGES[code]);
+            expect(error.message).not.toContain('canary-secret-value');
+        }
+    });
 });

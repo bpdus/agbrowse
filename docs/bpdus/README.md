@@ -3,7 +3,7 @@ note_type: guide
 content_mode: concept
 title: bpdus agbrowse 문서 안내
 status: draft
-summary: 기준선과 프로토콜 문서, 구현된 paired-device-v1 인증, 선택적 Serve 절차, 승인 결정을 안내한다.
+summary: 기준선과 프로토콜 문서, 구현된 인증·브라우저 조회·fail-closed cart 도구, 선택적 Serve 절차를 안내한다.
 created: 2026-10-11
 updated: 2026-10-11
 language: ko
@@ -20,7 +20,7 @@ related_notes:
 
 # bpdus agbrowse 문서 안내
 
-이 디렉터리는 `bpdus/agbrowse` 포크의 설계 문서와, PR 2에서 구현한 루프백 인증 계약을 담는다. 구현된 것은 paired-device-v1의 페어링, 접속 토큰, 반복 갱신, 즉시 폐기다. MCP 브리지, 브라우저 도구, 승인 페이지, OAuth, DPoP, 키 회전은 아직 없다.
+이 디렉터리는 `bpdus/agbrowse` 포크의 설계 문서와 구현 경계를 담는다. paired-device-v1 인증, 읽기 전용 브라우저 MCP, 네이버 검색 조회, 네 개의 cart 도구 계약이 구현되어 있다. 실제 네이버 cart layout과 mutation endpoint 증거가 없으므로 운영 cart 작업은 `SITE_UNSUPPORTED`로 닫힌다. 승인 페이지, 결제, OAuth, DPoP, 키 회전은 아직 없다.
 
 Copyright (c) 2026 bpdus. 원 소프트웨어 저작권은 [루트 LICENSE](../../LICENSE)의 `Copyright (c) 2026 lidge-jun`을 따른다. 이 표시는 원 저작권을 대체하지 않는다.
 
@@ -30,7 +30,7 @@ Copyright (c) 2026 bpdus. 원 소프트웨어 저작권은 [루트 LICENSE](../.
 |---|---|
 | [BASELINE.md](./BASELINE.md) | 포크 기준 SHA, 기존 기능, 제외 경로, 위협 모델, 환경 조사의 미확인 항목 |
 | [LICENSE-NOTES.md](./LICENSE-NOTES.md) | 루트 MIT LICENSE 고지 보존, 포크 문서 저작권, README 불일치, 의존성 조사 범위 |
-| [PROTOCOL.md](./PROTOCOL.md) | 구현된 paired-device-v1 인증 계약과, 아직 구현하지 않은 도메인 제안 |
+| [PROTOCOL.md](./PROTOCOL.md) | 인증·브라우저 MCP·fail-closed cart 계약과 아직 구현하지 않은 승인 제안 |
 | [APPROVAL-FLOW.md](./APPROVAL-FLOW.md) | 승인 페이지에서 결정하고 `approval.status`로 읽는 흐름 |
 | [SERVE.md](./SERVE.md) | 선택적 Tailscale Serve 추가와 해당 포트만 되돌리는 절차 |
 | [WORKER.md](./WORKER.md) | 전용 Chrome 프로필을 쓰는 포그라운드 워커 |
@@ -43,7 +43,7 @@ PR 0은 문서 다섯 개만 추가한다. 코드, 설정, 루트 `README.md`, �
 
 되돌리기는 문서 PR 철회 또는 이 문서 커밋의 revert다. 운영 영향은 없다.
 
-PR 0 당시의 동작 표면은 기존 `agbrowse` CLI와 좁은 MCP 도구였다. PR 2는 여기에 루프백 paired-device-v1 인증만 더한다. 승인 페이지와 도메인 MCP 도구는 아직 없다.
+PR 0 당시의 동작 표면은 기존 `agbrowse` CLI와 좁은 MCP 도구였다. 이후 PR 2가 paired-device-v1 인증을, PR 3가 읽기 전용 browser/search MCP를, PR 4가 fail-closed cart 도구를 추가했다. 승인 페이지와 결제 흐름은 아직 없다.
 
 ## 확정 결정
 
@@ -74,6 +74,6 @@ PR 0 당시의 동작 표면은 기존 `agbrowse` CLI와 좁은 MCP 도구였다
 
 ## 설계와 구현의 경계
 
-[PROTOCOL.md](./PROTOCOL.md)의 paired-device-v1 인증은 현재 checkout에 구현되어 있다. 관찰, 장바구니, 승인 도구와 상태 머신은 아직 제안이다. 승인 페이지도 없다. 기존 `browser_snapshot`, `browser_click_ref`는 재사용 후보이며, 게이트웨이 승인 표면이 아니다. Serve로 여는 절차는 [SERVE.md](./SERVE.md)에 있다.
+[PROTOCOL.md](./PROTOCOL.md)의 paired-device-v1 인증과 읽기 전용 MCP 도구, 네이버 cart 도구 네 개의 fail-closed 계약은 현재 checkout에 구현되어 있다. fixture는 adapter 동작만 증명하며 실제 Naver layout 지원을 뜻하지 않는다. live cart write, 주문, 결제, 승인 페이지는 제공하지 않는다. Serve로 여는 절차는 [SERVE.md](./SERVE.md)에 있다.
 
 신뢰 경로가 확보되기 전에는 자동 결제를 열지 않는다. 구매 요청 에이전트와 답장 중계 에이전트가 같으면 프롬프트 주입으로 승인 메시지를 위조할 수 있다. 이 문제는 에이전트가 주장하는 사용자 ID, 메시지 ID, 자체 서명만으로 해결되지 않는다. 상세는 [APPROVAL-FLOW.md](./APPROVAL-FLOW.md)를 따른다.

@@ -2,7 +2,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { connectReadEndpoint, defaultSocketPath, startReadEndpoint } from '../../skills/browser/agent-ipc.mjs';
+import { connectReadEndpoint, defaultSocketPath, isAllowedWorkerOperation, startReadEndpoint } from '../../skills/browser/agent-ipc.mjs';
 
 const sockets = [];
 
@@ -22,6 +22,12 @@ function socketDir() {
 }
 
 describe('agent ipc', () => {
+    it('cart operation allowlist offline', () => {
+        expect(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set'].every(isAllowedWorkerOperation)).toBe(true);
+        expect(isAllowedWorkerOperation('naver.cart.checkout')).toBe(false);
+        expect(isAllowedWorkerOperation('browser.evaluate')).toBe(false);
+    });
+
     it('uses the fixed socket name under the dedicated home directory', async () => {
         expect(defaultSocketPath('/home/someone')).toBe('/home/someone/.agbrowse-bpdus/agent-worker.sock');
         await expect(startReadEndpoint({
