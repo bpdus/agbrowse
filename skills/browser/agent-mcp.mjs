@@ -570,7 +570,7 @@ export function createMcpDispatcher(options) {
                 const status = ['logged_in', 'logged_out', 'unknown'].includes(result?.status) ? result.status : 'unknown';
                 let evidence = 'none';
                 if (status === 'logged_out' && result?.evidence === 'login_link') evidence = 'login_link';
-                if (status === 'logged_in' && ['logout_control', 'account_menu'].includes(result?.evidence)) evidence = result.evidence;
+                if (status === 'logged_in' && result?.evidence === 'logout_link') evidence = 'logout_link';
                 return toolOutcome(message.id, { status, evidence }, false, mcpSession.id, requestId, tool);
             }
 

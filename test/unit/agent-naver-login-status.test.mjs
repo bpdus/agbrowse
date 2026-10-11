@@ -17,20 +17,24 @@ function fixtureDocument(name) {
 }
 
 describe('Naver login status adapter', () => {
-    it('classifies only the visible top-bar login and account markers', () => {
+    it('classifies fixed auth targets anywhere in the document, with logout taking precedence', () => {
         expect(readLoginStatusFromDocument(fixtureDocument('logged-out')))
             .toEqual({ status: 'logged_out', evidence: 'login_link' });
         expect(readLoginStatusFromDocument(fixtureDocument('logged-in')))
-            .toEqual({ status: 'logged_in', evidence: 'account_menu' });
+            .toEqual({ status: 'logged_in', evidence: 'logout_link' });
         expect(readLoginStatusFromDocument(fixtureDocument('unknown')))
             .toEqual({ status: 'unknown', evidence: 'none' });
+        expect(readLoginStatusFromDocument(fixtureDocument('both')))
+            .toEqual({ status: 'logged_in', evidence: 'logout_link' });
     });
 
     it('never returns fixture names, email addresses, or page-derived values', () => {
-        for (const name of ['logged-in', 'logged-out', 'unknown']) {
+        for (const name of ['logged-in', 'logged-out', 'unknown', 'both']) {
             const result = readLoginStatusFromDocument(fixtureDocument(name));
             expect(Object.keys(result).sort()).toEqual(['evidence', 'status']);
-            expect(JSON.stringify(result)).not.toMatch(/Fixture Private Name|fixture\.private@example\.test|nidlogin\.login|url=/i);
+            expect(['logged_in', 'logged_out', 'unknown']).toContain(result.status);
+            expect(['logout_link', 'login_link', 'none']).toContain(result.evidence);
+            expect(JSON.stringify(result)).not.toMatch(/Fixture Private Name|fixture\.private@example\.test|nidlogin\.(?:login|logout)|url=/i);
         }
     });
 
