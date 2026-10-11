@@ -33,6 +33,7 @@ export const READ_ERROR_MESSAGES = Object.freeze({
     SITE_UNSUPPORTED: 'This page is not a supported listing.',
     STALE_REF: 'The ref is not in the current snapshot.',
     STATE_CHANGED: 'The document changed.',
+    STATE_LOCK_STALE: 'The writer lock is stale; remove the exact lock file path shown in the error message manually.',
     STATE_UNSAFE: 'Stored state is not safe to use.',
     VERSION_UNSUPPORTED: 'Protocol version is not supported.',
 });

@@ -27,4 +27,11 @@ describe('agent read errors', () => {
             expect(error.message).not.toContain('canary-secret-value');
         }
     });
+
+    it('provides a fixed stale-lock message without exposing exception details', () => {
+        const stale = readError('STATE_LOCK_STALE');
+        expect(stale.code).toBe('STATE_LOCK_STALE');
+        expect(stale.message).toBe('The writer lock is stale; remove the exact lock file path shown in the error message manually.');
+        expect(stale.message).not.toContain('canary-secret-value');
+    });
 });
