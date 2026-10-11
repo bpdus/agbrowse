@@ -10,6 +10,14 @@ import * as path from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { acquireProfileLock, releaseProfileLock } from './profile-lock.mjs';
+import { AgentReadError, READ_ERROR_MESSAGES, readError } from './agent-read-error.mjs';
+import {
+    classifyRequest,
+    productionSearchPolicy,
+    readListingFromDocument,
+    runListing,
+    runObserve,
+} from './agent-naver-search.mjs';
 
 const WORKER_DIR_NAME = '.agbrowse-bpdus';
 const PROFILE_DIR_NAME = 'agent-profile';
@@ -187,7 +195,255 @@ function launchOptions() {
         handleSIGHUP: false,
         logger: SILENT_LOGGER,
         env: browserLaunchEnv(),
+        serviceWorkers: 'block',
     };
+}
+
+/**
+ * Fixed page script. It records document mutations and is not caller input.
+ */
+function installEpochWatch() {
+    const root = /** @type {any} */ (globalThis);
+    if (root.__agbrowseEpochWatch) return root.__agbrowseDocumentEpoch || 1;
+    if (!Number.isInteger(root.__agbrowseDocumentEpoch)) root.__agbrowseDocumentEpoch = 1;
+    const Observer = root.MutationObserver;
+    const document = root.document;
+    if (typeof Observer !== 'function' || !document) return root.__agbrowseDocumentEpoch;
+    const bump = () => {
+        root.__agbrowseDocumentEpoch += 1;
+    };
+    const watchOptions = {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+    };
+    /**
+     * @param {unknown} target
+     */
+    const attach = (target) => {
+        if (!target) return false;
+        try {
+            const observer = new Observer(bump);
+            observer.observe(target, watchOptions);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+    const element = document.documentElement;
+    if (!element) {
+        if (!root.__agbrowseDocumentObserved) root.__agbrowseDocumentObserved = attach(document);
+        if (!root.__agbrowseEpochWatchWait && typeof document.addEventListener === 'function') {
+            root.__agbrowseEpochWatchWait = true;
+            document.addEventListener('DOMContentLoaded', () => {
+                installEpochWatch();
+            }, { once: true });
+        }
+        return root.__agbrowseDocumentEpoch;
+    }
+    if (attach(element)) root.__agbrowseEpochWatch = true;
+    return root.__agbrowseDocumentEpoch;
+}
+
+const MAX_REDIRECTS = 4;
+
+/**
+ * @param {import('playwright-core').Request | { method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, redirectedFrom?: () => unknown }} request
+ */
+function requestMethod(request) {
+    const method = typeof request.method === 'function' ? request.method() : 'GET';
+    return String(method || 'GET').toUpperCase();
+}
+
+/**
+ * @param {import('playwright-core').Request | { url?: () => string }} request
+ */
+function requestUrl(request) {
+    return typeof request.url === 'function' ? request.url() : '';
+}
+
+/**
+ * @param {import('playwright-core').Request | { isNavigationRequest?: () => boolean }} request
+ */
+function requestIsNavigation(request) {
+    return typeof request.isNavigationRequest === 'function' && request.isNavigationRequest();
+}
+
+/**
+ * @param {import('playwright-core').Request | { redirectedFrom?: () => unknown }} request
+ */
+function requestRedirectedFrom(request) {
+    if (typeof request.redirectedFrom !== 'function') return null;
+    return request.redirectedFrom() || null;
+}
+
+/**
+ * @param {{ resourceType?: () => string, url?: () => string }} request
+ */
+function requestIsWebSocket(request) {
+    if (typeof request.resourceType === 'function' && String(request.resourceType()).toLowerCase() === 'websocket') {
+        return true;
+    }
+    try {
+        const protocol = new URL(requestUrl(request)).protocol;
+        return protocol === 'ws:' || protocol === 'wss:';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, resourceType?: () => string, redirectedFrom?: () => unknown }} request
+ */
+function chainHasWebSocket(request) {
+    const seen = new Set();
+    /** @type {unknown} */
+    let current = request;
+    while (current && typeof current === 'object' && !seen.has(current)) {
+        seen.add(current);
+        const hop = /** @type {{ resourceType?: () => string, url?: () => string, redirectedFrom?: () => unknown }} */ (current);
+        if (requestIsWebSocket(hop)) return true;
+        current = requestRedirectedFrom(hop);
+    }
+    return false;
+}
+
+/**
+ * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, resourceType?: () => string }} request
+ * @param {ReturnType<typeof productionSearchPolicy>} policy
+ */
+function hopAllowed(request, policy) {
+    if (requestIsWebSocket(request)) return false;
+    const method = requestMethod(request);
+    const url = requestUrl(request);
+    const navigation = requestIsNavigation(request);
+    if (navigation && method !== 'GET') return false;
+    return classifyRequest(url, method, navigation ? 'navigation' : 'resource', policy) === 'allow';
+}
+
+/**
+ * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, redirectedFrom?: () => unknown }} request
+ * @param {ReturnType<typeof productionSearchPolicy>} policy
+ */
+function redirectChainAllowed(request, policy) {
+    const seen = new Set();
+    /** @type {unknown} */
+    let current = request;
+    while (current && typeof current === 'object' && !seen.has(current)) {
+        seen.add(current);
+        const hop = /** @type {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, redirectedFrom?: () => unknown }} */ (current);
+        if (!hopAllowed(hop, policy)) return false;
+        current = requestRedirectedFrom(hop);
+    }
+    return true;
+}
+
+/**
+ * @param {{ abort: (errorCode?: string) => Promise<void> }} route
+ */
+async function abortRoute(route) {
+    try {
+        await route.abort('blockedbyclient');
+    } catch {
+        /* already settled */
+    }
+}
+
+/**
+ * Classify the current request and every prior redirect before any fetch.
+ * A 3xx Location is classified before the next hop is requested.
+ * @param {import('playwright-core').Route} route
+ */
+async function guardRequest(route) {
+    const policy = productionSearchPolicy();
+    try {
+        const request = route.request();
+        const method = requestMethod(request);
+        const url = requestUrl(request);
+        if (chainHasWebSocket(request)) {
+            await abortRoute(route);
+            return;
+        }
+        if (url === 'about:blank' && method === 'GET' && !requestRedirectedFrom(request)) {
+            await route.continue();
+            return;
+        }
+        if (!redirectChainAllowed(request, policy)) {
+            await abortRoute(route);
+            return;
+        }
+        const navigation = requestIsNavigation(request);
+        let nextMethod = method;
+        let nextUrl = url;
+        let response = await route.fetch({ maxRedirects: 0 });
+        for (let followed = 0; ; followed += 1) {
+            const status = typeof response.status === 'function' ? response.status() : 0;
+            if (status < 300 || status >= 400) {
+                await route.fulfill({ response });
+                return;
+            }
+            if (followed >= MAX_REDIRECTS) {
+                await abortRoute(route);
+                return;
+            }
+            const headers = typeof response.headers === 'function' ? response.headers() : null;
+            const location = headers && (headers.location || headers.Location);
+            if (typeof location !== 'string' || location.length === 0) {
+                await route.fulfill({ response });
+                return;
+            }
+            let resolved;
+            try {
+                resolved = new URL(location, nextUrl).toString();
+            } catch {
+                await abortRoute(route);
+                return;
+            }
+            const followMethod = status === 307 || status === 308 ? nextMethod : 'GET';
+            if (navigation && followMethod !== 'GET') {
+                await abortRoute(route);
+                return;
+            }
+            if (classifyRequest(resolved, followMethod, navigation ? 'navigation' : 'resource', policy) !== 'allow') {
+                await abortRoute(route);
+                return;
+            }
+            nextMethod = followMethod;
+            nextUrl = resolved;
+            response = await route.fetch({ url: resolved, method: followMethod, maxRedirects: 0 });
+        }
+    } catch {
+        await abortRoute(route);
+    }
+}
+
+/**
+ * The read MVP never connects a socket. Closing here does not reach the server.
+ * @param {import('playwright-core').WebSocketRoute} ws
+ */
+async function guardWebSocket(ws) {
+    try {
+        await ws.close({ code: 1008 });
+    } catch {
+        /* already closed */
+    }
+}
+
+/**
+ * @param {import('playwright-core').BrowserContext} ctx
+ */
+async function installContextGuards(ctx) {
+    if (typeof ctx.route !== 'function' || typeof ctx.addInitScript !== 'function') {
+        throw new AgentRuntimeError('STARTUP_FAILED', 'Browser launch failed.');
+    }
+    await ctx.route('**/*', (route) => guardRequest(route));
+    if (typeof ctx.routeWebSocket === 'function') {
+        /** @type {(url: URL) => boolean} */
+        const allWebSockets = () => true;
+        await ctx.routeWebSocket(allWebSockets, (ws) => guardWebSocket(ws));
+    }
+    await ctx.addInitScript(installEpochWatch);
 }
 
 /**
@@ -205,7 +461,7 @@ export function createAgentRuntime(config) {
     let lockToken = null;
     /** @type {string | null} */
     let lockedDir = null;
-    /** @type {Map<string, { page: import('playwright-core').Page, targetId: string }>} */
+    /** @type {Map<string, { page: import('playwright-core').Page, targetId: string, epoch: number, seenPageEpoch: number, policyApplied: boolean }>} */
     const sessions = new Map();
     let intentionalStop = false;
     let disconnectNoted = false;
@@ -358,6 +614,10 @@ export function createAgentRuntime(config) {
                 if (disconnectNoted) {
                     throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
                 }
+                await installContextGuards(context);
+                if (disconnectNoted) {
+                    throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
+                }
                 state = 'running';
             } catch (error) {
                 await discardLaunch();
@@ -367,67 +627,252 @@ export function createAgentRuntime(config) {
         });
     }
 
-    async function openSession() {
-        return enqueue(async () => {
-            assertRunning();
-            const ctx = context;
-            if (!ctx) throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
-            /** @type {import('playwright-core').Page | undefined} */
-            let page;
-            try {
-                page = await ctx.newPage();
-                const targetId = await readTargetId(page);
-                if (disconnectNoted || state !== 'running' || intentionalStop) {
-                    throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
-                }
-                const sessionId = `ses_${randomBytes(8).toString('hex')}`;
-                sessions.set(sessionId, { page, targetId });
-                return { sessionId, targetId };
-            } catch (error) {
-                if (page) {
-                    try { await page.close(); } catch { /* already closed */ }
-                }
-                if (error instanceof AgentRuntimeError) throw error;
-                if (disconnectNoted || state !== 'running' || intentionalStop) {
-                    throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
-                }
-                throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+    async function openSessionUnlocked() {
+        assertRunning();
+        const ctx = context;
+        if (!ctx) throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
+        /** @type {import('playwright-core').Page | undefined} */
+        let page;
+        try {
+            page = await ctx.newPage();
+            const targetId = await readTargetId(page);
+            if (disconnectNoted || state !== 'running' || intentionalStop) {
+                throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
             }
-        });
+            const sessionId = `ses_${randomBytes(8).toString('hex')}`;
+            sessions.set(sessionId, { page, targetId, epoch: 1, seenPageEpoch: 0, policyApplied: false });
+            return { sessionId, targetId };
+        } catch (error) {
+            if (page) {
+                try { await page.close(); } catch { /* already closed */ }
+            }
+            if (error instanceof AgentRuntimeError) throw error;
+            if (disconnectNoted || state !== 'running' || intentionalStop) {
+                throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
+            }
+            throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+        }
+    }
+
+    async function openSession() {
+        return enqueue(() => openSessionUnlocked());
+    }
+
+    /**
+     * @param {string} sessionId
+     */
+    function requireBinding(sessionId) {
+        const binding = sessions.get(sessionId);
+        if (!binding) throw new AgentRuntimeError('SESSION_NOT_FOUND', 'Session was not found.');
+        if (typeof binding.page.isClosed === 'function' && binding.page.isClosed()) {
+            sessions.delete(sessionId);
+            throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+        }
+        return binding;
+    }
+
+    /**
+     * @param {string} sessionId
+     */
+    async function inspectSessionUnlocked(sessionId) {
+        assertRunning();
+        const binding = requireBinding(sessionId);
+        return { sessionId, targetId: binding.targetId };
     }
 
     /**
      * @param {string} sessionId
      */
     async function inspectSession(sessionId) {
-        return enqueue(async () => {
-            assertRunning();
-            const binding = sessions.get(sessionId);
-            if (!binding) throw new AgentRuntimeError('SESSION_NOT_FOUND', 'Session was not found.');
-            if (typeof binding.page.isClosed === 'function' && binding.page.isClosed()) {
-                sessions.delete(sessionId);
-                throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
-            }
-            return { sessionId, targetId: binding.targetId };
-        });
+        return enqueue(() => inspectSessionUnlocked(sessionId));
+    }
+
+    /**
+     * @param {string} sessionId
+     */
+    async function closeSessionUnlocked(sessionId) {
+        assertRunning();
+        const binding = sessions.get(sessionId);
+        if (!binding) throw new AgentRuntimeError('SESSION_NOT_FOUND', 'Session was not found.');
+        sessions.delete(sessionId);
+        if (typeof binding.page.isClosed === 'function' && binding.page.isClosed()) {
+            throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+        }
+        try {
+            await binding.page.close();
+        } catch {
+            throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+        }
     }
 
     /**
      * @param {string} sessionId
      */
     async function closeSession(sessionId) {
-        return enqueue(async () => {
-            assertRunning();
-            const binding = sessions.get(sessionId);
-            if (!binding) throw new AgentRuntimeError('SESSION_NOT_FOUND', 'Session was not found.');
-            sessions.delete(sessionId);
-            if (typeof binding.page.isClosed === 'function' && binding.page.isClosed()) {
-                throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+        return enqueue(() => closeSessionUnlocked(sessionId));
+    }
+
+    /**
+     * @param {import('playwright-core').Page} page
+     * @param {{ epoch: number, seenPageEpoch: number, policyApplied: boolean }} binding
+     */
+    async function applyReadPolicy(page, binding) {
+        if (binding.policyApplied) return;
+        binding.policyApplied = true;
+        if (typeof page.on === 'function') {
+            page.on('popup', (popup) => {
+                if (popup && typeof popup.close === 'function') {
+                    Promise.resolve(popup.close()).catch(() => {});
+                }
+            });
+            page.on('framenavigated', (frame) => {
+                const main = typeof page.mainFrame === 'function' ? page.mainFrame() : null;
+                if (main && frame && frame !== main) return;
+                binding.epoch += 1;
+                binding.seenPageEpoch = 0;
+                if (typeof page.evaluate === 'function') {
+                    Promise.resolve(page.evaluate(installEpochWatch)).catch(() => {});
+                }
+            });
+        }
+    }
+
+    /**
+     * @param {import('playwright-core').Page} page
+     * @param {{ epoch: number }} binding
+     * @param {string} url
+     */
+    async function gotoAllowed(page, binding, url) {
+        const policy = productionSearchPolicy();
+        if (classifyRequest(url, 'GET', 'navigation', policy) !== 'allow') throw readError('DOMAIN_DENIED');
+        if (typeof page.goto !== 'function') throw readError('NOT_RUNNING');
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
+        const finalUrl = typeof page.url === 'function' ? page.url() : url;
+        if (classifyRequest(finalUrl, 'GET', 'navigation', policy) !== 'allow') throw readError('DOMAIN_DENIED');
+        return { finalUrl };
+    }
+
+    /**
+     * @param {import('playwright-core').Page} page
+     * @param {{ epoch: number, seenPageEpoch: number }} binding
+     */
+    async function inspectPage(page, binding) {
+        /** @type {{ blocked?: boolean, reason?: string | null, results?: Array<{ rank: number, title: string, snippet: string, href: string }> }} */
+        let extracted = { blocked: false, reason: 'SITE_UNSUPPORTED', results: [] };
+        if (typeof page.evaluate === 'function') {
+            const value = await page.evaluate(readListingFromDocument);
+            if (value && typeof value === 'object') extracted = value;
+            const watched = await page.evaluate(() => {
+                const epoch = /** @type {any} */ (globalThis).__agbrowseDocumentEpoch;
+                return typeof epoch === 'number' ? epoch : 1;
+            });
+            if (Number.isInteger(watched) && watched > binding.seenPageEpoch) {
+                binding.epoch += watched - binding.seenPageEpoch;
+                binding.seenPageEpoch = watched;
             }
+        }
+        const title = typeof page.title === 'function' ? await page.title() : '';
+        const finalUrl = typeof page.url === 'function' ? page.url() : '';
+        return {
+            blocked: Boolean(extracted.blocked),
+            reason: extracted.reason ?? null,
+            results: Array.isArray(extracted.results) ? extracted.results : [],
+            title: typeof title === 'string' ? title : '',
+            finalUrl: typeof finalUrl === 'string' ? finalUrl : '',
+            epoch: binding.epoch,
+        };
+    }
+
+    /**
+     * @param {import('playwright-core').Page} page
+     * @param {{ epoch: number, seenPageEpoch: number, policyApplied: boolean }} binding
+     */
+    function readPort(page, binding) {
+        return {
+            async applyPolicy() {
+                await applyReadPolicy(page, binding);
+            },
+            async goto(url) {
+                return gotoAllowed(page, binding, url);
+            },
+            async inspect() {
+                return inspectPage(page, binding);
+            },
+            url() {
+                return typeof page.url === 'function' ? page.url() : '';
+            },
+        };
+    }
+
+    /**
+     * @param {unknown} error
+     * @returns {never}
+     */
+    function asPublicReadError(error) {
+        if (error instanceof AgentReadError) throw error;
+        if (error instanceof AgentRuntimeError) {
+            if (Object.hasOwn(READ_ERROR_MESSAGES, error.code)) throw readError(error.code);
+            throw error;
+        }
+        if (disconnectNoted || state !== 'running' || intentionalStop) {
+            throw readError('BROWSER_DISCONNECTED');
+        }
+        throw readError('SESSION_CLOSED');
+    }
+
+    /**
+     * One queued read operation. Caller policy is ignored.
+     * @param {string} op
+     * @param {Record<string, unknown>} [payload]
+     */
+    async function dispatchRead(op, payload = {}) {
+        return enqueue(async () => {
             try {
-                await binding.page.close();
-            } catch {
-                throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
+                assertRunning();
+                if (op === 'browser.session.open') {
+                    const opened = await openSessionUnlocked();
+                    return {
+                        session_id: opened.sessionId,
+                        tab_id: opened.targetId,
+                        frame_id: 'frame_main',
+                        document_epoch: 1,
+                    };
+                }
+                const sessionId = payload.session_id;
+                if (typeof sessionId !== 'string') throw readError('INVALID_ARGUMENTS');
+                if (op === 'browser.session.close') {
+                    await closeSessionUnlocked(sessionId);
+                    return { closed: true };
+                }
+                const binding = requireBinding(sessionId);
+                const port = readPort(binding.page, binding);
+                const policy = productionSearchPolicy();
+                if (op === 'browser.observe' || op === 'naver.search.result.read') {
+                    const observed = await runObserve(port, policy);
+                    return {
+                        ...observed,
+                        session_id: sessionId,
+                        tab_id: binding.targetId,
+                        frame_id: 'frame_main',
+                    };
+                }
+                if (op === 'naver.search.list') {
+                    if (typeof payload.query !== 'string') throw readError('INVALID_ARGUMENTS');
+                    const listed = await runListing(port, {
+                        query: payload.query,
+                        policy,
+                        maxNodes: typeof payload.max_nodes === 'number' ? payload.max_nodes : undefined,
+                    });
+                    return {
+                        ...listed,
+                        session_id: sessionId,
+                        tab_id: binding.targetId,
+                        frame_id: 'frame_main',
+                    };
+                }
+                throw readError('ACTION_DENIED');
+            } catch (error) {
+                throw asPublicReadError(error);
             }
         });
     }
@@ -450,5 +895,5 @@ export function createAgentRuntime(config) {
         });
     }
 
-    return { start, openSession, inspectSession, closeSession, stop };
+    return { start, openSession, inspectSession, closeSession, stop, dispatchRead };
 }

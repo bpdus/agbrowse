@@ -233,7 +233,9 @@ describe('loopback auth gateway', () => {
             body: '{}',
         });
         expect(plain.status).toBe(415);
-        expect((await request(port, { path: '/mcp', method: 'POST', headers: { host } })).status).toBe(404);
+        const mcp = await request(port, { path: '/mcp', method: 'POST', headers: { host } });
+        expect(mcp.status).toBe(401);
+        expect(JSON.parse(mcp.body).error.code).toBe('AUTH_INVALID');
         expect((await request(port, { path: '/auth/pair', method: 'GET', headers: { host } })).status).toBe(405);
         expect((await request(port, { path: '/healthz?x=1', headers: { host } })).status).toBe(404);
         const source = readFileSync(SCRIPT, 'utf8');
@@ -273,5 +275,42 @@ describe('loopback auth gateway', () => {
         } finally {
             for (const spy of spies) spy.mockRestore();
         }
+    });
+
+    it('leaves bootstrap routes open and requires a token everywhere else', async () => {
+        const started = await listenGateway();
+        const host = `127.0.0.1:${started.port}`;
+        const health = await request(started.port, { headers: { host } });
+        expect(health.status).toBe(200);
+        expect(health.body).toBe('{"ok":true}');
+        expect(Object.keys(JSON.parse(health.body))).toEqual(['ok']);
+        expect(health.body).not.toMatch(/version|device|path/i);
+
+        expect((await request(started.port, { path: '/healthz', method: 'POST', headers: { host } })).status).toBe(405);
+        for (const path of ['/auth/pair', '/auth/challenge', '/auth/token']) {
+            const posted = await request(started.port, { path, method: 'POST', headers: { host } });
+            expect(posted.status).toBe(415);
+            const got = await request(started.port, { path, method: 'GET', headers: { host } });
+            expect(got.status).toBe(405);
+        }
+
+        for (const path of ['/mcp', '/snapshot', '/browser', '/auth/revoke', '/version', '/debug', '/readyz', '/', '/auth/pair/extra']) {
+            for (const method of ['GET', 'POST']) {
+                const closed = await request(started.port, { path, method, headers: { host } });
+                expect(closed.status).toBe(401);
+                expect(JSON.parse(closed.body).error.code).toBe('AUTH_INVALID');
+                expect(closed.body).not.toMatch(/version|device|path/i);
+            }
+        }
+
+        const canary = 'canary-secret-token.aaa.bbb';
+        const rejected = await request(started.port, {
+            path: '/version',
+            method: 'GET',
+            headers: { host, authorization: `Bearer ${canary}` },
+        });
+        expect(rejected.status).toBe(401);
+        expect(JSON.parse(rejected.body).error.code).toBe('AUTH_INVALID');
+        expect(rejected.body).not.toContain('canary-secret-token');
     });
 });

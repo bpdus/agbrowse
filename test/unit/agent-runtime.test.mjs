@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createContext, runInContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { state, locks, trace } = vi.hoisted(() => ({
@@ -105,7 +106,24 @@ function makeContext(events) {
         order,
         closed: false,
         newPageCalls: [],
+        routes: [],
+        webSocketRoutes: [],
+        initScripts: [],
+        installOrder: [],
+        async route(pattern, handler) {
+            this.installOrder.push('route');
+            this.routes.push({ pattern, handler });
+        },
+        async routeWebSocket(pattern, handler) {
+            this.installOrder.push('routeWebSocket');
+            this.webSocketRoutes.push({ pattern, handler });
+        },
+        async addInitScript(script) {
+            this.installOrder.push('addInitScript');
+            this.initScripts.push(script);
+        },
         async newPage(...args) {
+            this.installOrder.push('newPage');
             this.newPageCalls.push(args);
             seq += 1;
             const page = makePage(`target-${seq}`);
@@ -191,7 +209,7 @@ describe('agent-runtime', () => {
 
     it('returns only the lifecycle methods', () => {
         const runtime = createAgentRuntime();
-        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'inspectSession', 'openSession', 'start', 'stop']);
+        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
     });
 
     it('rejects a foreign profile or endpoint before launch', async () => {
@@ -470,4 +488,332 @@ describe('agent-runtime', () => {
         expect(await runtime.inspectSession(second.sessionId)).toEqual(second);
         expect(trace.launches).toHaveLength(2);
     });
+
+    it('installs context interception before any page and blocks service workers', async () => {
+        const made = makeContext(events);
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        expect(trace.launches[0].options.serviceWorkers).toBe('block');
+        expect(made.context.installOrder).toEqual(['route', 'routeWebSocket', 'addInitScript']);
+        expect(made.context.routes[0].pattern).toBe('**/*');
+        const wsRoute = made.context.webSocketRoutes[0];
+        expect(wsRoute.pattern(new URL('wss://evil.example/socket'))).toBe(true);
+        expect(wsRoute.pattern(new URL('ws://search.naver.com/ws'))).toBe(true);
+        const foreignSocket = await closeSocket(wsRoute.handler, 'wss://evil.example/socket');
+        const allowedHostSocket = await closeSocket(wsRoute.handler, 'wss://search.naver.com/ws');
+        expect(foreignSocket).toEqual({ closed: 1, connected: 0, code: 1008 });
+        expect(allowedHostSocket).toEqual({ closed: 1, connected: 0, code: 1008 });
+        expect(JSON.stringify(foreignSocket)).not.toContain('evil.example');
+        await runtime.openSession();
+        expect(made.context.installOrder).toEqual(['route', 'routeWebSocket', 'addInitScript', 'newPage']);
+        expect(made.context.initScripts).toHaveLength(1);
+
+        const handler = made.context.routes[0].handler;
+        const allowed = 'https://search.naver.com/search.naver?where=web&query=widgets';
+        const privateUrl = 'http://169.254.169.254/latest';
+
+        /**
+         * @param {ReturnType<typeof makeRoutedRequest>} request
+         * @param {Array<{ status: number, headers?: Record<string, string> }>} responses
+         */
+        async function settle(request, responses) {
+            /** @type {Array<Record<string, unknown>>} */
+            const fetches = [];
+            /** @type {string | null} */
+            let aborted = null;
+            /** @type {{ response?: { status: () => number } } | null} */
+            let fulfilled = null;
+            let continued = false;
+            await handler({
+                request: () => request,
+                async abort(reason) { aborted = reason || 'aborted'; },
+                async continue() { continued = true; },
+                async fulfill(value) { fulfilled = value; },
+                async fetch(options = {}) {
+                    fetches.push(options);
+                    const next = responses[fetches.length - 1];
+                    if (!next) throw new Error('fetch past the allowed hop');
+                    return {
+                        status: () => next.status,
+                        headers: () => next.headers || {},
+                    };
+                },
+            });
+            return { fetches, aborted, fulfilled, continued };
+        }
+
+        const prior = makeRoutedRequest(allowed);
+        const chained = await settle(makeRoutedRequest(privateUrl, { redirectedFrom: () => prior }), []);
+        expect(chained.aborted).toBe('blockedbyclient');
+        expect(chained.fetches).toHaveLength(0);
+        expect(chained.fulfilled).toBeNull();
+
+        const earlierHop = await settle(makeRoutedRequest(allowed, {
+            redirectedFrom: () => makeRoutedRequest(privateUrl),
+        }), []);
+        expect(earlierHop.aborted).toBe('blockedbyclient');
+        expect(earlierHop.fetches).toHaveLength(0);
+
+        const redirected = await settle(makeRoutedRequest(allowed), [
+            { status: 302, headers: { location: privateUrl } },
+        ]);
+        expect(redirected.fetches).toEqual([{ maxRedirects: 0 }]);
+        expect(redirected.aborted).toBe('blockedbyclient');
+        expect(redirected.fulfilled).toBeNull();
+        expect(JSON.stringify(redirected.fetches)).not.toContain('169.254.169.254');
+
+        const posted = await settle(makeRoutedRequest(allowed, { method: 'POST' }), []);
+        expect(posted.aborted).toBe('blockedbyclient');
+        expect(posted.fetches).toHaveLength(0);
+
+        const headed = await settle(makeRoutedRequest(allowed, { method: 'HEAD' }), []);
+        expect(headed.aborted).toBe('blockedbyclient');
+        expect(headed.fetches).toHaveLength(0);
+
+        const ok = await settle(makeRoutedRequest(allowed), [{ status: 200 }]);
+        expect(ok.aborted).toBeNull();
+        expect(ok.fetches).toEqual([{ maxRedirects: 0 }]);
+        expect(ok.fulfilled?.response?.status()).toBe(200);
+
+        const nextUrl = 'https://search.naver.com/search.naver?where=web&query=next';
+        const followed = await settle(makeRoutedRequest(allowed), [
+            { status: 302, headers: { location: nextUrl } },
+            { status: 200 },
+        ]);
+        expect(followed.aborted).toBeNull();
+        expect(followed.fetches).toEqual([
+            { maxRedirects: 0 },
+            { url: nextUrl, method: 'GET', maxRedirects: 0 },
+        ]);
+        expect(followed.fulfilled?.response?.status()).toBe(200);
+
+        const blank = await settle(makeRoutedRequest('about:blank'), []);
+        expect(blank.continued).toBe(true);
+        expect(blank.fetches).toHaveLength(0);
+        expect(blank.aborted).toBeNull();
+
+        const handshake = await settle(makeRoutedRequest('https://search.naver.com/search.naver', {
+            navigation: false,
+            resourceType: 'websocket',
+        }), []);
+        expect(handshake.aborted).toBe('blockedbyclient');
+        expect(handshake.fetches).toHaveLength(0);
+        expect(handshake.continued).toBe(false);
+
+        const socketUrl = await settle(makeRoutedRequest('wss://evil.example/socket', { navigation: false }), []);
+        expect(socketUrl.aborted).toBe('blockedbyclient');
+        expect(socketUrl.fetches).toHaveLength(0);
+
+        const priorSocket = makeRoutedRequest('https://ssl.pstatic.net/ws', {
+            navigation: false,
+            resourceType: 'websocket',
+        });
+        const afterSocket = await settle(makeRoutedRequest(allowed, { redirectedFrom: () => priorSocket }), []);
+        expect(afterSocket.aborted).toBe('blockedbyclient');
+        expect(afterSocket.fetches).toHaveLength(0);
+
+        const firstDocument = bootEpochWatch(made.context.initScripts[0]);
+        expect(firstDocument.epoch).toBe(1);
+        firstDocument.observers[0].callback();
+        expect(firstDocument.sandbox.__agbrowseDocumentEpoch).toBe(2);
+        const nextDocument = bootEpochWatch(made.context.initScripts[0]);
+        expect(nextDocument.epoch).toBe(1);
+        expect(nextDocument.sandbox).not.toBe(firstDocument.sandbox);
+    });
+
+    it('reinstalls the document watcher on each main-frame navigation', async () => {
+        const made = makeContext(events);
+        const main = { id: 'main' };
+        const page = makePage('target-read');
+        page.listeners = {};
+        page.evaluations = [];
+        page.mainFrame = () => main;
+        page.on = (event, fn) => {
+            if (event !== 'popup' && event !== 'framenavigated') throw new Error(`unexpected page event ${event}`);
+            page.listeners[event] = fn;
+        };
+        page.route = async () => {
+            throw new Error('page route must not be installed');
+        };
+        page.goto = async () => {
+            page.currentUrl = 'https://search.naver.com/search.naver';
+            await page.listeners.framenavigated(main);
+            await page.listeners.framenavigated({ id: 'child' });
+        };
+        page.evaluate = async (fn) => {
+            page.evaluations.push(fn.name || 'anonymous');
+            if (fn.name === 'readListingFromDocument') {
+                return {
+                    blocked: false,
+                    reason: null,
+                    results: [{ rank: 1, title: 'Alpha', snippet: 'One', href: 'https://news.example/a', node_id: 'n_1' }],
+                };
+            }
+            return 1;
+        };
+        page.title = async () => 'Listing';
+        made.context.newPage = async () => {
+            made.context.installOrder.push('newPage');
+            made.order.push(page);
+            return page;
+        };
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const opened = await runtime.openSession();
+        const listed = await runtime.dispatchRead('naver.search.list', {
+            session_id: opened.sessionId,
+            query: 'widgets',
+        });
+        expect(page.evaluations.filter((name) => name === 'installEpochWatch')).toEqual(['installEpochWatch']);
+        expect(listed.results[0].node_id).toBe('n_1');
+        expect(listed.document_epoch).toBeGreaterThan(1);
+        expect(JSON.stringify(listed)).not.toContain('widgets');
+        await page.listeners.framenavigated(main);
+        expect(page.evaluations.filter((name) => name === 'installEpochWatch')).toEqual(['installEpochWatch', 'installEpochWatch']);
+    });
+
+    it('retries the watcher when the document element is missing and counts a restored mutation', async () => {
+        const made = makeContext(events);
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const script = made.context.initScripts[0];
+        /** @type {Array<{ callback: (records?: unknown[]) => void, target: unknown, options: Record<string, boolean> }>} */
+        const observers = [];
+        /** @type {Array<{ type: string, fn: () => void }>} */
+        const listeners = [];
+        const element = { id: 'root' };
+        const sandbox = {
+            observers,
+            MutationObserver: class MutationObserver {
+                /**
+                 * @param {(records?: unknown[]) => void} callback
+                 */
+                constructor(callback) {
+                    this.callback = callback;
+                }
+                /**
+                 * @param {unknown} target
+                 * @param {Record<string, boolean>} options
+                 */
+                observe(target, options) {
+                    this.target = target;
+                    this.options = options;
+                    observers.push(this);
+                }
+            },
+            document: {
+                documentElement: null,
+                /**
+                 * @param {string} type
+                 * @param {() => void} fn
+                 */
+                addEventListener(type, fn) {
+                    listeners.push({ type, fn });
+                },
+            },
+        };
+        sandbox.globalThis = sandbox;
+        createContext(sandbox);
+        const firstEpoch = runInContext(`(${script})()`, sandbox);
+        expect(firstEpoch).toBe(1);
+        expect(sandbox.__agbrowseEpochWatch).toBeUndefined();
+        expect(observers.map((observer) => observer.target)).toEqual([sandbox.document]);
+        expect(observers[0].options).toMatchObject({
+            subtree: true,
+            childList: true,
+            attributes: true,
+            characterData: true,
+        });
+        expect(listeners.map((listener) => listener.type)).toEqual(['DOMContentLoaded']);
+        observers[0].callback([{ type: 'childList' }]);
+        expect(sandbox.__agbrowseDocumentEpoch).toBe(2);
+
+        sandbox.document.documentElement = element;
+        const retried = runInContext(`(${script})()`, sandbox);
+        expect(retried).toBe(2);
+        expect(sandbox.__agbrowseEpochWatch).toBe(true);
+        const attached = observers.find((observer) => observer.target === element);
+        expect(attached).toBeTruthy();
+        expect(attached.options.characterData).toBe(true);
+        const beforeRestore = sandbox.__agbrowseDocumentEpoch;
+        attached.callback([{ type: 'characterData' }]);
+        attached.callback([{ type: 'characterData' }]);
+        expect(sandbox.__agbrowseDocumentEpoch).toBe(beforeRestore + 2);
+        listeners[0].fn();
+        expect(sandbox.__agbrowseDocumentEpoch).toBe(beforeRestore + 2);
+        expect(observers.filter((observer) => observer.target === element)).toHaveLength(1);
+    });
 });
+
+/**
+ * @param {string} url
+ * @param {{ method?: string, navigation?: boolean, redirectedFrom?: () => unknown }} [options]
+ */
+function makeRoutedRequest(url, options = {}) {
+    const method = options.method || 'GET';
+    const navigation = options.navigation !== false;
+    const redirectedFrom = options.redirectedFrom || (() => null);
+    const resourceType = options.resourceType || '';
+    return {
+        url: () => url,
+        method: () => method,
+        isNavigationRequest: () => navigation,
+        redirectedFrom,
+        resourceType: () => resourceType,
+    };
+}
+
+/**
+ * @param {(ws: { url: () => string, close: (options?: { code?: number }) => Promise<void>, connectToServer: () => unknown, send: () => void }) => Promise<void>} handler
+ * @param {string} url
+ */
+async function closeSocket(handler, url) {
+    const record = { closed: 0, connected: 0, code: 0 };
+    await handler({
+        url: () => url,
+        async close(options) {
+            record.closed += 1;
+            record.code = options && options.code ? options.code : 0;
+        },
+        connectToServer() {
+            record.connected += 1;
+            return {};
+        },
+        send() {
+            throw new Error('websocket send');
+        },
+    });
+    return record;
+}
+
+/**
+ * @param {Function} script
+ */
+function bootEpochWatch(script) {
+    /** @type {Array<{ callback: () => void }>} */
+    const observers = [];
+    const sandbox = {
+        observers,
+        MutationObserver: class MutationObserver {
+            /**
+             * @param {() => void} callback
+             */
+            constructor(callback) {
+                this.callback = callback;
+                observers.push(this);
+            }
+            observe() {}
+        },
+        document: { documentElement: {} },
+    };
+    sandbox.globalThis = sandbox;
+    createContext(sandbox);
+    const epoch = runInContext(`(${script})()`, sandbox);
+    return { sandbox, epoch, observers };
+}

@@ -1,10 +1,12 @@
 // @ts-check
 /**
  * Foreground opt-in worker. Invoke with `node skills/browser/agent-worker.mjs`.
- * Prints fixed lifecycle lines only. No socket, MCP, or session database.
+ * Prints fixed lifecycle lines only. The read endpoint is an owner-only socket.
+ * This file does not open an HTTP server, a CDP port, or a session database.
  */
 
 import { pathToFileURL } from 'node:url';
+import { startReadEndpoint } from './agent-ipc.mjs';
 
 const DEBUG_ENV_KEYS = ['DEBUG', 'PWDEBUG', 'DEBUG_FILE'];
 const ALLOWED_ERROR_CODES = new Set([
@@ -20,6 +22,7 @@ const ALLOWED_ERROR_CODES = new Set([
     'SESSION_CLOSED',
     'ALREADY_RUNNING',
     'SHUTDOWN_FAILED',
+    'STATE_UNSAFE',
 ]);
 
 const HELP = [
@@ -31,6 +34,7 @@ const HELP = [
     '',
     'Starts a foreground worker with the dedicated Chrome profile',
     '~/.agbrowse-bpdus/agent-profile and the debugging pipe.',
+    'Read requests use the owner-only socket ~/.agbrowse-bpdus/agent-worker.sock.',
     'No profile, endpoint, or port arguments are accepted.',
     'Stop the worker with SIGINT or SIGTERM.',
     '',
@@ -84,6 +88,7 @@ function writeError(stream, code) {
  * @property {import('node:stream').Writable} [stderr]
  * @property {{ on: Function, off?: Function, removeListener?: Function }} [signalSource]
  * @property {(code: number) => void} [exit]
+ * @property {string} [socketPath]
  */
 
 /**
@@ -122,6 +127,8 @@ export async function runAgentWorker(options = {}) {
         const { createAgentRuntime } = await import('./agent-runtime.mjs');
         /** @type {ReturnType<typeof createAgentRuntime> | null} */
         let runtime = null;
+        /** @type {{ close: () => Promise<void> } | null} */
+        let endpoint = null;
         let settled = false;
         /** @type {'signal' | 'disconnected' | null} */
         let reason = null;
@@ -156,8 +163,17 @@ export async function runAgentWorker(options = {}) {
                 onDisconnected() { wake('disconnected'); },
             });
             await runtime.start();
+            if (typeof runtime.dispatchRead === 'function') {
+                endpoint = await startReadEndpoint({
+                    ...(options.socketPath ? { socketPath: options.socketPath } : {}),
+                    dispatch: (op, payload) => runtime.dispatchRead(op, payload),
+                });
+            }
         } catch (error) {
             let reported = error;
+            if (endpoint) {
+                try { await endpoint.close(); } catch (stopError) { reported = stopError; }
+            }
             if (runtime) {
                 try { await runtime.stop(); } catch (stopError) { reported = stopError; }
             }
@@ -170,10 +186,18 @@ export async function runAgentWorker(options = {}) {
             await wait;
         }
 
+        /** @type {unknown} */
+        let shutdownError = null;
+        if (endpoint) {
+            try { await endpoint.close(); } catch (error) { shutdownError = error; }
+        }
         try {
             await runtime.stop();
         } catch (error) {
-            writeError(stderr, publicErrorCode(error));
+            if (!shutdownError) shutdownError = error;
+        }
+        if (shutdownError) {
+            writeError(stderr, publicErrorCode(shutdownError));
             return finish(1);
         }
 

@@ -15,6 +15,8 @@ import {
     createDevFileKeyStore,
     createJsonStateStore,
 } from './agent-auth-store.mjs';
+import { connectReadEndpoint } from './agent-ipc.mjs';
+import { createMcpDispatcher } from './agent-mcp.mjs';
 
 const BODY_BYTES = 16 * 1024;
 const PROTOCOL_VERSION = '0.1.0';
@@ -41,6 +43,8 @@ const HELP = [
     '',
     'Binds 127.0.0.1 only. The default port is 7420.',
     'GET /healthz returns {"ok":true} and does not require authentication.',
+    'POST /mcp serves authenticated read tools.',
+    'A gateway without the storage arguments cannot serve authenticated reads.',
     'Persistence flags, all required together:',
     '  --state-dir --key-dir --gateway-id --audience',
     'A --host value other than 127.0.0.1 is rejected.',
@@ -60,6 +64,29 @@ function sendJson(res, status, payload) {
         'cache-control': 'no-store',
         'x-content-type-options': 'nosniff',
     });
+    res.end(body);
+}
+
+/**
+ * @param {import('node:http').ServerResponse} res
+ * @param {{ status: number, body?: unknown, headers?: Record<string, string> }} outcome
+ */
+function sendMcp(res, outcome) {
+    /** @type {Record<string, string | number>} */
+    const headers = {
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        ...(outcome.headers ?? {}),
+    };
+    if (outcome.body === undefined) {
+        res.writeHead(outcome.status, headers);
+        res.end();
+        return;
+    }
+    const body = Buffer.from(JSON.stringify(outcome.body));
+    headers['content-type'] = 'application/json; charset=utf-8';
+    headers['content-length'] = body.length;
+    res.writeHead(outcome.status, headers);
     res.end(body);
 }
 
@@ -148,17 +175,34 @@ function singleHeader(req, name) {
     return value;
 }
 
+const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
+
+/**
+ * @param {import('node:http').IncomingMessage} req
+ * @returns {string}
+ */
+function bearerToken(req) {
+    const header = singleHeader(req, 'authorization');
+    if (!header) return '';
+    const match = BEARER.exec(header);
+    return match ? match[1] : '';
+}
+
 /**
  * @param {{
  *   auth: {
  *     submitPairing: (input: any) => Promise<unknown>,
  *     issueChallenge: (input: any) => Promise<unknown>,
  *     exchangeProof: (input: any) => Promise<unknown>,
+ *     authenticate: (token: string) => Promise<any>,
  *   },
  *   port?: number,
  *   allowedHosts: string[],
  *   allowedOrigins?: string[],
  *   host?: string,
+ *   mcp?: { handle: (request: any) => Promise<any> },
+ *   worker?: { call: (op: string, payload: Record<string, unknown>) => Promise<any> },
+ *   log?: (line: string) => void,
  * }} options
  */
 export function createGateway(options) {
@@ -171,6 +215,10 @@ export function createGateway(options) {
     }
     const allowedOrigins = new Set(options.allowedOrigins ?? []);
     if ([...allowedOrigins].some((item) => typeof item !== 'string')) throw authError('AUTH_INVALID');
+    const mcp = options.mcp ?? createMcpDispatcher({
+        worker: options.worker ?? connectReadEndpoint(),
+        log: options.log ?? ((line) => { process.stderr.write(line); }),
+    });
     let allowedHosts = options.allowedHosts.slice();
     /** @type {http.Server | null} */
     let server = null;
@@ -214,8 +262,25 @@ export function createGateway(options) {
                 sendJson(res, 200, { ok: true });
                 return;
             }
+            if (url.pathname === '/mcp') {
+                const outcome = await mcp.handle({
+                    method: req.method,
+                    headers: req.headers,
+                    readBody: () => readBody(req),
+                    authenticate: (token) => options.auth.authenticate(token),
+                });
+                sendMcp(res, outcome);
+                return;
+            }
             const route = url.pathname === '/auth/pair' || url.pathname === '/auth/challenge' || url.pathname === '/auth/token';
             if (!route) {
+                req.resume();
+                const token = bearerToken(req);
+                if (!token) {
+                    sendError(res, authError('AUTH_INVALID'), 401);
+                    return;
+                }
+                await options.auth.authenticate(token);
                 sendError(res, authError('AUTH_INVALID'), 404);
                 return;
             }
@@ -400,7 +465,13 @@ async function runGatewayCli() {
             });
         } else {
             const fail = () => { throw authError('STATE_UNSAFE'); };
-            auth = { submitPairing: fail, issueChallenge: fail, exchangeProof: fail, close() {} };
+            auth = {
+                submitPairing: fail,
+                issueChallenge: fail,
+                exchangeProof: fail,
+                authenticate: fail,
+                close() {},
+            };
         }
         const portLabel = args.port === 0 ? '0' : String(args.port);
         const gateway = createGateway({
