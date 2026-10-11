@@ -129,7 +129,6 @@ export function readListingFromDocument(doc) {
     const blocked = root.querySelector('input[type="password"], input[name="otp"], input[autocomplete="one-time-code"], #captcha, .captcha, [data-captcha], [data-agent-block]');
     if (blocked) return { blocked: true, reason: 'HUMAN_REQUIRED', results: [] };
     const containers = [...root.querySelectorAll('.total_wrap, li.bx')];
-    if (containers.length === 0) return { blocked: false, reason: 'SITE_UNSUPPORTED', results: [] };
     /** @type {Array<{ rank: number, title: string, snippet: string, href: string, node_id: string }>} */
     const results = [];
     for (const container of containers) {
@@ -148,6 +147,31 @@ export function readListingFromDocument(doc) {
             node_id: listingNodeId(root, link),
         });
     }
+
+    const modernRoots = [...root.querySelectorAll('[data-meta-area="web_lis"] .fds-web-doc-root')];
+    for (const docRoot of modernRoots) {
+        const headline = docRoot.querySelector('a[data-heatmap-target=".link"] span.sds-comps-text-type-headline1');
+        if (!headline) continue;
+        const link = headline.closest('a[data-heatmap-target=".link"]');
+        if (!link) continue;
+        const title = (headline.textContent || '').replace(/\s+/g, ' ').trim();
+        const href = (link.getAttribute('href') || '').trim();
+        if (!title || !href) continue;
+        const snippet = [...docRoot.querySelectorAll('span.sds-comps-text-type-body1')]
+            .filter((span) => !span.parentElement?.closest('span.sds-comps-text-type-body1'))
+            .map((span) => span.textContent || '')
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        results.push({
+            rank: results.length + 1,
+            title,
+            snippet,
+            href,
+            node_id: listingNodeId(root, link),
+        });
+    }
+
     if (results.length === 0) return { blocked: false, reason: 'SITE_UNSUPPORTED', results: [] };
     return { blocked: false, reason: null, results };
 }
