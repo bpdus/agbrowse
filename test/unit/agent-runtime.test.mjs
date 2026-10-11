@@ -743,6 +743,59 @@ describe('agent-runtime', () => {
         expect(nextDocument.sandbox).not.toBe(firstDocument.sandbox);
     });
 
+    it('allows the fixed Naver homepage only during login status on that session page', async () => {
+        const made = makeContext(events);
+        const pages = [makePage('login-status-one'), makePage('login-status-two')];
+        let index = 0;
+        made.context.newPage = async () => pages[index++];
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const first = await runtime.openSession();
+        await runtime.openSession();
+        const handler = made.context.routes[0].handler;
+        const decisions = [];
+
+        async function request(url, { page, method = 'GET', navigation = false } = {}) {
+            const decision = { url, page: page.targetId, method, navigation, fetched: 0, aborted: false };
+            await handler({
+                request: () => makeRoutedRequest(url, { page, method, navigation }),
+                async abort() { decision.aborted = true; },
+                async fetch() { decision.fetched += 1; return { status: () => 200, headers: () => ({}) }; },
+                async fulfill() {},
+                async continue() {},
+            });
+            decisions.push(decision);
+            return decision;
+        }
+
+        pages[0].goto = async (url) => {
+            pages[0].currentUrl = url;
+            await request(url, { page: pages[0], navigation: true });
+            await request('https://ssl.pstatic.net/static/home.css', { page: pages[0] });
+            await request('https://evil.example/pixel', { page: pages[0] });
+            await request('https://www.naver.com/write', { page: pages[0], method: 'POST', navigation: true });
+            await request('https://www.naver.com/static/home.css', { page: pages[1] });
+        };
+        pages[0].evaluate = async (fn) => {
+            expect(fn.name).toBe('readLoginStatusFromDocument');
+            return { status: 'logged_in', evidence: 'account_menu' };
+        };
+
+        const result = await runtime.dispatchRead('naver.login_status', { session_id: first.sessionId });
+        expect(result).toEqual({ status: 'logged_in', evidence: 'account_menu' });
+        expect(decisions.slice(0, 2).map(({ fetched, aborted }) => ({ fetched, aborted })))
+            .toEqual([{ fetched: 1, aborted: false }, { fetched: 1, aborted: false }]);
+        expect(decisions.slice(2).every(({ fetched, aborted }) => fetched === 0 && aborted)).toBe(true);
+
+        const afterCall = await request('https://www.naver.com/static/after.css', { page: pages[0] });
+        expect(afterCall).toMatchObject({ fetched: 0, aborted: true });
+        await expect(runtime.dispatchRead('naver.login_status', {
+            session_id: first.sessionId, navigation_url: 'https://evil.example/',
+        })).rejects.toMatchObject({ code: 'INVALID_ARGUMENTS' });
+    });
+
     it('reinstalls the document watcher on each main-frame navigation', async () => {
         const made = makeContext(events);
         const main = { id: 'main' };
@@ -873,7 +926,7 @@ describe('agent-runtime', () => {
 
 /**
  * @param {string} url
- * @param {{ method?: string, navigation?: boolean, redirectedFrom?: () => unknown, page?: object }} [options]
+ * @param {{ method?: string, navigation?: boolean, resourceType?: string, redirectedFrom?: () => unknown, page?: object }} [options]
  */
 function makeRoutedRequest(url, options = {}) {
     const method = options.method || 'GET';

@@ -98,15 +98,16 @@ afterEach(() => {
 });
 
 describe('agent-worker', () => {
-    it('routes the fixed cart tools offline to dispatchCart', async () => {
+    it('routes login status to read dispatch and the fixed cart tools to cart dispatch', async () => {
         const calls = [];
         const runtime = {
             async dispatchRead(op) { calls.push(['read', op]); return 'read'; },
             async dispatchCart(op) { calls.push(['cart', op]); return 'cart'; },
         };
+        expect(await dispatchWorkerOperation(runtime, 'naver.login_status', {})).toBe('read');
         expect(await dispatchWorkerOperation(runtime, 'naver.cart.prepare', {})).toBe('cart');
         expect(await dispatchWorkerOperation(runtime, 'naver.product.read', {})).toBe('cart');
-        expect(calls).toEqual([['cart', 'naver.cart.prepare'], ['cart', 'naver.product.read']]);
+        expect(calls).toEqual([['read', 'naver.login_status'], ['cart', 'naver.cart.prepare'], ['cart', 'naver.product.read']]);
         await expect(dispatchWorkerOperation(runtime, 'naver.cart.checkout', {})).rejects.toMatchObject({ code: 'ACTION_DENIED' });
     });
 

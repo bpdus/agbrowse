@@ -31,6 +31,7 @@ const READ_OPERATIONS = new Set([
     'browser.session.close',
     'browser.session.open',
     'naver.search.list',
+    'naver.login_status',
     'naver.search.result.read',
 ]);
 

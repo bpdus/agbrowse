@@ -112,16 +112,22 @@ challenge payload 순서: `protocol_version`, `purpose`, `gateway_id`, `aud`, `d
 
 인자의 `device_id`, `user_id`, `conversation_id`는 힌트일 수 있다. 권한 결정은 인증 문맥의 기기와 등록된 권한으로 한다.
 
+## 네이버 로그인 상태 도구
+
+`naver.login_status`는 `browser:read` scope만 요구한다. `protocol_version`, `request_id`, `session_id`만 받고, 현재 세션 탭을 고정 주소 `https://www.naver.com/`로 이동한다. 이 호출 중에만 해당 주소와 페이지 표시를 위한 `https://ssl.pstatic.net`, `https://s.pstatic.net` 정적 호스트의 GET/HEAD 요청을 허용한다. 리다이렉트도 같은 정책으로 검사하며, 쓰기 요청과 WebSocket은 계속 차단한다. 로그인 주소를 따라가거나 로그인 동작을 수행하지 않는다.
+
+MCP 결과는 `{"status":"logged_in|logged_out|unknown","evidence":"login_link|logout_control|account_menu|none"}` 두 필드뿐이다. 상단에 표시된 `nid.naver.com/nidlogin` 링크가 있으면 `logged_out`이다. 그 링크가 없고 표시된 로그아웃 컨트롤이나 계정 메뉴 표식이 있으면 `logged_in`이다. 나머지는 `unknown`이다. 이름, 이메일, URL, DOM 텍스트, 쿠키를 결과에 포함하지 않는다.
+
 ## 네이버 장바구니 도구
 
-PR 4는 다음 네 MCP 도구를 추가한다. 네 도구 모두 `browser:read`와 `cart:write`를 함께 요구한다. `cart:write`는 사람이 페어링 과정에서 명시적으로 승인해야 한다. 기존 기기에는 자동으로 추가하지 않는다. `cart:write`를 회수하려면 해당 기기를 폐기한 뒤 이 scope 없이 다시 페어링한다.
+네이버 장바구니 읽기와 변경 준비는 서로 다른 scope를 요구한다. 상품·장바구니 조회는 `browser:read`만 요구한다. `naver.cart.prepare`와 `naver.cart.set`은 `browser:read`와 `cart:write`를 함께 요구한다. `cart:write`는 사람이 페어링 과정에서 명시적으로 승인해야 한다. 기존 기기에는 자동으로 추가하지 않는다. `cart:write`를 회수하려면 해당 기기를 폐기한 뒤 이 scope 없이 다시 페어링한다.
 
 | 도구 | 전용 인자 | 동작 |
 |---|---|---|
-| `naver.product.read` | 없음 | 현재 열려 있는 지원 상품 페이지에서 상품·옵션·가격·재고와 상태 지문을 읽는다. |
-| `naver.cart.read` | 없음 | 현재 열려 있는 지원 장바구니에서 opaque line ref, 상품·variant ID, 수량·단가와 상태 지문을 읽는다. |
-| `naver.cart.prepare` | `product_ref`, `option_ids`, `quantity`, `expected_unit_price`, `dry_run` | 정확한 옵션 조합을 확인하고 절대 목표 수량을 5분 유효 intent에 묶는다. `dry_run` 기본값은 `true`다. |
-| `naver.cart.set` | `intent_id`, `idempotency_key`, `dry_run` | 준비된 intent를 적용하거나 기본값인 inspection-only 예측 결과를 반환한다. `dry_run` 기본값은 `true`다. |
+| `naver.product.read` | 없음 | `browser:read`. 현재 열려 있는 지원 상품 페이지에서 상품·옵션·가격·재고와 상태 지문을 읽는다. |
+| `naver.cart.read` | 없음 | `browser:read`. 현재 열려 있는 지원 장바구니에서 opaque line ref, 상품·variant ID, 수량·단가와 상태 지문을 읽는다. |
+| `naver.cart.prepare` | `product_ref`, `option_ids`, `quantity`, `expected_unit_price`, `dry_run` | `browser:read`와 `cart:write`. 정확한 옵션 조합을 확인하고 절대 목표 수량을 5분 유효 intent에 묶는다. `dry_run` 기본값은 `true`다. |
+| `naver.cart.set` | `intent_id`, `idempotency_key`, `dry_run` | `browser:read`와 `cart:write`. 준비된 intent를 적용하거나 기본값인 inspection-only 예측 결과를 반환한다. `dry_run` 기본값은 `true`다. |
 
 네 도구의 입력 스키마는 추가 속성을 허용하지 않는다. 모든 호출은 `protocol_version: "0.1.0"`, bounded `request_id`, 현재 브라우저 `session_id`를 포함한다. `quantity`는 1부터 99까지의 정수이며, 해당 상품과 variant의 **절대 목표 수량**이다. 다른 수량을 더하는 값이 아니다. 품절, 모호한 variant, 구독형 상품, 임의 옵션 조합은 거부한다.
 

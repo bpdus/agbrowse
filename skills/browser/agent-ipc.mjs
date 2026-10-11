@@ -19,6 +19,7 @@ const ALLOWED_OPS = new Set([
     'browser.session.close',
     'browser.session.open',
     'naver.search.list',
+    'naver.login_status',
     'naver.search.result.read',
     'naver.product.read',
     'naver.cart.read',

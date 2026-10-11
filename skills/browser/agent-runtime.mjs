@@ -19,6 +19,7 @@ import {
     runListing,
     runObserve,
 } from './agent-naver-search.mjs';
+import { LOGIN_STATUS_URL, loginStatusPolicy, readLoginStatusFromDocument } from './agent-naver-login-status.mjs';
 import { classifyCartRequest } from './agent-naver-cart.mjs';
 
 const WORKER_DIR_NAME = '.agbrowse-bpdus';
@@ -361,7 +362,6 @@ async function abortRoute(route) {
  * @param {import('playwright-core').Route} route
  */
 async function guardRequest(route, pagePolicies) {
-    const policy = productionSearchPolicy();
     try {
         const request = route.request();
         const method = requestMethod(request);
@@ -369,6 +369,7 @@ async function guardRequest(route, pagePolicies) {
         let page = null;
         try { page = request.frame?.().page?.() ?? null; } catch { page = null; }
         const pagePolicy = page && pagePolicies.get(page);
+        const policy = pagePolicy?.requestPolicy ?? productionSearchPolicy();
         if (chainHasWebSocket(request)) {
             await abortRoute(route);
             return;
@@ -517,7 +518,7 @@ export function createAgentRuntime(config) {
     let lockedDir = null;
     /** @type {Map<string, { page: import('playwright-core').Page, targetId: string, epoch: number, seenPageEpoch: number, policyApplied: boolean }>} */
     const sessions = new Map();
-    /** @type {WeakMap<object, { mode: 'read' | 'cart', mutationPermit: any, blockedReason: string | null }>} */
+    /** @type {WeakMap<object, { mode: 'read' | 'cart', mutationPermit: any, blockedReason: string | null, requestPolicy?: ReturnType<typeof loginStatusPolicy> }>} */
     const pagePolicies = new WeakMap();
     let intentionalStop = false;
     let disconnectNoted = false;
@@ -802,9 +803,9 @@ export function createAgentRuntime(config) {
      * @param {import('playwright-core').Page} page
      * @param {{ epoch: number }} binding
      * @param {string} url
+     * @param {ReturnType<typeof productionSearchPolicy>} [policy]
      */
-    async function gotoAllowed(page, binding, url) {
-        const policy = productionSearchPolicy();
+    async function gotoAllowed(page, binding, url, policy = productionSearchPolicy()) {
         if (classifyRequest(url, 'GET', 'navigation', policy) !== 'allow') throw readError('DOMAIN_DENIED');
         if (typeof page.goto !== 'function') throw readError('NOT_RUNNING');
         await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -933,6 +934,28 @@ export function createAgentRuntime(config) {
                         tab_id: binding.targetId,
                         frame_id: 'frame_main',
                     };
+                }
+                if (op === 'naver.login_status') {
+                    if (Object.keys(payload).some((key) => key !== 'session_id')) throw readError('INVALID_ARGUMENTS');
+                    const pagePolicy = pagePolicies.get(binding.page);
+                    if (!pagePolicy) throw readError('SESSION_CLOSED');
+                    const statusPolicy = loginStatusPolicy();
+                    const previousPolicy = pagePolicy.requestPolicy;
+                    pagePolicy.requestPolicy = statusPolicy;
+                    try {
+                        await gotoAllowed(binding.page, binding, LOGIN_STATUS_URL, statusPolicy);
+                        const value = typeof binding.page.evaluate === 'function'
+                            ? await binding.page.evaluate(readLoginStatusFromDocument)
+                            : null;
+                        if (!value || !['logged_in', 'logged_out', 'unknown'].includes(value.status)
+                            || !['login_link', 'logout_control', 'account_menu', 'none'].includes(value.evidence)) {
+                            return { status: 'unknown', evidence: 'none' };
+                        }
+                        return { status: value.status, evidence: value.evidence };
+                    } finally {
+                        if (previousPolicy === undefined) delete pagePolicy.requestPolicy;
+                        else pagePolicy.requestPolicy = previousPolicy;
+                    }
                 }
                 if (op === 'naver.search.list') {
                     if (typeof payload.query !== 'string') throw readError('INVALID_ARGUMENTS');
