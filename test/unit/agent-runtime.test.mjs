@@ -107,11 +107,16 @@ function makeContext(events) {
         closed: false,
         newPageCalls: [],
         routes: [],
+        webSocketRoutes: [],
         initScripts: [],
         installOrder: [],
         async route(pattern, handler) {
             this.installOrder.push('route');
             this.routes.push({ pattern, handler });
+        },
+        async routeWebSocket(pattern, handler) {
+            this.installOrder.push('routeWebSocket');
+            this.webSocketRoutes.push({ pattern, handler });
         },
         async addInitScript(script) {
             this.installOrder.push('addInitScript');
@@ -491,10 +496,18 @@ describe('agent-runtime', () => {
         active = runtime;
         await runtime.start();
         expect(trace.launches[0].options.serviceWorkers).toBe('block');
-        expect(made.context.installOrder).toEqual(['route', 'addInitScript']);
+        expect(made.context.installOrder).toEqual(['route', 'routeWebSocket', 'addInitScript']);
         expect(made.context.routes[0].pattern).toBe('**/*');
+        const wsRoute = made.context.webSocketRoutes[0];
+        expect(wsRoute.pattern(new URL('wss://evil.example/socket'))).toBe(true);
+        expect(wsRoute.pattern(new URL('ws://search.naver.com/ws'))).toBe(true);
+        const foreignSocket = await closeSocket(wsRoute.handler, 'wss://evil.example/socket');
+        const allowedHostSocket = await closeSocket(wsRoute.handler, 'wss://search.naver.com/ws');
+        expect(foreignSocket).toEqual({ closed: 1, connected: 0, code: 1008 });
+        expect(allowedHostSocket).toEqual({ closed: 1, connected: 0, code: 1008 });
+        expect(JSON.stringify(foreignSocket)).not.toContain('evil.example');
         await runtime.openSession();
-        expect(made.context.installOrder).toEqual(['route', 'addInitScript', 'newPage']);
+        expect(made.context.installOrder).toEqual(['route', 'routeWebSocket', 'addInitScript', 'newPage']);
         expect(made.context.initScripts).toHaveLength(1);
 
         const handler = made.context.routes[0].handler;
@@ -581,6 +594,26 @@ describe('agent-runtime', () => {
         expect(blank.fetches).toHaveLength(0);
         expect(blank.aborted).toBeNull();
 
+        const handshake = await settle(makeRoutedRequest('https://search.naver.com/search.naver', {
+            navigation: false,
+            resourceType: 'websocket',
+        }), []);
+        expect(handshake.aborted).toBe('blockedbyclient');
+        expect(handshake.fetches).toHaveLength(0);
+        expect(handshake.continued).toBe(false);
+
+        const socketUrl = await settle(makeRoutedRequest('wss://evil.example/socket', { navigation: false }), []);
+        expect(socketUrl.aborted).toBe('blockedbyclient');
+        expect(socketUrl.fetches).toHaveLength(0);
+
+        const priorSocket = makeRoutedRequest('https://ssl.pstatic.net/ws', {
+            navigation: false,
+            resourceType: 'websocket',
+        });
+        const afterSocket = await settle(makeRoutedRequest(allowed, { redirectedFrom: () => priorSocket }), []);
+        expect(afterSocket.aborted).toBe('blockedbyclient');
+        expect(afterSocket.fetches).toHaveLength(0);
+
         const firstDocument = bootEpochWatch(made.context.initScripts[0]);
         expect(firstDocument.epoch).toBe(1);
         firstDocument.observers[0].callback();
@@ -642,6 +675,80 @@ describe('agent-runtime', () => {
         await page.listeners.framenavigated(main);
         expect(page.evaluations.filter((name) => name === 'installEpochWatch')).toEqual(['installEpochWatch', 'installEpochWatch']);
     });
+
+    it('retries the watcher when the document element is missing and counts a restored mutation', async () => {
+        const made = makeContext(events);
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const script = made.context.initScripts[0];
+        /** @type {Array<{ callback: (records?: unknown[]) => void, target: unknown, options: Record<string, boolean> }>} */
+        const observers = [];
+        /** @type {Array<{ type: string, fn: () => void }>} */
+        const listeners = [];
+        const element = { id: 'root' };
+        const sandbox = {
+            observers,
+            MutationObserver: class MutationObserver {
+                /**
+                 * @param {(records?: unknown[]) => void} callback
+                 */
+                constructor(callback) {
+                    this.callback = callback;
+                }
+                /**
+                 * @param {unknown} target
+                 * @param {Record<string, boolean>} options
+                 */
+                observe(target, options) {
+                    this.target = target;
+                    this.options = options;
+                    observers.push(this);
+                }
+            },
+            document: {
+                documentElement: null,
+                /**
+                 * @param {string} type
+                 * @param {() => void} fn
+                 */
+                addEventListener(type, fn) {
+                    listeners.push({ type, fn });
+                },
+            },
+        };
+        sandbox.globalThis = sandbox;
+        createContext(sandbox);
+        const firstEpoch = runInContext(`(${script})()`, sandbox);
+        expect(firstEpoch).toBe(1);
+        expect(sandbox.__agbrowseEpochWatch).toBeUndefined();
+        expect(observers.map((observer) => observer.target)).toEqual([sandbox.document]);
+        expect(observers[0].options).toMatchObject({
+            subtree: true,
+            childList: true,
+            attributes: true,
+            characterData: true,
+        });
+        expect(listeners.map((listener) => listener.type)).toEqual(['DOMContentLoaded']);
+        observers[0].callback([{ type: 'childList' }]);
+        expect(sandbox.__agbrowseDocumentEpoch).toBe(2);
+
+        sandbox.document.documentElement = element;
+        const retried = runInContext(`(${script})()`, sandbox);
+        expect(retried).toBe(2);
+        expect(sandbox.__agbrowseEpochWatch).toBe(true);
+        const attached = observers.find((observer) => observer.target === element);
+        expect(attached).toBeTruthy();
+        expect(attached.options.characterData).toBe(true);
+        const beforeRestore = sandbox.__agbrowseDocumentEpoch;
+        attached.callback([{ type: 'characterData' }]);
+        attached.callback([{ type: 'characterData' }]);
+        expect(sandbox.__agbrowseDocumentEpoch).toBe(beforeRestore + 2);
+        listeners[0].fn();
+        expect(sandbox.__agbrowseDocumentEpoch).toBe(beforeRestore + 2);
+        expect(observers.filter((observer) => observer.target === element)).toHaveLength(1);
+    });
 });
 
 /**
@@ -652,12 +759,37 @@ function makeRoutedRequest(url, options = {}) {
     const method = options.method || 'GET';
     const navigation = options.navigation !== false;
     const redirectedFrom = options.redirectedFrom || (() => null);
+    const resourceType = options.resourceType || '';
     return {
         url: () => url,
         method: () => method,
         isNavigationRequest: () => navigation,
         redirectedFrom,
+        resourceType: () => resourceType,
     };
+}
+
+/**
+ * @param {(ws: { url: () => string, close: (options?: { code?: number }) => Promise<void>, connectToServer: () => unknown, send: () => void }) => Promise<void>} handler
+ * @param {string} url
+ */
+async function closeSocket(handler, url) {
+    const record = { closed: 0, connected: 0, code: 0 };
+    await handler({
+        url: () => url,
+        async close(options) {
+            record.closed += 1;
+            record.code = options && options.code ? options.code : 0;
+        },
+        connectToServer() {
+            record.connected += 1;
+            return {};
+        },
+        send() {
+            throw new Error('websocket send');
+        },
+    });
+    return record;
 }
 
 /**

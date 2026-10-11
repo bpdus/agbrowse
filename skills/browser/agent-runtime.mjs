@@ -205,21 +205,44 @@ function launchOptions() {
 function installEpochWatch() {
     const root = /** @type {any} */ (globalThis);
     if (root.__agbrowseEpochWatch) return root.__agbrowseDocumentEpoch || 1;
-    root.__agbrowseDocumentEpoch = 1;
+    if (!Number.isInteger(root.__agbrowseDocumentEpoch)) root.__agbrowseDocumentEpoch = 1;
+    const Observer = root.MutationObserver;
+    const document = root.document;
+    if (typeof Observer !== 'function' || !document) return root.__agbrowseDocumentEpoch;
     const bump = () => {
         root.__agbrowseDocumentEpoch += 1;
     };
-    const Observer = root.MutationObserver;
-    if (typeof Observer === 'function' && root.document && root.document.documentElement) {
-        const observer = new Observer(bump);
-        observer.observe(root.document.documentElement, {
-            subtree: true,
-            childList: true,
-            attributes: true,
-            characterData: true,
-        });
+    const watchOptions = {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+    };
+    /**
+     * @param {unknown} target
+     */
+    const attach = (target) => {
+        if (!target) return false;
+        try {
+            const observer = new Observer(bump);
+            observer.observe(target, watchOptions);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+    const element = document.documentElement;
+    if (!element) {
+        if (!root.__agbrowseDocumentObserved) root.__agbrowseDocumentObserved = attach(document);
+        if (!root.__agbrowseEpochWatchWait && typeof document.addEventListener === 'function') {
+            root.__agbrowseEpochWatchWait = true;
+            document.addEventListener('DOMContentLoaded', () => {
+                installEpochWatch();
+            }, { once: true });
+        }
+        return root.__agbrowseDocumentEpoch;
     }
-    root.__agbrowseEpochWatch = true;
+    if (attach(element)) root.__agbrowseEpochWatch = true;
     return root.__agbrowseDocumentEpoch;
 }
 
@@ -256,10 +279,42 @@ function requestRedirectedFrom(request) {
 }
 
 /**
- * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean }} request
+ * @param {{ resourceType?: () => string, url?: () => string }} request
+ */
+function requestIsWebSocket(request) {
+    if (typeof request.resourceType === 'function' && String(request.resourceType()).toLowerCase() === 'websocket') {
+        return true;
+    }
+    try {
+        const protocol = new URL(requestUrl(request)).protocol;
+        return protocol === 'ws:' || protocol === 'wss:';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, resourceType?: () => string, redirectedFrom?: () => unknown }} request
+ */
+function chainHasWebSocket(request) {
+    const seen = new Set();
+    /** @type {unknown} */
+    let current = request;
+    while (current && typeof current === 'object' && !seen.has(current)) {
+        seen.add(current);
+        const hop = /** @type {{ resourceType?: () => string, url?: () => string, redirectedFrom?: () => unknown }} */ (current);
+        if (requestIsWebSocket(hop)) return true;
+        current = requestRedirectedFrom(hop);
+    }
+    return false;
+}
+
+/**
+ * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, resourceType?: () => string }} request
  * @param {ReturnType<typeof productionSearchPolicy>} policy
  */
 function hopAllowed(request, policy) {
+    if (requestIsWebSocket(request)) return false;
     const method = requestMethod(request);
     const url = requestUrl(request);
     const navigation = requestIsNavigation(request);
@@ -306,6 +361,10 @@ async function guardRequest(route) {
         const request = route.request();
         const method = requestMethod(request);
         const url = requestUrl(request);
+        if (chainHasWebSocket(request)) {
+            await abortRoute(route);
+            return;
+        }
         if (url === 'about:blank' && method === 'GET' && !requestRedirectedFrom(request)) {
             await route.continue();
             return;
@@ -360,6 +419,18 @@ async function guardRequest(route) {
 }
 
 /**
+ * The read MVP never connects a socket. Closing here does not reach the server.
+ * @param {import('playwright-core').WebSocketRoute} ws
+ */
+async function guardWebSocket(ws) {
+    try {
+        await ws.close({ code: 1008 });
+    } catch {
+        /* already closed */
+    }
+}
+
+/**
  * @param {import('playwright-core').BrowserContext} ctx
  */
 async function installContextGuards(ctx) {
@@ -367,6 +438,11 @@ async function installContextGuards(ctx) {
         throw new AgentRuntimeError('STARTUP_FAILED', 'Browser launch failed.');
     }
     await ctx.route('**/*', (route) => guardRequest(route));
+    if (typeof ctx.routeWebSocket === 'function') {
+        /** @type {(url: URL) => boolean} */
+        const allWebSockets = () => true;
+        await ctx.routeWebSocket(allWebSockets, (ws) => guardWebSocket(ws));
+    }
     await ctx.addInitScript(installEpochWatch);
 }
 
