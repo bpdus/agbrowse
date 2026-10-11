@@ -76,7 +76,7 @@ const TOOLS = [
     },
     {
         name: 'naver.login_status',
-        description: 'Navigate to the fixed Naver homepage and return only a redacted login status enum. Requires browser:read.',
+        description: 'Navigate to the fixed Naver account page and return only login status and evidence enums. Requires browser:read.',
         inputSchema: schema(['protocol_version', 'request_id', 'session_id'], {}),
     },
     {
@@ -569,8 +569,8 @@ export function createMcpDispatcher(options) {
                 });
                 const status = ['logged_in', 'logged_out', 'unknown'].includes(result?.status) ? result.status : 'unknown';
                 let evidence = 'none';
-                if (status === 'logged_out' && result?.evidence === 'login_link') evidence = 'login_link';
-                if (status === 'logged_in' && result?.evidence === 'logout_link') evidence = 'logout_link';
+                if (status === 'logged_out' && ['redirect_login', 'login_link'].includes(result?.evidence)) evidence = result.evidence;
+                if (status === 'logged_in' && ['account_page', 'logout_link'].includes(result?.evidence)) evidence = result.evidence;
                 return toolOutcome(message.id, { status, evidence }, false, mcpSession.id, requestId, tool);
             }
 

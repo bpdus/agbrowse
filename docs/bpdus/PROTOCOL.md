@@ -114,9 +114,9 @@ challenge payload 순서: `protocol_version`, `purpose`, `gateway_id`, `aud`, `d
 
 ## 네이버 로그인 상태 도구
 
-`naver.login_status`는 `browser:read` scope만 요구한다. `protocol_version`, `request_id`, `session_id`만 받고, 현재 세션 탭을 고정 주소 `https://www.naver.com/`로 이동한다. 이 호출 중에만 해당 주소와 페이지 표시를 위한 `https://ssl.pstatic.net`, `https://s.pstatic.net` 정적 호스트의 GET/HEAD 요청을 허용한다. 리다이렉트도 같은 정책으로 검사하며, 쓰기 요청과 WebSocket은 계속 차단한다. 로그인 주소를 따라가거나 로그인 동작을 수행하지 않는다.
+`naver.login_status`는 `browser:read` scope만 요구한다. `protocol_version`, `request_id`, `session_id`만 받고, 현재 세션 탭을 고정 주소 `https://nid.naver.com/user2/help/myInfo`로 이동한다. 이 도구의 임시 정책은 `https://nid.naver.com`의 `/user2/help/myInfo`와 `/nidlogin.login` 경로만 직접 탐색하도록 허용한다. 탐색은 GET만 허용하며, 리다이렉트는 `nid.naver.com` 또는 `www.naver.com` 안에서만 GET으로 따라간다. 기존 정적 리소스 호스트의 GET/HEAD 요청은 허용한다. 다른 호스트, 쓰기 요청, WebSocket은 차단한다.
 
-MCP 결과는 `{"status":"logged_in|logged_out|unknown","evidence":"logout_link|login_link|none"}` 두 필드뿐이다. 문서 어디에서든 `nid.naver.com/nidlogin.logout` 링크 대상이 있으면 `logged_in`이다. 없고 `nid.naver.com/nidlogin.login` 링크 대상이 있으면 `logged_out`이다. 둘 다 있으면 `logged_in`이 우선하며, 대상 링크가 없으면 `unknown`이다. 이름, 이메일, URL, DOM 텍스트, 쿠키를 결과에 포함하지 않는다.
+최종 최상위 URL이 사용자 정보 경로이면 `{"status":"logged_in","evidence":"account_page"}`, 로그인 경로이면 `{"status":"logged_out","evidence":"redirect_login"}`을 반환한다. 그 외 URL에서는 현재 문서의 인증 링크 대상만 확인한다. `nid.naver.com/nidlogin.logout` 링크가 있으면 `logged_in/logout_link`, 없고 `nid.naver.com/nidlogin.login` 링크가 있으면 `logged_out/login_link`, 둘 다 없으면 `unknown/none`이다. `evidence` enum은 `account_page|redirect_login|logout_link|login_link|none`이다. MCP 결과에는 `status`와 `evidence` 두 필드만 포함하며 이름, 이메일, URL, DOM 텍스트, 쿠키는 포함하지 않는다.
 
 ## 네이버 장바구니 도구
 
