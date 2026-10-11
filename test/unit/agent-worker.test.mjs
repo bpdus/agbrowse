@@ -111,6 +111,17 @@ describe('agent-worker', () => {
         await expect(dispatchWorkerOperation(runtime, 'naver.cart.checkout', {})).rejects.toMatchObject({ code: 'ACTION_DENIED' });
     });
 
+    it('routes the fixed top-bar capture only to the operator dispatcher', async () => {
+        const calls = [];
+        const runtime = {
+            async dispatchOperator(op, payload) { calls.push([op, payload]); return '<header>TEXT</header>'; },
+            async dispatchRead() { throw new Error('read dispatcher must not be called'); },
+        };
+        expect(await dispatchWorkerOperation(runtime, 'operator.naver.topbar_structure', {})).toBe('<header>TEXT</header>');
+        expect(calls).toEqual([['operator.naver.topbar_structure', {}]]);
+        await expect(dispatchWorkerOperation(runtime, 'operator.browser.evaluate', {})).rejects.toMatchObject({ code: 'ACTION_DENIED' });
+    });
+
     it('does not import the legacy browser surfaces or start on import', () => {
         expect(createdAtImport).toBe(0);
         expect(workerSource).not.toMatch(/['"]\.\/browser\.mjs['"]|['"]\.\.\/\.\.\/web-ai\/cli\.mjs['"]|web-ai\/mcp-server\.mjs|adaptive-fetch|tab-manager|connectOverCDP|createServer/);

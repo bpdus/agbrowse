@@ -26,6 +26,7 @@ const ALLOWED_ERROR_CODES = new Set([
     'STATE_UNSAFE',
 ]);
 const CART_OPERATIONS = new Set(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set']);
+const OPERATOR_OPERATIONS = new Set(['operator.naver.topbar_structure']);
 const READ_OPERATIONS = new Set([
     'browser.observe',
     'browser.session.close',
@@ -93,6 +94,10 @@ function writeError(stream, code) {
 
 /** Route only fixed worker operations to the matching runtime dispatcher. */
 export async function dispatchWorkerOperation(runtime, op, payload) {
+    if (OPERATOR_OPERATIONS.has(op)) {
+        if (typeof runtime.dispatchOperator !== 'function') throw readError('ACTION_DENIED');
+        return runtime.dispatchOperator(op, payload);
+    }
     if (CART_OPERATIONS.has(op)) {
         if (typeof runtime.dispatchCart !== 'function') throw readError('ACTION_DENIED');
         return runtime.dispatchCart(op, payload);

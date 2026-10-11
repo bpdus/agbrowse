@@ -1,0 +1,92 @@
+{
+  "schema_version": 2,
+  "domain": "feature",
+  "summary": "Add an owner-only worker operation and CLI for sanitized Naver top-bar structure capture, recover dead auth-store locks, and close MCP client keys on every exit path.",
+  "status": "READY",
+  "questions": [],
+  "verification": [
+    "npx vitest run test/unit/agent-auth-store.test.mjs test/unit/agent-mcp-client.test.mjs test/unit/agent-ipc.test.mjs test/unit/agent-worker.test.mjs test/unit/agent-runtime.test.mjs test/unit/agent-mcp.test.mjs test/unit/agent-naver-login-status.test.mjs test/unit/agent-naver-topbar.test.mjs"
+  ],
+  "risks": [
+    "The operator-only capture must remain unavailable through MCP and must return no page text or unsanitized iframe URL data.",
+    "Stale-lock recovery must remove only an owned regular 0600 lock whose recorded PID is confirmed gone."
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Add operator-only Naver top-bar capture",
+      "files": [
+        "skills/browser/agent-ipc.mjs",
+        "skills/browser/agent-worker.mjs",
+        "skills/browser/agent-runtime.mjs",
+        "skills/browser/agent-naver-topbar.mjs",
+        "bin/bpdus/capture-naver-topbar.mjs",
+        "test/unit/agent-ipc.test.mjs",
+        "test/unit/agent-worker.test.mjs",
+        "test/unit/agent-runtime.test.mjs",
+        "test/unit/agent-mcp.test.mjs",
+        "test/unit/agent-naver-topbar.test.mjs",
+        "docs/bpdus/WORKER.md",
+        "docs/bpdus/PROTOCOL.md"
+      ],
+      "target": "worker IPC and operator dispatch",
+      "depends_on": "none",
+      "change": "Allow operator.naver.topbar_structure only on the owner-only worker socket; navigate a worker-owned page under loginStatusPolicy(), serialize selected top-bar DOM with text and aria-label redaction and an element cap, expose a private CLI that writes mode 0600 output, and prove MCP/gateway cannot call it.",
+      "effect": "The operator CLI writes sanitized structure while the MCP tool catalog and dispatcher cannot reach the operation.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "A DOM leak or accidental gateway exposure could reveal profile data or widen the authenticated API.",
+        "test_decision": "add",
+        "test_reason": "The existing suite does not cover this operation or sanitizer; fixture-based canaries and gateway denial need repeatable regression checks.",
+        "subject": "sanitized operator capture and MCP boundary",
+        "procedure": "Unit-test a DOM fixture with fake identity and cookie-like text, exercise worker IPC dispatch, and call the MCP/gateway with the operator operation name.",
+        "pass_criterion": "Only permitted sanitized markup returns, output is capped, and MCP/gateway never dispatch the operator operation."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Recover only dead owned auth-store locks",
+      "files": [
+        "skills/browser/agent-auth-store.mjs",
+        "test/unit/agent-auth-store.test.mjs"
+      ],
+      "target": "acquireLock",
+      "depends_on": "none",
+      "change": "Write the owner PID into each writer lock and retry acquisition once only after confirming that an owned regular 0600 lock names a dead PID.",
+      "effect": "A dead-owner lock can be recovered, while a live-owner lock remains exclusive.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "Incorrect recovery could let concurrent writers replace authentication state or keys.",
+        "test_decision": "add",
+        "test_reason": "Existing storage tests cover lock exclusion but not stale owner recovery or PID metadata.",
+        "subject": "dead and live writer lock behavior",
+        "procedure": "Create a mode 0600 lock with an impossible PID, then one with the current live PID; open the key store in each case.",
+        "pass_criterion": "The dead lock is replaced by a lock containing the current PID, and the live lock still fails with STATE_UNSAFE."
+      }
+    },
+    {
+      "id": 3,
+      "title": "Close MCP key stores and preserve known gateway errors",
+      "files": [
+        "skills/browser/agent-mcp-client.mjs",
+        "test/unit/agent-mcp-client.test.mjs"
+      ],
+      "target": "connectMcpHttp and runMcpStdioClient",
+      "depends_on": "none",
+      "change": "Close client key stores from client close and stdio-client finally/signal paths, and preserve known gateway auth/read error codes from either parsed error data.code or error.code.",
+      "effect": "Client shutdown always releases key-store locks and known gateway failures retain their public code.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "An unclosed key-store lock blocks future clients, and error-code loss hides version and authorization failures.",
+        "test_decision": "add",
+        "test_reason": "The current tests do not assert signal cleanup or VERSION_UNSUPPORTED passthrough from an HTTP error response.",
+        "subject": "MCP key-store cleanup and gateway error passthrough",
+        "procedure": "Exercise normal, error, and signal stdio exits plus a gateway response carrying VERSION_UNSUPPORTED in error.data.code.",
+        "pass_criterion": "The key-store lock is released on every exit and known error codes survive; unknown codes become AUTH_INVALID."
+      }
+    }
+  ]
+}

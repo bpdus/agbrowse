@@ -168,16 +168,80 @@ function prepareDirectory(io, directory) {
 function acquireLock(io, directory) {
     revalidateDirectory(io, directory);
     const lockPath = path.join(directory, LOCK_NAME);
-    let fd;
-    try {
-        fd = io.openSync(
+    const create = () => {
+        const fd = io.openSync(
             lockPath,
             io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL | io.constants.O_NOFOLLOW,
             0o600,
         );
+        let created;
+        try {
+            created = io.fstatSync(fd);
+            io.fchmodSync(fd, 0o600);
+            io.writeFileSync(fd, `${process.pid}\n`);
+        } catch (error) {
+            try {
+                const stat = io.lstatSync(lockPath);
+                if (created && stat.isFile() && stat.uid === process.getuid()
+                    && stat.dev === created.dev && stat.ino === created.ino) io.unlinkSync(lockPath);
+            } catch { /* lock could not be safely removed */ }
+            try { io.closeSync(fd); } catch { /* already closed */ }
+            throw error;
+        }
+        return fd;
+    };
+
+    /**
+     * Remove only the same owned regular lock file after confirming its PID is gone.
+     * @returns {boolean}
+     */
+    const removeDeadOwnedLock = () => {
+        let fd;
+        try {
+            const original = io.lstatSync(lockPath);
+            if (original.isSymbolicLink() || !original.isFile() || original.uid !== process.getuid()
+                || (original.mode & 0o777) !== 0o600) return false;
+            fd = io.openSync(lockPath, io.constants.O_RDONLY | io.constants.O_NOFOLLOW);
+            const opened = io.fstatSync(fd);
+            if (!opened.isFile() || opened.uid !== process.getuid() || (opened.mode & 0o777) !== 0o600
+                || opened.dev !== original.dev || opened.ino !== original.ino) return false;
+            const content = String(io.readFileSync(fd, 'utf8'));
+            const match = /^([1-9]\d*)\n?$/.exec(content);
+            if (!match) return false;
+            const pid = Number(match[1]);
+            if (!Number.isSafeInteger(pid)) return false;
+            try {
+                process.kill(pid, 0);
+                return false;
+            } catch (error) {
+                if (/** @type {{ code?: string }} */ (error).code !== 'ESRCH') return false;
+            }
+            const current = io.lstatSync(lockPath);
+            if (current.isSymbolicLink() || !current.isFile() || current.uid !== process.getuid()
+                || (current.mode & 0o777) !== 0o600 || current.dev !== original.dev || current.ino !== original.ino) return false;
+            io.unlinkSync(lockPath);
+            return true;
+        } catch {
+            return false;
+        } finally {
+            if (fd !== undefined) {
+                try { io.closeSync(fd); } catch { /* already closed */ }
+            }
+        }
+    };
+
+    let fd;
+    try {
+        fd = create();
     } catch (error) {
-        throw mapFs(error);
+        if (/** @type {{ code?: string }} */ (error).code !== 'EEXIST' || !removeDeadOwnedLock()) throw mapFs(error);
+        try {
+            fd = create();
+        } catch (retryError) {
+            throw mapFs(retryError);
+        }
     }
+    const owner = io.fstatSync(fd);
     let released = false;
     return function release() {
         if (released) return;
@@ -185,7 +249,10 @@ function acquireLock(io, directory) {
         try { io.closeSync(fd); } catch { /* already closed */ }
         try {
             const stat = io.lstatSync(lockPath);
-            if (!stat.isSymbolicLink()) io.unlinkSync(lockPath);
+            if (!stat.isSymbolicLink() && stat.isFile() && stat.uid === process.getuid()
+                && (stat.mode & 0o777) === 0o600 && stat.dev === owner.dev && stat.ino === owner.ino) {
+                io.unlinkSync(lockPath);
+            }
         } catch { /* lock file already gone */ }
     };
 }

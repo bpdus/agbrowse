@@ -2,7 +2,8 @@ import { chmodSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync } 
 import * as net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { EventEmitter } from 'node:events';
+import { PassThrough, Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAuthService } from '../../skills/browser/agent-auth.mjs';
 import { createDevFileKeyStore, createJsonStateStore } from '../../skills/browser/agent-auth-store.mjs';
@@ -13,6 +14,7 @@ import {
     bootstrapLocalClient,
     connectMcpHttp,
     createClientStore,
+    mapGatewayError,
     runMcpStdioClient,
 } from '../../skills/browser/agent-mcp-client.mjs';
 
@@ -131,6 +133,15 @@ async function liveGateway() {
 }
 
 describe('agent mcp client', () => {
+    it('preserves known gateway codes from either error field and defaults unknown codes', () => {
+        expect(mapGatewayError({ id: 12 }, { error: { code: -32602, data: { code: 'VERSION_UNSUPPORTED' } } }))
+            .toMatchObject({ id: 12, error: { data: { code: 'VERSION_UNSUPPORTED' }, message: 'Protocol version is not supported.' } });
+        expect(mapGatewayError({ id: 13 }, { error: { data: { code: 'UNKNOWN' }, code: 'AUTH_EXPIRED' } }))
+            .toMatchObject({ id: 13, error: { data: { code: 'AUTH_EXPIRED' }, message: 'Authentication has expired.' } });
+        expect(mapGatewayError({ id: 14 }, { error: { data: { code: 'UNKNOWN' }, code: -32000 } }))
+            .toMatchObject({ id: 14, error: { data: { code: 'AUTH_INVALID' }, message: 'Authentication was rejected.' } });
+    });
+
     it('accepts only a pinned loopback or https gateway origin', () => {
         expect(assertGatewayUrl('http://127.0.0.1:7420', 'http://127.0.0.1:7420/mcp')).toBe('http://127.0.0.1:7420');
         expect(assertGatewayUrl('https://gw.example', 'https://gw.example/mcp')).toBe('https://gw.example');
@@ -222,6 +233,34 @@ describe('agent mcp client', () => {
         } finally {
             client.close();
         }
+        const reopenedKeys = createDevFileKeyStore({ directory: box.dirs.device });
+        reopenedKeys.close();
+    });
+
+    it('passes through VERSION_UNSUPPORTED from an HTTP MCP error envelope', async () => {
+        const { port, box } = await liveGateway();
+        const clientDir = join(box.root, 'client');
+        await bootstrapLocalClient({ auth: box.auth, deviceKeys: box.deviceKeys, directory: clientDir });
+        const record = createClientStore({ directory: clientDir }).load();
+        const client = connectMcpHttp({
+            record,
+            keyStore: box.deviceKeys,
+            gatewayUrl: `http://127.0.0.1:${port}`,
+            now: () => box.now(),
+        });
+        try {
+            const failed = await client.request({
+                jsonrpc: '2.0',
+                id: 7,
+                method: 'initialize',
+                params: { protocolVersion: 'unsupported', capabilities: {}, clientInfo: { name: 'unit', version: '0' } },
+            });
+            expect(failed.error).toMatchObject({ code: -32000, data: { code: 'VERSION_UNSUPPORTED' } });
+        } finally {
+            client.close();
+        }
+        const reopenedKeys = createDevFileKeyStore({ directory: box.dirs.device });
+        reopenedKeys.close();
     });
 
     it('keeps stdout to MCP messages and rejects secret arguments', async () => {
@@ -294,5 +333,61 @@ describe('agent mcp client', () => {
         expect(JSON.parse(lines[1]).result.tools.length).toBeGreaterThan(0);
         expect(stdout.read()).not.toContain(seen[0]);
         expect(calls).toEqual([]);
+    });
+
+    it('releases the key-store lock when stdio setup fails', async () => {
+        const box = harness('http://127.0.0.1:7420/mcp');
+        const clientDir = join(box.root, 'client');
+        await bootstrapLocalClient({ auth: box.auth, deviceKeys: box.deviceKeys, directory: clientDir });
+        box.deviceKeys.close();
+        const stdout = capture();
+        const stderr = capture();
+        let exitCode = null;
+
+        const status = await runMcpStdioClient({
+            argv: ['--client-dir', clientDir, '--key-dir', box.dirs.device, '--gateway-url', 'http://127.0.0.1:1'],
+            stdin: Readable.from([]),
+            stdout: stdout.stream,
+            stderr: stderr.stream,
+            exit(code) { exitCode = code; },
+        });
+
+        expect(status).toBe(1);
+        expect(exitCode).toBe(1);
+        expect(stderr.read()).toBe('agbrowse-mcp-client: error code=AUTH_INVALID\n');
+        const reopenedKeys = createDevFileKeyStore({ directory: box.dirs.device });
+        reopenedKeys.close();
+    });
+
+    it.each([
+        { signal: 'SIGINT', expected: 130 },
+        { signal: 'SIGTERM', expected: 143 },
+    ])('closes the key store and input loop on $signal', async ({ signal, expected }) => {
+        const box = harness('http://127.0.0.1:7420/mcp');
+        const clientDir = join(box.root, 'client');
+        await bootstrapLocalClient({ auth: box.auth, deviceKeys: box.deviceKeys, directory: clientDir });
+        box.deviceKeys.close();
+        const stdout = capture();
+        const stderr = capture();
+        const stdin = new PassThrough();
+        const signals = new EventEmitter();
+        let exitCode = null;
+        const pending = runMcpStdioClient({
+            argv: ['--client-dir', clientDir, '--key-dir', box.dirs.device, '--gateway-url', 'http://127.0.0.1:7420'],
+            stdin,
+            stdout: stdout.stream,
+            stderr: stderr.stream,
+            signalSource: signals,
+            exit(code) { exitCode = code; },
+        });
+        signals.emit(signal);
+        const status = await pending;
+        stdin.destroy();
+
+        expect(status).toBe(expected);
+        expect(exitCode).toBe(expected);
+        expect(stderr.read()).toBe('');
+        const reopenedKeys = createDevFileKeyStore({ directory: box.dirs.device });
+        reopenedKeys.close();
     });
 });

@@ -5,7 +5,7 @@ title: Agent Browser Gateway Protocol draft v0
 status: draft
 summary: 구현된 paired-device-v1 인증·브라우저 MCP·fail-closed cart 계약과 미구현 승인 제안을 구분한다.
 created: 2026-10-11
-updated: 2026-10-11
+updated: 2026-10-12
 language: ko
 render_target: github
 project: bpdus/agbrowse
@@ -96,7 +96,7 @@ challenge payload 순서: `protocol_version`, `purpose`, `gateway_id`, `aud`, `d
 
 운영 전송은 HTTPS와 일반 인증서 검증을 요구한다. 테스트만 루프백 HTTP를 명시적으로 넣을 수 있다. Keychain 연동은 확인 필요이며 구현되어 있지 않다. `createDevFileKeyStore`는 개발용으로 명시해서 고른다. 운영 저장소가 없다고 파일로 자동 전환하지 않는다.
 
-상태 파일은 버전 1 JSON이다. gateway 신원과 공개 키, 기기, 부여 scope, epoch, 폐기 목록을 담는다. 개인 키는 키 저장소에만 둔다. 디렉터리는 `0700`, 파일과 임시 파일은 `0600`이다. 심볼릭 링크, 다른 소유자, 느슨한 권한, 읽을 수 없는 상태, 지원하지 않는 버전은 실패로 닫는다. 쓰기는 임시 파일, flush, rename, 디렉터리 flush 순서다. 상태 디렉터리의 쓰기 잠금은 하나이며, 잠긴 이유를 추정해 빼앗지 않는다. 저장이 실패하면 등록이나 폐기 성공을 보고하지 않는다. 신원을 자동으로 다시 만들거나 깨진 상태를 덮어쓰지 않는다.
+상태 파일은 버전 1 JSON이다. gateway 신원과 공개 키, 기기, 부여 scope, epoch, 폐기 목록을 담는다. 개인 키는 키 저장소에만 둔다. 디렉터리는 `0700`, 파일과 임시 파일은 `0600`이다. 심볼릭 링크, 다른 소유자, 느슨한 권한, 읽을 수 없는 상태, 지원하지 않는 버전은 실패로 닫는다. 쓰기는 임시 파일, flush, rename, 디렉터리 flush 순서다. 상태 디렉터리의 쓰기 잠금에는 소유 PID를 기록한다. PID가 가리키는 프로세스가 종료된 것을 확인하고 잠금 파일이 현재 사용자 소유의 일반 `0600` 파일일 때만 한 번 회수한다. 저장이 실패하면 등록이나 폐기 성공을 보고하지 않는다. 신원을 자동으로 다시 만들거나 깨진 상태를 덮어쓰지 않는다.
 
 ## 요청 공통 필드
 
@@ -117,6 +117,10 @@ challenge payload 순서: `protocol_version`, `purpose`, `gateway_id`, `aud`, `d
 `naver.login_status`는 `browser:read` scope만 요구한다. `protocol_version`, `request_id`, `session_id`만 받고, 현재 세션 탭을 고정 주소 `https://www.naver.com/`로 이동한다. 이 호출 중에만 해당 주소와 페이지 표시를 위한 `https://ssl.pstatic.net`, `https://s.pstatic.net` 정적 호스트의 GET/HEAD 요청을 허용한다. 리다이렉트도 같은 정책으로 검사하며, 쓰기 요청과 WebSocket은 계속 차단한다. 로그인 주소를 따라가거나 로그인 동작을 수행하지 않는다.
 
 MCP 결과는 `{"status":"logged_in|logged_out|unknown","evidence":"login_link|logout_control|account_menu|none"}` 두 필드뿐이다. 상단에 표시된 `nid.naver.com/nidlogin` 링크가 있으면 `logged_out`이다. 그 링크가 없고 표시된 로그아웃 컨트롤이나 계정 메뉴 표식이 있으면 `logged_in`이다. 나머지는 `unknown`이다. 이름, 이메일, URL, DOM 텍스트, 쿠키를 결과에 포함하지 않는다.
+
+## 운영자용 top-bar 구조 캡처
+
+`operator.naver.topbar_structure`는 owner-only Unix socket에서만 허용되는 로컬 운영자 작업이다. worker가 별도 페이지를 열고 `loginStatusPolicy()`를 적용해 `https://www.naver.com/`으로 이동한 뒤, 로그인 상태 classifier가 확인하는 top-bar selector와 첫 header/account 영역, 관련 class 표식을 위생 처리해 HTML 문자열로 반환한다. 태그 이름과 `class`, `id`, `role`, `aria-label`, `href`, `data-clk`만 남기며 텍스트 노드는 `TEXT`, aria-label 값은 `LABEL`로 바꾼다. href에서는 query와 fragment를 제거하고, iframe은 origin만 `data-src-origin`으로 기록한다. 출력 요소는 최대 4000개다. 이 operation은 MCP 도구나 gateway 경로에 공개되지 않는다. `bin/bpdus/capture-naver-topbar.mjs --out <path>`는 결과를 mode `0600` 파일에 저장하고 바이트 수만 표준 출력에 쓴다.
 
 ## 네이버 장바구니 도구
 

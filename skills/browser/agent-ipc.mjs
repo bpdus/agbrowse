@@ -25,6 +25,7 @@ const ALLOWED_OPS = new Set([
     'naver.cart.read',
     'naver.cart.prepare',
     'naver.cart.set',
+    'operator.naver.topbar_structure',
     'worker.hello',
 ]);
 

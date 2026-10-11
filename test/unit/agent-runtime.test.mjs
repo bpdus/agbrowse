@@ -209,7 +209,36 @@ describe('agent-runtime', () => {
 
     it('returns only the lifecycle methods', () => {
         const runtime = createAgentRuntime();
-        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchCart', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
+        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchCart', 'dispatchOperator', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
+    });
+
+    it('opens a temporary page for operator top-bar capture under the fixed Naver policy', async () => {
+        const made = makeContext(events);
+        const page = makePage('operator-topbar');
+        const navigations = [];
+        let evaluated = 0;
+        page.goto = async (url, options) => {
+            navigations.push({ url, options });
+            page.currentUrl = url;
+        };
+        page.evaluate = async () => {
+            evaluated += 1;
+            return '<header>TEXT</header>';
+        };
+        made.context.newPage = async () => page;
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+
+        const html = await runtime.dispatchOperator('operator.naver.topbar_structure', {});
+
+        expect(html).toBe('<header>TEXT</header>');
+        expect(navigations).toEqual([{ url: 'https://www.naver.com/', options: { waitUntil: 'domcontentloaded' } }]);
+        expect(evaluated).toBe(1);
+        expect(page.closed).toBe(true);
+        await expect(runtime.dispatchOperator('operator.naver.topbar_structure', { url: 'https://evil.example' }))
+            .rejects.toMatchObject({ code: 'INVALID_ARGUMENTS' });
     });
 
     it('serializes cart inspection through the runtime queue and fails live layouts closed', async () => {

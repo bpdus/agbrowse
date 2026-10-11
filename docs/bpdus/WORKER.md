@@ -3,7 +3,7 @@ note_type: guide
 content_mode: how_to
 title: bpdus agbrowse 전용 에이전트 워커
 status: draft
-summary: 전용 Chrome 프로필과 디버깅 파이프를 쓰는 포그라운드 워커의 조회·cart 경계, 종료, 한계와 되돌리기를 적는다.
+summary: 전용 Chrome 프로필과 디버깅 파이프를 쓰는 포그라운드 워커의 조회·운영자 캡처·cart 경계, 종료, 한계와 되돌리기를 적는다.
 created: 2026-10-11
 updated: 2026-10-12
 language: ko
@@ -17,7 +17,7 @@ related_notes:
 
 # bpdus agbrowse 전용 에이전트 워커
 
-이 문서는 로컬에서 직접 켜는 포그라운드 워커의 실행 방법과 안전 경계를 적는다. 워커는 설치된 Google Chrome 하나를 전용 프로필로 띄운다. 읽기 전용 브라우저 MCP와 네이버 cart 도구 네 개를 제공하지만, 실제 Naver cart layout과 mutation endpoint가 검증되지 않아 live cart 작업은 `SITE_UNSUPPORTED`로 닫힌다. 승인과 결제 기능은 없다.
+이 문서는 로컬에서 직접 켜는 포그라운드 워커의 실행 방법과 안전 경계를 적는다. 워커는 설치된 Google Chrome 하나를 전용 프로필로 띄운다. 읽기 전용 브라우저 MCP와 네이버 cart 도구 네 개, 소켓 소유자만 쓸 수 있는 운영자용 top-bar 캡처를 제공한다. 실제 Naver cart layout과 mutation endpoint가 검증되지 않아 live cart 작업은 `SITE_UNSUPPORTED`로 닫힌다. 승인과 결제 기능은 없다.
 
 Copyright (c) 2026 bpdus. 원 소프트웨어 저작권은 [루트 LICENSE](../../LICENSE)의 `Copyright (c) 2026 lidge-jun`을 따른다. 이 표시는 원 저작권을 대체하지 않는다.
 
@@ -49,11 +49,17 @@ worker와 gateway가 모두 멈춰 있으면 `~/.agbrowse-bpdus/bin/start-in-her
 
 ## 파이프 전송
 
-Chrome과는 디버깅 파이프로만 통신한다. 원격 디버깅 TCP 포트를 열지 않으므로 다른 기기에서 CDP로 접속할 수 없다. owner-only Unix socket은 고정된 read 도구와 cart 도구 네 개만 받는다. 임의 브라우저 평가나 요청 인자는 허용하지 않는다. 기존 CLI의 포트 접속 경로는 바꾸지 않는다.
+Chrome과는 디버깅 파이프로만 통신한다. 원격 디버깅 TCP 포트를 열지 않으므로 다른 기기에서 CDP로 접속할 수 없다. owner-only Unix socket은 고정 read 작업과 cart 작업 네 개, `operator.naver.topbar_structure`만 받는다. 운영자 작업은 `https://www.naver.com/`의 top-bar 관련 DOM을 열어 태그와 제한된 속성만 남긴다. 텍스트는 `TEXT`, `aria-label`은 `LABEL`로 치환하고, 링크의 query와 fragment 및 iframe의 경로를 버린다. MCP 도구 목록에는 포함하지 않으며 gateway는 이 작업을 호출하지 않는다. 임의 브라우저 평가나 요청 인자는 허용하지 않는다. 기존 CLI의 포트 접속 경로는 바꾸지 않는다.
+
+워커를 켠 상태에서 저장소 루트에서 다음 명령을 실행하면 결과를 mode `0600` 파일에 저장한다. 표준 출력에는 바이트 수만 쓴다.
+
+```bash
+node bin/bpdus/capture-naver-topbar.mjs --out /path/to/naver-topbar.html
+```
 
 ## Cart 상태와 지원 범위
 
-준비 intent와 idempotency 기록은 `~/.agbrowse-bpdus/cart-state`에 둔다. 디렉터리는 `0700`, 상태 파일과 잠금 파일은 `0600`을 요구한다. 쓰기는 잠금, 임시 파일, flush, 원자적 rename 순서로 저장한다. 안전하지 않은 경로나 쓰기 실패가 있으면 요청을 실패로 닫는다.
+준비 intent와 idempotency 기록은 `~/.agbrowse-bpdus/cart-state`에 둔다. 디렉터리는 `0700`, 상태 파일과 잠금 파일은 `0600`을 요구한다. 잠금 파일에는 소유 PID를 기록한다. 기존 잠금은 소유 프로세스가 종료된 것이 확인되고 파일 소유자·형식·`0600` 권한이 맞을 때만 회수한다. 쓰기는 잠금, 임시 파일, flush, 원자적 rename 순서로 저장한다. 안전하지 않은 경로나 쓰기 실패가 있으면 요청을 실패로 닫는다.
 
 작업을 보내기 전에 `DISPATCHING` 상태를 저장한다. 워커가 재시작했을 때 이 상태가 남아 있으면 `OUTCOME_UNKNOWN`으로 바꾸고 같은 account의 새 쓰기를 막는다. 결과가 불분명한 작업은 자동 재전송하지 않는다. 조회와 dry-run은 현재 DOM만 읽으며 페이지 이동, 옵션 선택, 입력, 클릭, 제출을 하지 않는다. 이 checkout에는 검증된 production cart layout이나 endpoint가 없으므로 어떤 live cart write도 실행되지 않는다.
 

@@ -204,6 +204,7 @@ describe('agent mcp dispatcher', () => {
         const before = ctx.worker.calls.length;
         const list = await handle(ctx.mcp, { jsonrpc: '2.0', id: 90, method: 'tools/list' }, { headers: ctx.headers });
         const tools = list.body.result.tools;
+        expect(tools.some((tool) => tool.name === 'operator.naver.topbar_structure')).toBe(false);
         const loginStatus = tools.find((tool) => tool.name === 'naver.login_status');
         expect(loginStatus.inputSchema.required).toEqual(['protocol_version', 'request_id', 'session_id']);
         expect(loginStatus.inputSchema.additionalProperties).toBe(false);
@@ -220,6 +221,14 @@ describe('agent mcp dispatcher', () => {
         expect(login.body.result.content[0].text).toBe('{"status":"logged_out","evidence":"login_link"}');
         expect(ctx.worker.calls.at(-1)).toEqual({ op: 'naver.login_status', payload: { session_id: ctx.sessionId } });
         expect(JSON.stringify(login.body)).not.toMatch(/Fixture Private Name|example\.test|nidlogin|url=/i);
+
+        const callCountBeforeOperator = ctx.worker.calls.length;
+        const operator = await handle(ctx.mcp, toolCall(97, 'operator.naver.topbar_structure', {
+            protocol_version: '0.1.0', request_id: 'req_operator_capture',
+        }), { headers: ctx.headers });
+        expect(operator.status).toBe(400);
+        expect(operator.body.error.code).toBe(-32602);
+        expect(ctx.worker.calls).toHaveLength(callCountBeforeOperator);
 
         const cartRead = await handle(ctx.mcp, toolCall(92, 'naver.cart.read', {
             protocol_version: '0.1.0', request_id: 'req_cart_read', session_id: ctx.sessionId,
@@ -446,6 +455,33 @@ describe('agent mcp dispatcher', () => {
             expect(init.status).toBe(200);
             expect(init.headers['mcp-protocol-version']).toBe(MCP_PROTOCOL_VERSION);
             expect(init.headers['mcp-session-id']).toMatch(/^mcp_[a-f0-9]{16}$/);
+            expect(worker.calls).toEqual([]);
+
+            const operatorBody = JSON.stringify({
+                jsonrpc: '2.0',
+                id: 2,
+                method: 'tools/call',
+                params: {
+                    name: 'operator.naver.topbar_structure',
+                    arguments: { protocol_version: '0.1.0', request_id: 'req_operator_capture' },
+                },
+            });
+            const operator = await request(bound.port, {
+                path: '/mcp',
+                method: 'POST',
+                headers: {
+                    host,
+                    authorization: `Bearer ${TOKEN}`,
+                    'content-type': 'application/json',
+                    accept: ACCEPT,
+                    'content-length': Buffer.byteLength(operatorBody),
+                    'mcp-protocol-version': MCP_PROTOCOL_VERSION,
+                    'mcp-session-id': init.headers['mcp-session-id'],
+                },
+                body: operatorBody,
+            });
+            expect(operator.status).toBe(400);
+            expect(JSON.parse(operator.body).error.code).toBe(-32602);
             expect(worker.calls).toEqual([]);
             expect(logs.join('')).not.toContain(TOKEN);
         } finally {

@@ -20,6 +20,7 @@ import {
     runObserve,
 } from './agent-naver-search.mjs';
 import { LOGIN_STATUS_URL, loginStatusPolicy, readLoginStatusFromDocument } from './agent-naver-login-status.mjs';
+import { sanitizeNaverTopbarStructure } from './agent-naver-topbar.mjs';
 import { classifyCartRequest } from './agent-naver-cart.mjs';
 
 const WORKER_DIR_NAME = '.agbrowse-bpdus';
@@ -979,6 +980,45 @@ export function createAgentRuntime(config) {
     }
 
     /**
+     * Capture sanitized Naver top-bar structure for the local operator only.
+     * @param {string} op
+     * @param {Record<string, unknown>} [payload]
+     */
+    async function dispatchOperator(op, payload = {}) {
+        return enqueue(async () => {
+            /** @type {import('playwright-core').Page | undefined} */
+            let page;
+            try {
+                assertRunning();
+                if (op !== 'operator.naver.topbar_structure') throw readError('ACTION_DENIED');
+                if (Object.keys(payload).length > 0) throw readError('INVALID_ARGUMENTS');
+                const ctx = context;
+                if (!ctx) throw readError('BROWSER_DISCONNECTED');
+                page = await ctx.newPage();
+                const policy = loginStatusPolicy();
+                pagePolicies.set(page, {
+                    mode: 'read',
+                    mutationPermit: null,
+                    blockedReason: null,
+                    requestPolicy: policy,
+                });
+                await gotoAllowed(page, { epoch: 1 }, LOGIN_STATUS_URL, policy);
+                if (typeof page.evaluate !== 'function') throw readError('SITE_UNSUPPORTED');
+                const html = await page.evaluate(sanitizeNaverTopbarStructure);
+                if (typeof html !== 'string') throw readError('INTERNAL');
+                return html;
+            } catch (error) {
+                throw asPublicReadError(error);
+            } finally {
+                if (page) {
+                    pagePolicies.delete(page);
+                    await page.close();
+                }
+            }
+        });
+    }
+
+    /**
      * Cart tools are routed separately from the read adapter. Production
      * inspection recognizes login and human gates without navigating or
      * reading form values; all other live layouts fail closed in this PR.
@@ -1042,5 +1082,5 @@ export function createAgentRuntime(config) {
         });
     }
 
-    return { start, openSession, inspectSession, closeSession, stop, dispatchRead, dispatchCart };
+    return { start, openSession, inspectSession, closeSession, stop, dispatchRead, dispatchCart, dispatchOperator };
 }

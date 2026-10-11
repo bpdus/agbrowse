@@ -25,7 +25,9 @@ describe('agent ipc', () => {
     it('cart operation allowlist offline', () => {
         expect(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set'].every(isAllowedWorkerOperation)).toBe(true);
         expect(isAllowedWorkerOperation('naver.login_status')).toBe(true);
+        expect(isAllowedWorkerOperation('operator.naver.topbar_structure')).toBe(true);
         expect(isAllowedWorkerOperation('naver.cart.checkout')).toBe(false);
+        expect(isAllowedWorkerOperation('operator.browser.evaluate')).toBe(false);
         expect(isAllowedWorkerOperation('browser.evaluate')).toBe(false);
     });
 
@@ -68,6 +70,9 @@ describe('agent ipc', () => {
         const observed = await client.call('browser.observe', { query: 'canary-secret-value' });
         expect(observed.echoed).toBe('canary-secret-value');
         expect(seen).toEqual([{ op: 'browser.observe', payload: { query: 'canary-secret-value' } }]);
+        const structure = await client.call('operator.naver.topbar_structure', {});
+        expect(structure.echoed).toBeUndefined();
+        expect(seen.at(-1)).toEqual({ op: 'operator.naver.topbar_structure', payload: {} });
         expect(logs.join('')).not.toContain('canary-secret-value');
         expect(logs.some((line) => line.startsWith('agbrowse-worker: op=browser.observe status=ok '))).toBe(true);
 
