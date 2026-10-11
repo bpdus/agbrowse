@@ -46,6 +46,9 @@ node skills/browser/agent-gateway.mjs \
   --audience https://gw.example/mcp
 ```
 
+MCP `initialize` 요청의 `params.protocolVersion`은 `"2025-11-25"`로 지정해야 한다.
+게이트웨이의 `--audience`는 클라이언트가 접속하는 게이트웨이 origin에 `/mcp`를 붙인 값이어야 한다. 다른 값이면 클라이언트가 연결을 거부한다.
+
 운영용 키 저장소는 macOS Keychain을 예정한다. Keychain 연동은 확인 필요이며 구현되어 있지 않다. `createDevFileKeyStore`는 개발할 때 명시적으로 고르는 파일 저장소다. 운영 저장소를 쓸 수 없다고 파일 저장소로 자동 전환하지 않는다. 이 프로세스는 Chrome을 켜지 않는다.
 
 ## 기존 Serve 설정 확인
@@ -83,3 +86,7 @@ tailscale serve --https=8443 off
 ```
 
 롤백 뒤에 `tailscale serve status --json`과 같은 herdr 확인을 한 번 더 한다. 다른 포트나 경로의 매핑은 이 절차로 바꾸지 않는다.
+
+## 후속
+
+원격 기기를 페어링하려면 게이트웨이를 중지해야 한다. 페어링은 프로세스 내부 운영자 API이며, 실행 중인 게이트웨이가 상태 디렉터리의 쓰기 잠금을 보유한다.
