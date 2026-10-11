@@ -102,16 +102,46 @@ discover_workers() {
         echo "Worker discovery returned no process IDs." >&2
         return 2
       fi
-      for worker_pid in $worker_output; do
-        case "$worker_pid" in
+      verified_worker_pids=""
+      for candidate_pid in $worker_output; do
+        case "$candidate_pid" in
           ''|*[!0-9]*)
             echo "Worker discovery returned an invalid process ID." >&2
             return 2
             ;;
         esac
+
+        worker_args=$(ps -o args= -p "$candidate_pid" 2>/dev/null)
+        ps_status=$?
+        if [ "$ps_status" -ne 0 ]; then
+          if kill -0 "$candidate_pid" 2>/dev/null; then
+            echo "Could not verify process arguments for PID $candidate_pid." >&2
+            return 2
+          fi
+          continue
+        fi
+        if [ -z "$worker_args" ]; then
+          continue
+        fi
+
+        read -r executable script_arg _ <<EOF
+$worker_args
+EOF
+        executable=${executable##*/}
+        if [ "$executable" = "node" ] && [ "$script_arg" = "skills/browser/agent-worker.mjs" ]; then
+          if [ -n "$verified_worker_pids" ]; then
+            verified_worker_pids="$verified_worker_pids
+$candidate_pid"
+          else
+            verified_worker_pids="$candidate_pid"
+          fi
+        fi
       done
-      WORKER_PIDS="$worker_output"
-      return 0
+      WORKER_PIDS="$verified_worker_pids"
+      if [ -n "$WORKER_PIDS" ]; then
+        return 0
+      fi
+      return 1
       ;;
     1)
       WORKER_PIDS=""

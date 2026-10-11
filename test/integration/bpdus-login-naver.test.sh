@@ -15,17 +15,17 @@ CHROME_STDOUT="$TEST_ROOT/chrome-stdout"
 CHROME_STDERR="$TEST_ROOT/chrome-stderr"
 TEST_TERM_MARKER="$TEST_ROOT/worker-term"
 TEST_SLEEP_COUNT="$TEST_ROOT/sleep-count"
-TEST_GATEWAY_PID=""
 TEST_WORKER_PID=""
+TEST_VIM_PID=""
 
 cleanup() {
   if [ -n "$TEST_WORKER_PID" ]; then
     kill -TERM "$TEST_WORKER_PID" 2>/dev/null || true
     wait "$TEST_WORKER_PID" 2>/dev/null || true
   fi
-  if [ -n "$TEST_GATEWAY_PID" ]; then
-    kill -TERM "$TEST_GATEWAY_PID" 2>/dev/null || true
-    wait "$TEST_GATEWAY_PID" 2>/dev/null || true
+  if [ -n "$TEST_VIM_PID" ]; then
+    kill -TERM "$TEST_VIM_PID" 2>/dev/null || true
+    wait "$TEST_VIM_PID" 2>/dev/null || true
   fi
   rm -rf "$TEST_ROOT"
 }
@@ -56,6 +56,7 @@ case "${FAKE_PGREP_MODE:-none}" in
   term)
     if [ -e "$TEST_TERM_MARKER" ]; then exit 1; fi
     printf '%s\n' "$TEST_WORKER_PID"
+    printf '%s\n' "$TEST_VIM_PID"
     exit 0
     ;;
   timeout) printf '%s\n' "$TEST_WORKER_PID"; exit 0 ;;
@@ -63,6 +64,17 @@ case "${FAKE_PGREP_MODE:-none}" in
 esac
 EOF
 chmod +x "$FAKE_BIN/pgrep" || fail "could not prepare fake pgrep"
+
+cat > "$FAKE_BIN/ps" <<'EOF'
+#!/bin/sh
+[ "$#" -eq 4 ] && [ "$1" = "-o" ] && [ "$2" = "args=" ] && [ "$3" = "-p" ] || exit 2
+case "$4" in
+  "$TEST_WORKER_PID") printf '%s\n' 'node skills/browser/agent-worker.mjs' ;;
+  "$TEST_VIM_PID") printf '%s\n' 'vim skills/browser/agent-worker.mjs' ;;
+  *) exec /bin/ps -o args= -p "$4" ;;
+esac
+EOF
+chmod +x "$FAKE_BIN/ps" || fail "could not prepare fake ps"
 
 cat > "$FAKE_BIN/sleep" <<'EOF'
 #!/bin/sh
@@ -148,7 +160,8 @@ TEST_WORKER_PID=$!
 export TEST_WORKER_PID
 /bin/sleep 0.05
 /bin/sleep 30 &
-TEST_GATEWAY_PID=$!
+TEST_VIM_PID=$!
+export TEST_VIM_PID
 if ! "$SCRIPT" --stop-worker > "$TEST_ROOT/term.out" 2> "$TEST_ROOT/term.err"; then
   cat "$TEST_ROOT/term.err" >&2
   fail "--stop-worker should wait for the worker to exit"
@@ -156,9 +169,12 @@ fi
 wait "$TEST_WORKER_PID" 2>/dev/null || true
 TEST_WORKER_PID=""
 [ -e "$TEST_TERM_MARKER" ] || fail "worker did not receive SIGTERM"
-kill -0 "$TEST_GATEWAY_PID" 2>/dev/null || fail "unrelated gateway fixture did not survive"
+kill -0 "$TEST_VIM_PID" 2>/dev/null || fail "Vim-like process fixture did not survive"
 grep -q 'Quit Chrome' "$TEST_ROOT/term.out" || fail "restart guidance missing after Chrome exit"
-pass "--stop-worker waits for TERM; unrelated gateway survives"
+kill -TERM "$TEST_VIM_PID" 2>/dev/null || true
+wait "$TEST_VIM_PID" 2>/dev/null || true
+TEST_VIM_PID=""
+pass "--stop-worker waits for TERM; Vim-like process survives"
 
 check_lock_refusal() {
   lock_path="$1"
@@ -219,7 +235,4 @@ grep -q 'restart with' "$CHROME_STDOUT" || fail "restart guidance missing after 
 grep -q 'Quit Chrome' "$CHROME_STDOUT" || fail "macOS Quit Chrome guidance missing"
 pass "Chrome receives exactly the required arguments and the script waits before printing guidance"
 
-kill -TERM "$TEST_GATEWAY_PID" 2>/dev/null || true
-wait "$TEST_GATEWAY_PID" 2>/dev/null || true
-TEST_GATEWAY_PID=""
 echo "All Naver login integration checks passed."
