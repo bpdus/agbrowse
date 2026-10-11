@@ -207,6 +207,62 @@ describe('paired-device durability', () => {
         expect(saved.devices[paired.confirmed.device_id].revoked).toBe(true);
     });
 
+    it('retries a pending revocation until it is saved, then keeps it across restart', async () => {
+        let failSave = false;
+        let stateSaves = 0;
+        const io = wrapFs({
+            renameSync(from, to) {
+                if (String(to).endsWith('/state.json')) {
+                    stateSaves += 1;
+                    if (failSave) {
+                        const error = new Error('injected pre-rename failure');
+                        error.code = 'EIO';
+                        throw error;
+                    }
+                }
+                return fs.renameSync(from, to);
+            },
+        });
+        const box = harness(io);
+        const paired = await pair(box);
+        const token = await issueToken(box, paired.confirmed.device_id);
+        const statePath = join(box.dirs.state, 'state.json');
+        const deviceId = paired.confirmed.device_id;
+
+        const savesBefore = stateSaves;
+        failSave = true;
+        await expect(box.auth.revokeDevice(deviceId)).rejects.toMatchObject({ code: 'STATE_UNSAFE' });
+        expect(stateSaves).toBe(savesBefore + 1);
+        failSave = false;
+        expect(JSON.parse(readFileSync(statePath, 'utf8')).devices[deviceId].revoked).toBe(false);
+        await expect(box.auth.authenticate(token)).rejects.toMatchObject({ code: 'DEVICE_REVOKED' });
+
+        const savesAfterFailure = stateSaves;
+        const revoked = await box.auth.revokeDevice(deviceId);
+        expect(stateSaves).toBe(savesAfterFailure + 1);
+        expect(revoked).toEqual({ device_id: deviceId, epoch: 2, revoked: true });
+        expect(JSON.parse(readFileSync(statePath, 'utf8')).devices[deviceId].revoked).toBe(true);
+
+        box.auth.close();
+        const stateStore = createJsonStateStore({ directory: box.dirs.state, fs: io });
+        const keyStore = createDevFileKeyStore({ directory: box.dirs.server });
+        const restarted = createAuthService({
+            stateStore,
+            keyStore,
+            gatewayId: 'gw_test',
+            audience: AUDIENCE,
+            now: () => 1_700_000_000_000,
+        });
+        cleanups.push(() => {
+            try { restarted.close(); } catch { /* already closed */ }
+            try { stateStore.close(); } catch { /* already closed */ }
+            try { keyStore.close(); } catch { /* already closed */ }
+        });
+        const saved = JSON.parse(readFileSync(statePath, 'utf8'));
+        expect(saved.devices[deviceId].revoked).toBe(true);
+        await expect(restarted.authenticate(token)).rejects.toMatchObject({ code: 'DEVICE_REVOKED' });
+    });
+
     it('reloads a disk revocation before a later save so stale memory cannot erase it', async () => {
         const box = harness();
         const paired = await pair(box);

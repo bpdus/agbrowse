@@ -313,6 +313,8 @@ export function createAuthService(options) {
     const issueTimes = new Map();
     const usedChallenges = new Set();
     const expiredChallenges = new Set();
+    /** Device ids whose revocation is in memory but not yet stored. */
+    const unsavedRevocations = new Set();
     const maxRememberedChallenges = 1024;
     let closed = false;
 
@@ -743,6 +745,8 @@ export function createAuthService(options) {
     }
 
     /**
+     * Revocation stays pending until the store accepts it. A repeated revoke
+     * retries that save and reports success only after the write lands.
      * @param {string} deviceId
      */
     function revokeDevice(deviceId) {
@@ -750,20 +754,28 @@ export function createAuthService(options) {
         const current = /** @type {Record<string, any>} */ (state);
         const device = current.devices[deviceId];
         if (!device) throw authError('AUTH_INVALID');
-        if (device.revoked) return { device_id: deviceId, epoch: device.epoch, revoked: true };
-        const at = seconds();
-        const next = structuredClone(current);
-        next.devices[deviceId].revoked = true;
-        next.devices[deviceId].epoch += 1;
-        next.revocations.push({
-            device_id: deviceId,
-            epoch: next.devices[deviceId].epoch,
-            revoked_at: at,
-        });
-        state = next;
-        for (const [id, challenge] of challenges) {
-            if (challenge.device_id === deviceId) challenges.delete(id);
+        if (device.revoked && !unsavedRevocations.has(deviceId)) {
+            return { device_id: deviceId, epoch: device.epoch, revoked: true };
         }
+
+        let next = current;
+        if (!device.revoked) {
+            const at = seconds();
+            next = structuredClone(current);
+            next.devices[deviceId].revoked = true;
+            next.devices[deviceId].epoch += 1;
+            next.revocations.push({
+                device_id: deviceId,
+                epoch: next.devices[deviceId].epoch,
+                revoked_at: at,
+            });
+            state = next;
+            for (const [id, challenge] of challenges) {
+                if (challenge.device_id === deviceId) challenges.delete(id);
+            }
+        }
+        unsavedRevocations.add(deviceId);
+
         let saved;
         try {
             saved = commitState(next);
@@ -771,7 +783,10 @@ export function createAuthService(options) {
             state = mergeStickyRevocations(state ?? next, next);
             throw error;
         }
-        return { device_id: deviceId, epoch: saved.devices[deviceId].epoch, revoked: true };
+        const savedDevice = saved.devices[deviceId];
+        if (!savedDevice?.revoked) throw authError('STATE_UNSAFE');
+        unsavedRevocations.delete(deviceId);
+        return { device_id: deviceId, epoch: savedDevice.epoch, revoked: true };
     }
 
     function close() {
