@@ -15,6 +15,7 @@ import {
     connectMcpHttp,
     createClientStore,
     mapGatewayError,
+    mapGatewayResponse,
     runMcpStdioClient,
 } from '../../skills/browser/agent-mcp-client.mjs';
 
@@ -284,6 +285,38 @@ describe('agent mcp client', () => {
         }
         const reopenedKeys = createDevFileKeyStore({ directory: box.dirs.device });
         reopenedKeys.close();
+    });
+
+    it('sanitizes JSON-RPC errors in HTTP 2xx responses and preserves successful results', () => {
+        const request = { id: 21 };
+        expect(mapGatewayResponse(request, 200, {
+            jsonrpc: '2.0',
+            id: 21,
+            error: {
+                code: -32000,
+                message: 'gateway-secret-message',
+                data: { code: 'VERSION_UNSUPPORTED', secret: 'gateway-secret-data' },
+            },
+        })).toEqual({
+            jsonrpc: '2.0',
+            id: 21,
+            error: {
+                code: -32000,
+                message: 'Protocol version is not supported.',
+                data: { code: 'VERSION_UNSUPPORTED' },
+            },
+        });
+        expect(mapGatewayResponse(request, 200, {
+            jsonrpc: '2.0',
+            id: 21,
+            error: { code: -32000, message: 'gateway-secret-message', data: { code: 'UNKNOWN' } },
+        })).toEqual({
+            jsonrpc: '2.0',
+            id: 21,
+            error: { code: -32000, message: 'The request failed.', data: { code: 'INTERNAL' } },
+        });
+        const success = { jsonrpc: '2.0', id: 21, result: { ok: true } };
+        expect(mapGatewayResponse(request, 200, success)).toBe(success);
     });
 
     it('keeps stdout to MCP messages and rejects secret arguments', async () => {

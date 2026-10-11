@@ -214,15 +214,16 @@ function postRaw(target, payload, headers) {
 }
 
 /**
- * Map a non-2xx gateway response to the client's fixed public error envelope.
+ * Map a gateway error to the client's fixed public error envelope.
  * @param {unknown} request
  * @param {any} parsed
+ * @param {'AUTH_INVALID' | 'INTERNAL'} [unknownCode]
  */
-export function mapGatewayError(request, parsed) {
+export function mapGatewayError(request, parsed, unknownCode = 'AUTH_INVALID') {
     const code = [parsed?.error?.data?.code, parsed?.error?.code].find((candidate) => (
         typeof candidate === 'string'
         && (Object.hasOwn(READ_ERROR_MESSAGES, candidate) || Object.hasOwn(AUTH_ERROR_MESSAGES, candidate))
-    )) ?? 'AUTH_INVALID';
+    )) ?? unknownCode;
     const failureMessage = Object.hasOwn(READ_ERROR_MESSAGES, code)
         ? READ_ERROR_MESSAGES[/** @type {keyof typeof READ_ERROR_MESSAGES} */ (code)]
         : AUTH_ERROR_MESSAGES[/** @type {keyof typeof AUTH_ERROR_MESSAGES} */ (code)];
@@ -234,6 +235,20 @@ export function mapGatewayError(request, parsed) {
         id,
         error: { code: -32000, message: failureMessage, data: { code } },
     };
+}
+
+/**
+ * Keep successful results intact while sanitizing JSON-RPC errors, including those returned with HTTP 2xx.
+ * @param {unknown} request
+ * @param {number} status
+ * @param {any} parsed
+ */
+export function mapGatewayResponse(request, status, parsed) {
+    const hasError = parsed !== null && typeof parsed === 'object' && Object.hasOwn(parsed, 'error');
+    if (status >= 200 && status < 300) {
+        return hasError ? mapGatewayError(request, parsed, 'INTERNAL') : parsed;
+    }
+    return mapGatewayError(request, parsed);
 }
 
 /**
@@ -301,8 +316,7 @@ function createMcpHttpClient(options) {
             } catch {
                 throw readError('INTERNAL');
             }
-            if (response.status >= 200 && response.status < 300) return parsed;
-            return mapGatewayError(message, parsed);
+            return mapGatewayResponse(message, response.status, parsed);
         },
         close() {
             if (closed) return;
