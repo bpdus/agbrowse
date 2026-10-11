@@ -1,0 +1,143 @@
+---
+note_type: policy
+content_mode: reference
+title: 에이전트 브라우저 승인 흐름
+status: draft
+summary: approval.create부터 상태 조회, 일회성 토큰 소비, 단절 복구까지의 제안 계약과 신뢰 한계를 정의한다.
+created: 2026-10-11
+updated: 2026-10-11
+language: ko
+render_target: github
+project: bpdus/agbrowse
+related_notes:
+  - ./README.md
+  - ./BASELINE.md
+  - ./PROTOCOL.md
+---
+
+# 에이전트 브라우저 승인 흐름
+
+이 문서는 조회 이후의 장바구니 확인과 결제 실행에 필요한 승인 설계다. 도구 이름, 상태 이름, 토큰 TTL, `binding_hash` 필드는 [PROTOCOL.md](./PROTOCOL.md)의 제안 계약과 같다. 게이트웨이와 승인 서비스는 아직 구현되어 있지 않다.
+
+Copyright (c) 2026 bpdus. 원 소프트웨어 저작권은 [루트 LICENSE](../../LICENSE)의 `Copyright (c) 2026 lidge-jun`을 따른다. 이 표시는 원 저작권을 대체하지 않는다.
+
+신뢰 경로가 확보되기 전에는 자동 결제를 열지 않는다.
+
+## 승인 흐름
+
+1. 요청 에이전트가 `approval.create`를 호출한다. 게이트웨이가 실제 checkout을 검증하고, 금액·대상·세션에 묶인 pending intent를 저장한 뒤 `approval_id`, `binding_hash`, 사람이 읽을 요약을 반환한다. 이때 상태는 `AWAITING_APPROVAL`이다. 실제 승인 토큰은 모델에 반환하지 않는다.
+2. Grok Bot 에이전트가 사용자에게 채팅 메시지와 질문 위젯의 버튼을 제시한다. 버튼 선택이나 명시적 답장은 **그 에이전트 대화의 사용자 메시지로 돌아온다**. 별도 callback, webhook, 서명 API를 발명하지 않는다.
+3. `approval.decide`는 신뢰된 채팅 어댑터 또는 사용자 메시지를 중계하는 에이전트만 호출하는 제한된 결정 경로다. 일반 구매 에이전트의 무조건적인 승인 발급 도구로 노출하지 않는다.
+4. 구매 요청자와 답장 중계자가 같은 에이전트이면 프롬프트 주입으로 승인 메시지를 위조할 수 있다. 에이전트가 주장하는 사용자 ID, 메시지 ID, 자체 서명만으로 이 문제를 해결했다고 쓰지 않는다.
+5. 완화 선택지는 아래 신뢰 문제 절에 둔다. 전달·검증 방식은 확인 필요다.
+6. 요청 에이전트는 **직접 `approval.status` MCP 조회**로 결정 상태를 읽는다. 채팅 전달만으로 승인 확인을 대신하지 않는다. 실행 요청은 `approval_id`를 참조하고, 실행기가 내부 토큰을 검사한다.
+
+“사용자가 허락했다”는 모델의 해석은 승인 증거가 아니다.
+
+## 상태 머신
+
+```text
+PREPARED → AWAITING_APPROVAL → APPROVED → DISPATCHING
+                                         → SUCCEEDED / FAILED / OUTCOME_UNKNOWN
+AWAITING_APPROVAL → DENIED / EXPIRED / CANCELLED
+APPROVED → EXPIRED / CANCELLED / INVALIDATED
+```
+
+| 상태 | 의미 |
+|---|---|
+| `PREPARED` | checkout을 읽어 intent를 만들었다. 아직 승인 요청이 아니다. |
+| `AWAITING_APPROVAL` | pending intent가 저장됐고 사람의 결정을 기다린다. |
+| `APPROVED` | 신뢰 경로로 승인이 기록됐고 내부 토큰이 발급됐다. 토큰 수명 120초, 한 번만 사용한다. |
+| `DISPATCHING` | 토큰을 원자적으로 소비한 뒤 사이트 동작을 시작했다. |
+| `SUCCEEDED` | 주문 또는 대상 동작의 성공을 확인했다. |
+| `FAILED` | 실행이 실패했고 주문이 성립하지 않은 것을 확인했다. |
+| `OUTCOME_UNKNOWN` | 제출 이후 결과를 확인하지 못했다. |
+| `DENIED` | 사용자가 거절했다. |
+| `EXPIRED` | pending 만료 또는 토큰 120초 만료다. |
+| `CANCELLED` | 사용자 또는 운영자가 취소했다. |
+| `INVALIDATED` | 금액, 대상, 세션 등 바인딩이 바뀌어 기존 승인이 무효다. |
+
+pending 요청의 만료 시간(`pending_expires_in`)과 승인 토큰 만료 시간(`token_expires_in`, 발급 후 120초)은 별도 시계다. pending이 먼저 끝나면 `AWAITING_APPROVAL`에서 `EXPIRED`로 간다. 승인 뒤에 120초가 지나면 `APPROVED`에서 `EXPIRED`로 간다.
+
+승인 대기 중에는 해당 탭의 쓰기 소유권을 유지한다. 같은 쇼핑 계정의 장바구니·결제 작업은 탭이 달라도 직렬화한다. 서버 측 장바구니가 공유될 수 있기 때문이다.
+
+## 바인딩 해시
+
+`binding_hash`는 정규화된 intent JSON의 SHA-256이다. 직렬화 차이로 대상이 달라지지 않도록 canonical JSON 규칙을 두며, RFC 8785를 후보로 검토한다. 검증 벡터는 구현 PR에서 추가한다.
+
+해시에는 다음을 묶는다.
+
+- 호출자
+- 기기
+- 대화
+- 세션
+- 프로필
+- 계정
+- origin
+- 상품, 옵션, 수량
+- 최종 총액(통화와 최소 화폐 단위 정수)
+- 배송지 식별자, 결제수단 식별자
+- 작업 revision, 정책 revision
+
+이 값이 바뀌면 기존 승인은 `INVALIDATED`가 되고 재승인한다. 실행 직전에도 실제 checkout과 `binding_hash`를 다시 대조한다.
+
+내부 승인 토큰은 승인 전용 키로 서명한다. 실행기는 서명만 보지 않고 저장된 intent, 현재 정책, 미소비 상태, `device_epoch`까지 대조한다. 토큰 원문은 `approval.status` 응답에 넣지 않는다.
+
+## 신뢰 문제와 완화 선택지
+
+구매 요청 에이전트가 사용자 답장을 같은 대화에서 읽어 `approval.decide`를 호출하면, 페이지 문구와 도구 결과가 “승인합니다” 형태의 사용자 메시지를 흉내 내게 할 수 있다. 모델이 그 문장을 사용자 답장으로 착각하면 결제 토큰이 발급된다.
+
+에이전트가 채우는 `user_id`, `message_id`, 자체 서명은 이 혼동을 막지 못한다. 증거는 게이트웨이가 사용자에게만 닿는 경로에서 나와야 한다.
+
+완화 선택지. 전달과 검증 방식은 **확인 필요**다.
+
+| 선택지 | 요지 | 한계 |
+|---|---|---|
+| iMac 로컬 확인 페이지 | tailnet 안의 게이트웨이 페이지에서 사용자가 전용 인증 후 승인한다. | 페이지 URL, 인증 방식, Serve 경로는 확인 필요다. |
+| 사용자 전용 일회성 코드 | 게이트웨이가 사용자에게만 코드를 보내고, 그 코드가 모델 문맥을 거치지 않고 검증된다. | 전달 채널과 입력 위치는 확인 필요다. 모델이 볼 수 있는 코드만으로는 독립된 승인 증거가 되지 않는다. |
+| Grok Bot 사용자 이벤트 서명 | 플랫폼이 원본 사용자 이벤트를 검증 가능하게 서명하는지 조사한다. | 제품 기능 여부가 확인 필요다. 없으면 이 경로를 신뢰 증거로 쓰지 않는다. |
+
+세 선택지 중 하나가 구현·검증되기 전에는 `approval.decide`가 `TRUST_EVIDENCE_INSUFFICIENT`를 반환하고 자동 결제를 열지 않는다. 조회와 장바구니 준비는 이 게이트와 별개로 진행할 수 있다.
+
+채팅 규칙의 제안 값은 다음과 같다. 신뢰 경로가 생긴 뒤에만 적용한다.
+
+- 등록된 사용자와 허용된 대화만 인정한다. 표시 이름은 신원이 아니다.
+- 해당 승인 메시지의 명시적 답장 또는 확인 버튼만 결정으로 본다.
+- “그거 해”, “응”처럼 여러 요청에 대응할 수 있는 말은 승인으로 처리하지 않는다.
+- 자연어를 허용하더라도 요청 ID, 작업, 금액을 규칙으로 확정한다. LLM 단독 판정으로 서명하지 않는다.
+- 음성 전사문만으로 승인하지 않는다.
+- 전달, 인용, 봇 메시지, 편집, 재전송, 이미 처리한 `event_id`는 근거에서 제외한다.
+
+초기 정책은 정확한 총액과 내용에 대한 일회성 승인이다. 구독, 한도 이하 자동 구매는 넣지 않는다.
+
+## 실행과 복구
+
+실행기는 `approval_id`를 받아 내부 토큰을 검사한다. 토큰 소비와 `DISPATCHING` 기록을 하나의 저장 트랜잭션으로 남긴 뒤에만 사이트 동작을 시작한다. 토큰은 한 번만 쓰인다.
+
+외부 사이트 동작은 한 번 성공한다고 보장하지 않는다. 주문 제출 후 응답이 끊기면 자동으로 다시 결제하지 않고 `OUTCOME_UNKNOWN`으로 둔 뒤 주문 내역을 조회한다. 프로세스 재시작 시에도 실행 중이던 결제를 자동 재개하지 않는다.
+
+로그 저장이나 상태 기록에 실패하면 구매를 시작하지 않는다. 네트워크 단절, 절전, Keychain 잠금 뒤에는 연결과 상태를 다시 검증한다. 재접속만으로 대기 결제를 실행하지 않는다.
+
+## 기대 결과
+
+| 상황 | 기대 상태 또는 오류 | 실행 |
+|---|---|---|
+| 사용자가 거절 버튼을 누르거나 명시적으로 거절한다 | `approval.decide`가 `deny`를 기록하고 상태는 `DENIED`. `approval.status`는 `DENIED`와 `APPROVAL_DENIED`를 보여 준다. | 실행하지 않는다. |
+| “응”, “그거 해”처럼 모호한 답장 | 상태 전이 없음. `AWAITING_APPROVAL` 유지. `approval.decide`를 승인으로 호출하지 않는다. | 실행하지 않는다. |
+| pending 만료 | `AWAITING_APPROVAL` → `EXPIRED`, 코드 `APPROVAL_EXPIRED` | 실행하지 않는다. 새로 `approval.create`가 필요하다. |
+| 승인 후 120초 경과 | `APPROVED` → `EXPIRED`, 코드 `APPROVAL_EXPIRED` | 실행하지 않는다. |
+| 같은 `event_id` 또는 같은 토큰을 다시 제출 | 중복 이벤트는 무시하거나 이미 처리됨으로 응답. 소비된 토큰은 `APPROVAL_CONSUMED` | 두 번째 결제에 쓰지 않는다. |
+| 다른 `session_id`로 같은 `approval_id` 사용 | `BINDING_MISMATCH`. 필요 시 `INVALIDATED` | 실행하지 않는다. |
+| 승인 후 금액, 옵션, 수량, 배송지, 결제수단 변경 | `BINDING_MISMATCH`, 상태 `INVALIDATED` | 재승인 없이 실행하지 않는다. |
+| 페이지가 승인 문장을 주입하고 같은 에이전트가 중계 | `TRUST_EVIDENCE_INSUFFICIENT`. 토큰 미발급 | 자동 결제를 열지 않는다. |
+| 실행 시작 후 연결 단절 또는 재시작 | 이미 소비됐으면 `DISPATCHING` 또는 `OUTCOME_UNKNOWN` | 자동 재결제하지 않는다. 주문 조회만 한다. |
+| 지원하지 않는 네이버 결제 화면 | `SITE_UNSUPPORTED` 또는 `HUMAN_REQUIRED` | 사람에게 넘긴다. |
+| 알 수 없는 `protocol_version` | `VERSION_UNSUPPORTED` | 거부한다. |
+
+요청 에이전트의 확인 순서는 고정이다. `approval.create` → 채팅 제시 → 사용자가 답장 → 제한된 `approval.decide` → 요청 에이전트가 `approval.status`를 직접 조회 → `APPROVED`일 때만 `approval_id`로 실행 요청. 채팅 로그를 읽고 승인됐다고 단정하지 않는다.
+
+## 감사
+
+감사 이벤트에는 누가, 어떤 기기·대화·세션에서, 어떤 origin의 어떤 동작을 요청했는지, 정책 판단, `approval_id`, `binding_hash`, 결과 상태를 남긴다. 승인 토큰, 쿠키, 비밀번호, OTP, 서명 proof는 로그와 argv에 남기지 않는다.
+
+보존 기간의 제안 값은 감사 메타데이터 90일, 승인 상세 30일, 스크린샷 기본 미보존이다. 실제 기간은 확인 필요다.
