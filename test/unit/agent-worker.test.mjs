@@ -247,6 +247,7 @@ describe('agent-worker', () => {
             ['--user-data-dir', '/tmp/secret-profile'],
             ['http://127.0.0.1:9222'],
             ['--help', '--port', '9222'],
+            ['-h'],
         ];
         for (const argv of cases) {
             const created = harness.created;
@@ -276,6 +277,99 @@ describe('agent-worker', () => {
         expect(helped.stdout).toContain('node skills/browser/agent-worker.mjs');
         expect(helped.stdout).toContain('~/.agbrowse-bpdus/agent-profile');
         expect(helped.stdout).not.toMatch(/9222|cookie|SECRET/);
+    });
+
+    it('keeps signal handlers through a pending startup', async () => {
+        const signal = new EventEmitter();
+        let releaseStart = () => {};
+        const startGate = new Promise((resolve) => { releaseStart = resolve; });
+        let markStarted = () => {};
+        const startedGate = new Promise((resolve) => { markStarted = resolve; });
+        let starts = 0;
+        let stops = 0;
+        let listenersAtStart = 0;
+        harness.factory = () => ({
+            async start() {
+                starts += 1;
+                listenersAtStart = signal.listenerCount('SIGINT') + signal.listenerCount('SIGTERM');
+                signal.emit('SIGTERM');
+                signal.emit('SIGINT');
+                markStarted();
+                await startGate;
+            },
+            async stop() {
+                expect(signal.listenerCount('SIGINT')).toBe(1);
+                expect(signal.listenerCount('SIGTERM')).toBe(1);
+                stops += 1;
+            },
+        });
+        const stdout = capture();
+        const stderr = capture();
+        const pending = runAgentWorker({
+            argv: [],
+            stdout: stdout.stream,
+            stderr: stderr.stream,
+            signalSource: signal,
+            exit() {},
+        });
+        await startedGate;
+        expect(starts).toBe(1);
+        expect(listenersAtStart).toBe(2);
+        releaseStart();
+        const code = await pending;
+        expect(code).toBe(0);
+        expect(stops).toBe(1);
+        expect(stdout.read()).toBe('agbrowse-agent: stopped\n');
+        expect(stderr.read()).toBe('');
+        expect(signal.listenerCount('SIGINT')).toBe(0);
+        expect(signal.listenerCount('SIGTERM')).toBe(0);
+    });
+
+    it('keeps signal handlers through a pending stop', async () => {
+        const signal = new EventEmitter();
+        let releaseStop = () => {};
+        const stopGate = new Promise((resolve) => { releaseStop = resolve; });
+        let markStopEntered = () => {};
+        const stopEntered = new Promise((resolve) => { markStopEntered = resolve; });
+        let stops = 0;
+        let listenersDuringStop = 0;
+        harness.factory = () => ({
+            async start() {},
+            async stop() {
+                listenersDuringStop = signal.listenerCount('SIGINT') + signal.listenerCount('SIGTERM');
+                signal.emit('SIGINT');
+                signal.emit('SIGTERM');
+                markStopEntered();
+                await stopGate;
+                stops += 1;
+            },
+        });
+        const stdout = capture();
+        const stderr = capture();
+        const pending = runAgentWorker({
+            argv: [],
+            stdout: {
+                write(chunk) {
+                    stdout.stream.write(chunk);
+                    if (String(chunk).includes('ready')) signal.emit('SIGTERM');
+                    return true;
+                },
+            },
+            stderr: stderr.stream,
+            signalSource: signal,
+            exit() {},
+        });
+        await stopEntered;
+        expect(listenersDuringStop).toBe(2);
+        expect(stops).toBe(0);
+        releaseStop();
+        const code = await pending;
+        expect(code).toBe(0);
+        expect(stops).toBe(1);
+        expect(stdout.read()).toBe('agbrowse-agent: ready\nagbrowse-agent: stopped\n');
+        expect(stderr.read()).toBe('');
+        expect(signal.listenerCount('SIGINT')).toBe(0);
+        expect(signal.listenerCount('SIGTERM')).toBe(0);
     });
 
     it('answers --help from a direct process without launching Chrome', () => {

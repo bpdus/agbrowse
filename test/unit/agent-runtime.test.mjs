@@ -404,4 +404,70 @@ describe('agent-runtime', () => {
         expect(made.order[0].closed).toBe(true);
         expect(made.order[0].cdpAttached).toBe(0);
     });
+
+    it('turns a secret-bearing page creation failure into a stable code', async () => {
+        const made = makeContext(events);
+        const secret = 'super-secret-cookie-value https://evil.example/private?token=sekret';
+        made.context.newPage = async () => {
+            const error = new Error(`Playwright newPage failed ${secret} --user-data-dir=/tmp/secret-profile`);
+            error.stack = `${error.message}\n    at newPage (/tmp/secret-profile/playwright.js:1:1)`;
+            throw error;
+        };
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const error = await runtime.openSession().catch((caught) => caught);
+        expect(error).toMatchObject({ code: 'SESSION_CLOSED', message: 'Session target is closed.' });
+        expect(error.cause).toBeUndefined();
+        expect(`${error.message}\n${error.stack}`).not.toMatch(/super-secret-cookie-value|evil\.example|secret-profile|Playwright/);
+        await expect(runtime.inspectSession('ses_missing')).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+        expect(trace.launches).toHaveLength(1);
+        expect(locks.release).not.toHaveBeenCalled();
+    });
+
+    it('keeps the profile lock when close fails and retries shutdown before restart', async () => {
+        const made = makeContext(events);
+        const secret = 'super-secret-cookie-value';
+        let attempts = 0;
+        const originalClose = made.context.close.bind(made.context);
+        made.context.close = async () => {
+            attempts += 1;
+            if (attempts === 1) {
+                const error = new Error(`browser still open cookie=${secret} https://evil.example/private`);
+                error.stack = `${error.message}\n    at close (/tmp/secret-profile/playwright.js:4:1)`;
+                throw error;
+            }
+            await originalClose();
+        };
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        const first = await runtime.openSession();
+        const failed = await runtime.stop().catch((caught) => caught);
+        expect(failed).toMatchObject({ code: 'SHUTDOWN_FAILED', message: 'Browser shutdown failed.' });
+        expect(failed.cause).toBeUndefined();
+        expect(`${failed.message}\n${failed.stack}`).not.toMatch(/super-secret-cookie-value|evil\.example|secret-profile/);
+        expect(locks.release).not.toHaveBeenCalled();
+        expect(events).not.toContain('close');
+        expect(trace.launches).toHaveLength(1);
+        await expect(runtime.start()).rejects.toMatchObject({ code: 'ALREADY_RUNNING' });
+        expect(trace.launches).toHaveLength(1);
+        expect(locks.acquire).toHaveBeenCalledTimes(1);
+
+        await runtime.stop();
+        expect(events).toEqual(['close', 'release']);
+        expect(locks.release).toHaveBeenCalledTimes(1);
+        expect(locks.release).toHaveBeenCalledWith(workerDir(), 'tok-1');
+
+        const restarted = makeContext(events);
+        trace.launchImpl = () => restarted.context;
+        await runtime.start();
+        const second = await runtime.openSession();
+        expect(second.sessionId).not.toBe(first.sessionId);
+        await expect(runtime.inspectSession(first.sessionId)).rejects.toMatchObject({ code: 'SESSION_NOT_FOUND' });
+        expect(await runtime.inspectSession(second.sessionId)).toEqual(second);
+        expect(trace.launches).toHaveLength(2);
+    });
 });

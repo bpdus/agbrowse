@@ -134,7 +134,9 @@ pending 요청의 만료 시간(`pending_expires_in`)과 승인 토큰 만료 �
 | 지원하지 않는 네이버 결제 화면 | `SITE_UNSUPPORTED` 또는 `HUMAN_REQUIRED` | 사람에게 넘긴다. |
 | 알 수 없는 `protocol_version` | `VERSION_UNSUPPORTED` | 거부한다. |
 
-요청 에이전트의 확인 순서는 고정이다. `approval.create` → 채팅 제시 → 사용자가 답장 → 제한된 `approval.decide` → 요청 에이전트가 `approval.status`를 직접 조회 → `APPROVED`일 때만 `approval_id`로 실행 요청. 채팅 로그를 읽고 승인됐다고 단정하지 않는다.
+아래 순서는 채팅 답장을 결정 경로로 두던 이전 제안이며, [Decision (2026-10-11)](#decision-2026-10-11)이 대체했다. 이전 제안: `approval.create` → 채팅 제시 → 사용자가 답장 → 제한된 `approval.decide` → 요청 에이전트가 `approval.status`를 직접 조회 → `APPROVED`일 때만 `approval_id`로 실행 요청.
+
+확정된 순서는 승인 페이지에서 사람이 결정하고, 요청 에이전트는 `approval.status`만 읽는다. 채팅 답장이나 채팅 로그를 읽고 승인됐다고 단정하지 않는다.
 
 ## 감사
 

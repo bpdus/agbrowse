@@ -195,7 +195,7 @@ function launchOptions() {
  */
 export function createAgentRuntime(config) {
     const { onDisconnected } = readConfig(config);
-    /** @type {'idle' | 'running' | 'stopped'} */
+    /** @type {'idle' | 'running' | 'closing' | 'stopped'} */
     let state = 'idle';
     /** @type {'stopped' | 'disconnected' | null} */
     let stopReason = null;
@@ -224,7 +224,7 @@ export function createAgentRuntime(config) {
     }
 
     function assertRunning() {
-        if (state === 'running' && context) return;
+        if (state === 'running' && context && !intentionalStop) return;
         if (stopReason === 'disconnected') {
             throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
         }
@@ -232,25 +232,42 @@ export function createAgentRuntime(config) {
     }
 
     /**
-     * @param {string | null} token
-     * @param {string | null} dir
-     * @param {import('playwright-core').BrowserContext | null} ctx
+     * Close the owned browser before releasing its lock.
+     * A rejected close leaves the context and token in place so stop() can retry.
      */
-    async function closeThenUnlock(ctx, dir, token) {
-        if (ctx) {
-            try { await ctx.close(); } catch { /* already closed */ }
-        }
-        if (token && dir) releaseProfileLock(dir, token);
-    }
-
-    async function discardLaunch(ctx, dir, token) {
+    async function releaseOwnedBrowser() {
+        const ctx = context;
+        if (ctx) await ctx.close();
+        const dir = lockedDir;
+        const token = lockToken;
         context = null;
         lockToken = null;
         lockedDir = null;
+        if (token && dir) releaseProfileLock(dir, token);
+    }
+
+    /**
+     * @param {unknown} error
+     * @returns {never}
+     */
+    function throwShutdownFailure(error) {
+        if (error instanceof AgentRuntimeError) throw error;
+        throw new AgentRuntimeError('SHUTDOWN_FAILED', 'Browser shutdown failed.');
+    }
+
+    async function discardLaunch() {
         sessions.clear();
+        try {
+            await releaseOwnedBrowser();
+        } catch (error) {
+            state = 'closing';
+            intentionalStop = true;
+            throwShutdownFailure(error);
+        }
         state = 'idle';
         stopReason = null;
-        await closeThenUnlock(ctx, dir, token);
+        intentionalStop = false;
+        disconnectNoted = false;
         restorePlaywrightDebug(savedDebug);
         savedDebug = null;
     }
@@ -264,18 +281,17 @@ export function createAgentRuntime(config) {
     async function applyDisconnect() {
         if (intentionalStop || state === 'idle') return;
         if (state === 'stopped' && !context && !lockToken) return;
-        const ctx = context;
-        const dir = lockedDir;
-        const token = lockToken;
-        context = null;
-        lockToken = null;
-        lockedDir = null;
         sessions.clear();
-        state = 'stopped';
+        state = 'closing';
         stopReason = 'disconnected';
-        await closeThenUnlock(ctx, dir, token);
-        restorePlaywrightDebug(savedDebug);
-        savedDebug = null;
+        try {
+            await releaseOwnedBrowser();
+            state = 'stopped';
+            restorePlaywrightDebug(savedDebug);
+            savedDebug = null;
+        } catch {
+            // Chrome may still be alive. Keep the context and lock for stop().
+        }
         if (onDisconnected) onDisconnected();
     }
 
@@ -319,19 +335,13 @@ export function createAgentRuntime(config) {
 
     async function start() {
         return enqueue(async () => {
-            if (state === 'running') {
+            if (state === 'running' || state === 'closing' || context || lockToken) {
                 throw new AgentRuntimeError('ALREADY_RUNNING', 'Agent runtime is already running.');
             }
             intentionalStop = false;
             disconnectNoted = false;
             stopReason = null;
             savedDebug = suppressPlaywrightDebug();
-            /** @type {import('playwright-core').BrowserContext | null} */
-            let launched = null;
-            /** @type {string | null} */
-            let acquiredToken = null;
-            /** @type {string | null} */
-            let acquiredDir = null;
             try {
                 const { workerDir, profileDir } = ensureDedicatedProfile();
                 let lock;
@@ -340,23 +350,17 @@ export function createAgentRuntime(config) {
                 } catch {
                     throw new AgentRuntimeError('LOCK_HELD', 'Profile lock is held.');
                 }
-                acquiredToken = lock.token;
-                acquiredDir = workerDir;
                 lockToken = lock.token;
                 lockedDir = workerDir;
                 const playwright = await import('playwright-core');
-                launched = await playwright.chromium.launchPersistentContext(profileDir, launchOptions());
-                context = launched;
-                watchContext(launched);
+                context = await playwright.chromium.launchPersistentContext(profileDir, launchOptions());
+                watchContext(context);
                 if (disconnectNoted) {
                     throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
                 }
                 state = 'running';
             } catch (error) {
-                const ctx = launched || context;
-                const dir = acquiredDir || lockedDir;
-                const token = acquiredToken || lockToken;
-                await discardLaunch(ctx, dir, token);
+                await discardLaunch();
                 if (error instanceof AgentRuntimeError) throw error;
                 throw new AgentRuntimeError('STARTUP_FAILED', 'Browser launch failed.');
             }
@@ -368,19 +372,23 @@ export function createAgentRuntime(config) {
             assertRunning();
             const ctx = context;
             if (!ctx) throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
-            const page = await ctx.newPage();
+            /** @type {import('playwright-core').Page | undefined} */
+            let page;
             try {
+                page = await ctx.newPage();
                 const targetId = await readTargetId(page);
-                if (disconnectNoted || state !== 'running') {
+                if (disconnectNoted || state !== 'running' || intentionalStop) {
                     throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
                 }
                 const sessionId = `ses_${randomBytes(8).toString('hex')}`;
                 sessions.set(sessionId, { page, targetId });
                 return { sessionId, targetId };
             } catch (error) {
-                try { await page.close(); } catch { /* already closed */ }
+                if (page) {
+                    try { await page.close(); } catch { /* already closed */ }
+                }
                 if (error instanceof AgentRuntimeError) throw error;
-                if (disconnectNoted || state !== 'running') {
+                if (disconnectNoted || state !== 'running' || intentionalStop) {
                     throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
                 }
                 throw new AgentRuntimeError('SESSION_CLOSED', 'Session target is closed.');
@@ -426,18 +434,17 @@ export function createAgentRuntime(config) {
 
     async function stop() {
         return enqueue(async () => {
-            if ((state === 'idle' || state === 'stopped') && !context && !lockToken) return;
+            if (!context && !lockToken && state !== 'running' && state !== 'closing') return;
             intentionalStop = true;
-            const ctx = context;
-            const dir = lockedDir;
-            const token = lockToken;
-            context = null;
-            lockToken = null;
-            lockedDir = null;
+            if (stopReason !== 'disconnected') stopReason = 'stopped';
             sessions.clear();
+            state = 'closing';
+            try {
+                await releaseOwnedBrowser();
+            } catch (error) {
+                throwShutdownFailure(error);
+            }
             state = 'stopped';
-            stopReason = 'stopped';
-            await closeThenUnlock(ctx, dir, token);
             restorePlaywrightDebug(savedDebug);
             savedDebug = null;
         });

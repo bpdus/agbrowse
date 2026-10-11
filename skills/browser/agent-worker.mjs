@@ -19,6 +19,7 @@ const ALLOWED_ERROR_CODES = new Set([
     'SESSION_NOT_FOUND',
     'SESSION_CLOSED',
     'ALREADY_RUNNING',
+    'SHUTDOWN_FAILED',
 ]);
 
 const HELP = [
@@ -105,7 +106,7 @@ export async function runAgentWorker(options = {}) {
         return code;
     }
 
-    if (argv.length === 1 && (argv[0] === '--help' || argv[0] === '-h')) {
+    if (argv.length === 1 && argv[0] === '--help') {
         stdout.write(HELP);
         return finish(0);
     }
@@ -115,20 +116,40 @@ export async function runAgentWorker(options = {}) {
     }
 
     const savedDebug = suppressInheritedDebug();
+    /** @type {() => void} */
+    let removeSignals = () => {};
     try {
         const { createAgentRuntime } = await import('./agent-runtime.mjs');
         /** @type {ReturnType<typeof createAgentRuntime> | null} */
         let runtime = null;
-        /** @type {(reason: 'signal' | 'disconnected') => void} */
-        let wake = () => {};
         let settled = false;
+        /** @type {'signal' | 'disconnected' | null} */
+        let reason = null;
+        /** @type {(value: 'signal' | 'disconnected') => void} */
+        let wake = () => {};
         const wait = new Promise((resolve) => {
-            wake = (reason) => {
+            wake = (value) => {
                 if (settled) return;
                 settled = true;
-                resolve(reason);
+                reason = value;
+                resolve(value);
             };
         });
+
+        // Own both signals before launch and until stop() finishes. Removing
+        // them earlier lets a second signal hit Node's default termination.
+        const onSignal = () => { wake('signal'); };
+        signalSource.on('SIGINT', onSignal);
+        signalSource.on('SIGTERM', onSignal);
+        removeSignals = () => {
+            if (typeof signalSource.off === 'function') {
+                signalSource.off('SIGINT', onSignal);
+                signalSource.off('SIGTERM', onSignal);
+            } else if (typeof signalSource.removeListener === 'function') {
+                signalSource.removeListener('SIGINT', onSignal);
+                signalSource.removeListener('SIGTERM', onSignal);
+            }
+        };
 
         try {
             runtime = createAgentRuntime({
@@ -136,36 +157,23 @@ export async function runAgentWorker(options = {}) {
             });
             await runtime.start();
         } catch (error) {
+            let reported = error;
             if (runtime) {
-                try { await runtime.stop(); } catch { /* already cleaned up */ }
+                try { await runtime.stop(); } catch (stopError) { reported = stopError; }
             }
-            writeError(stderr, publicErrorCode(error));
+            writeError(stderr, publicErrorCode(reported));
             return finish(1);
         }
 
-        /**
-         * @returns {void}
-         */
-        const onSignal = () => { wake('signal'); };
-        signalSource.on('SIGINT', onSignal);
-        signalSource.on('SIGTERM', onSignal);
-        stdout.write('agbrowse-agent: ready\n');
-        if (settled) {
-            // Disconnect won the race before the ready line was observed.
-        }
-        const reason = await wait;
-        if (typeof signalSource.off === 'function') {
-            signalSource.off('SIGINT', onSignal);
-            signalSource.off('SIGTERM', onSignal);
-        } else if (typeof signalSource.removeListener === 'function') {
-            signalSource.removeListener('SIGINT', onSignal);
-            signalSource.removeListener('SIGTERM', onSignal);
+        if (!settled) {
+            stdout.write('agbrowse-agent: ready\n');
+            await wait;
         }
 
         try {
             await runtime.stop();
-        } catch {
-            writeError(stderr, 'STARTUP_FAILED');
+        } catch (error) {
+            writeError(stderr, publicErrorCode(error));
             return finish(1);
         }
 
@@ -179,6 +187,7 @@ export async function runAgentWorker(options = {}) {
         writeError(stderr, 'STARTUP_FAILED');
         return finish(1);
     } finally {
+        removeSignals();
         restoreInheritedDebug(savedDebug);
     }
 }
