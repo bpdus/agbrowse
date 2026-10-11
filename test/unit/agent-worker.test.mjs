@@ -1,7 +1,10 @@
 import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { connectReadEndpoint } from '../../skills/browser/agent-ipc.mjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const harness = vi.hoisted(() => ({
@@ -391,5 +394,88 @@ describe('agent-worker', () => {
         expect(rejected.status).toBe(1);
         expect(rejected.stderr).toBe('agbrowse-agent: error code=INVALID_ARGUMENTS\n');
         expect(`${rejected.stdout}\n${rejected.stderr}`).not.toContain('SECRET_DEBUG_TOKEN');
+    });
+
+    it('does not open a socket unless the runtime can dispatch reads', async () => {
+        const dir = realpathSync(mkdtempSync(join(tmpdir(), 'agb-worker-')));
+        chmodSync(dir, 0o700);
+        const socketPath = join(dir, 'agent-worker.sock');
+        const signal = new EventEmitter();
+        const stdout = capture();
+        harness.factory = () => ({
+            async start() {},
+            async stop() {},
+        });
+        try {
+            const code = await runAgentWorker({
+                argv: [],
+                socketPath,
+                stdout: {
+                    write(chunk) {
+                        stdout.stream.write(chunk);
+                        if (String(chunk).includes('ready')) signal.emit('SIGTERM');
+                        return true;
+                    },
+                },
+                stderr: capture().stream,
+                signalSource: signal,
+                exit() {},
+            });
+            expect(code).toBe(0);
+            expect(existsSync(socketPath)).toBe(false);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('answers hello on the owner socket and keeps the payload out of logs', async () => {
+        const dir = realpathSync(mkdtempSync(join(tmpdir(), 'agb-worker-')));
+        chmodSync(dir, 0o700);
+        const socketPath = join(dir, 'agent-worker.sock');
+        const seen = [];
+        const signal = new EventEmitter();
+        const stdout = capture();
+        const stderr = capture();
+        let markReady = () => {};
+        const ready = new Promise((resolve) => { markReady = resolve; });
+        harness.factory = () => ({
+            async start() {},
+            async stop() {},
+            async dispatchRead(op, payload) {
+                seen.push({ op, payload });
+                return { ok: true };
+            },
+        });
+        const pending = runAgentWorker({
+            argv: [],
+            socketPath,
+            stdout: {
+                write(chunk) {
+                    stdout.stream.write(chunk);
+                    if (String(chunk).includes('ready')) markReady();
+                    return true;
+                },
+            },
+            stderr: stderr.stream,
+            signalSource: signal,
+            exit() {},
+        });
+        try {
+            await ready;
+            const client = connectReadEndpoint({ socketPath });
+            const hello = await client.call('worker.hello', {});
+            expect(hello.worker_id).toMatch(/^wrk_[a-f0-9]{16}$/);
+            await client.call('browser.observe', { query: 'canary-secret-value' });
+            client.close();
+            signal.emit('SIGTERM');
+            expect(await pending).toBe(0);
+            expect(seen.map((item) => item.op)).toEqual(['browser.observe']);
+            expect(`${stdout.read()}\n${stderr.read()}`).not.toContain('canary-secret-value');
+            expect(existsSync(socketPath)).toBe(false);
+        } finally {
+            signal.emit('SIGTERM');
+            await pending.catch(() => {});
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

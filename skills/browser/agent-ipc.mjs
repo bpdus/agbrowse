@@ -204,6 +204,7 @@ export async function startReadEndpoint(options) {
         socketPath,
         workerId,
         async close() {
+            server.closeAllConnections?.();
             await new Promise((resolve) => server.close(() => resolve(undefined)));
             try {
                 const stat = fs.lstatSync(socketPath);

@@ -193,6 +193,7 @@ export async function runListing(page, input) {
 export async function runObserve(page, policy) {
     const inspected = await page.inspect();
     if (inspected.blocked || inspected.reason === 'HUMAN_REQUIRED') throw readError('HUMAN_REQUIRED');
+    if (inspected.reason === 'SITE_UNSUPPORTED') throw readError('SITE_UNSUPPORTED');
     const finalUrl = inspected.finalUrl || (typeof page.url === 'function' ? page.url() : '');
     if (finalUrl && classifyRequest(finalUrl, 'GET', 'navigation', policy) !== 'allow') throw readError('DOMAIN_DENIED');
     const results = publishResults(inspected.results || [], finalUrl || policy.navigationOrigin, policy);
