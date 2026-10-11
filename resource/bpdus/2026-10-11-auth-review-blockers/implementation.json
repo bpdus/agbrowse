@@ -1,0 +1,83 @@
+{
+  "schema_version": 2,
+  "status": "DONE",
+  "summary": "Key fsync failures propagate, revocation fails closed and reconciles from disk, storage paths reject symlinked ancestors and unsafe modes, and the approval doc no longer allows chat decisions.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-11-auth-review-blockers/plan.json",
+  "tasks": [
+    {
+      "task_id": 1,
+      "status": "DONE",
+      "changed_files": [
+        "skills/browser/agent-auth-store.mjs",
+        "test/unit/agent-auth-durability.test.mjs"
+      ]
+    },
+    {
+      "task_id": 2,
+      "status": "DONE",
+      "changed_files": [
+        "skills/browser/agent-auth.mjs",
+        "test/unit/agent-auth-durability.test.mjs"
+      ]
+    },
+    {
+      "task_id": 3,
+      "status": "DONE",
+      "changed_files": [
+        "skills/browser/agent-auth-store.mjs",
+        "test/unit/agent-auth-durability.test.mjs"
+      ]
+    },
+    {
+      "task_id": 4,
+      "status": "DONE",
+      "changed_files": [
+        "docs/bpdus/APPROVAL-FLOW.md",
+        "skills/browser/agent-auth.mjs",
+        "test/unit/agent-auth-durability.test.mjs"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-auth-store.mjs",
+      "sha256": "25daddb82113eece183991c1116d46a3cb84cbba21a65ecdde589f59fdc6ffd3"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-auth.mjs",
+      "sha256": "76cda85d88c0ca2a91de6d82fe349982f267bd96b393468ce5c0ac3553e1ad6f"
+    },
+    {
+      "path": "/home/box/src/agbrowse/docs/bpdus/APPROVAL-FLOW.md",
+      "sha256": "f523be0d39ca474514200b1ba29f04cac21bab3b7df2bf7e1057fe47ae8ea36f"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-auth-durability.test.mjs",
+      "sha256": "9857016d8e6e27451a4a46a2c82ed396b340689d806b1bd4634cfdd6c688ce2e"
+    },
+    {
+      "path": "/home/box/src/agbrowse/resource/bpdus/2026-10-11-auth-review-blockers/plan.json",
+      "sha256": "bb75601acb1e306d6ecda481912f8db0203c108173e713d7648d611d070be15a"
+    }
+  ],
+  "checks": [
+    {
+      "name": "tests",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-11-auth-review-blockers/evidence/vitest-auth-durability.log",
+      "evidence_sha256": "92d2be69b82fd86d7e40f0b20c38053f004138d85376155ab26991a99f9a4492"
+    },
+    {
+      "name": "verification",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-11-auth-review-blockers/evidence/vitest-auth-durability.log",
+      "evidence_sha256": "92d2be69b82fd86d7e40f0b20c38053f004138d85376155ab26991a99f9a4492"
+    },
+    {
+      "name": "self_review",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-11-auth-review-blockers/evidence/self-review.md",
+      "evidence_sha256": "cc51dce59752d76d2ccdb8b48515a8fd4db784961815970ad031f5c45435b9ae"
+    }
+  ]
+}

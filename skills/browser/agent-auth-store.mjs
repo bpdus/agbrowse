@@ -65,46 +65,114 @@ function mapFs(error) {
 }
 
 /**
+ * @param {{ fs?: typeof fs } | null | undefined} options
+ * @returns {typeof fs}
+ */
+function bindFs(options) {
+    if (options?.fs === undefined) return fs;
+    if (options.fs === null || typeof options.fs !== 'object') throw authError('STATE_UNSAFE');
+    return options.fs;
+}
+
+/**
+ * lstat every component. A symlink anywhere in the path is unsafe.
+ * Ancestors must be real directories. The storage directory itself is
+ * checked for owner and mode by assertOwnedDirectory.
+ * @param {typeof fs} io
+ * @param {string} resolved
+ * @param {boolean} allowMissingFinal
+ * @returns {fs.Stats | null}
+ */
+function assertStoragePath(io, resolved, allowMissingFinal) {
+    const root = path.parse(resolved).root;
+    const relative = path.relative(root, resolved);
+    if (!relative || relative.startsWith('..') || relative.split(path.sep).includes('..')) {
+        throw authError('STATE_UNSAFE');
+    }
+    /** @type {fs.Stats} */
+    let rootStat;
+    try {
+        rootStat = io.lstatSync(root);
+    } catch (error) {
+        throw mapFs(error);
+    }
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) throw authError('STATE_UNSAFE');
+    const parts = relative.split(path.sep);
+    let current = root;
+    for (let index = 0; index < parts.length; index += 1) {
+        current = path.join(current, parts[index]);
+        const isFinal = index === parts.length - 1;
+        /** @type {fs.Stats} */
+        let stat;
+        try {
+            stat = io.lstatSync(current);
+        } catch (error) {
+            const code = /** @type {{ code?: string }} */ (error).code;
+            if (code === 'ENOENT' && isFinal && allowMissingFinal) return null;
+            throw mapFs(error);
+        }
+        if (stat.isSymbolicLink()) throw authError('STATE_UNSAFE');
+        if (!isFinal && !stat.isDirectory()) throw authError('STATE_UNSAFE');
+        if (isFinal) return stat;
+    }
+    throw authError('STATE_UNSAFE');
+}
+
+/**
+ * @param {fs.Stats | null | undefined} stat
+ */
+function assertOwnedDirectory(stat) {
+    if (!stat || stat.isSymbolicLink() || !stat.isDirectory() || stat.uid !== process.getuid()) {
+        throw authError('STATE_UNSAFE');
+    }
+    if ((stat.mode & 0o022) !== 0 || (stat.mode & 0o777) !== 0o700) throw authError('STATE_UNSAFE');
+}
+
+/**
+ * @param {typeof fs} io
+ * @param {string} directory
+ */
+function revalidateDirectory(io, directory) {
+    assertOwnedDirectory(assertStoragePath(io, directory, false));
+}
+
+/**
+ * @param {typeof fs} io
  * @param {string} directory
  * @returns {string}
  */
-function prepareDirectory(directory) {
+function prepareDirectory(io, directory) {
     if (typeof directory !== 'string' || directory.length === 0 || directory.includes('\0')) {
         throw authError('STATE_UNSAFE');
     }
     const resolved = path.resolve(directory);
-    /** @type {fs.Stats} */
-    let stat;
-    try {
-        stat = fs.lstatSync(resolved);
-    } catch (error) {
-        const code = /** @type {{ code?: string }} */ (error).code;
-        if (code !== 'ENOENT') throw mapFs(error);
+    let stat = assertStoragePath(io, resolved, true);
+    if (!stat) {
         try {
-            fs.mkdirSync(resolved, { mode: 0o700 });
-            fs.chmodSync(resolved, 0o700);
-            stat = fs.lstatSync(resolved);
-        } catch (mkdirError) {
-            throw mapFs(mkdirError);
+            io.mkdirSync(resolved, { mode: 0o700 });
+            io.chmodSync(resolved, 0o700);
+            stat = io.lstatSync(resolved);
+        } catch (error) {
+            throw mapFs(error);
         }
     }
-    if (stat.isSymbolicLink() || !stat.isDirectory() || stat.uid !== process.getuid() || (stat.mode & 0o777) !== 0o700) {
-        throw authError('STATE_UNSAFE');
-    }
+    assertOwnedDirectory(stat);
     return resolved;
 }
 
 /**
+ * @param {typeof fs} io
  * @param {string} directory
  * @returns {() => void}
  */
-function acquireLock(directory) {
+function acquireLock(io, directory) {
+    revalidateDirectory(io, directory);
     const lockPath = path.join(directory, LOCK_NAME);
     let fd;
     try {
-        fd = fs.openSync(
+        fd = io.openSync(
             lockPath,
-            fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
+            io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL | io.constants.O_NOFOLLOW,
             0o600,
         );
     } catch (error) {
@@ -114,34 +182,36 @@ function acquireLock(directory) {
     return function release() {
         if (released) return;
         released = true;
-        try { fs.closeSync(fd); } catch { /* already closed */ }
+        try { io.closeSync(fd); } catch { /* already closed */ }
         try {
-            const stat = fs.lstatSync(lockPath);
-            if (!stat.isSymbolicLink()) fs.unlinkSync(lockPath);
+            const stat = io.lstatSync(lockPath);
+            if (!stat.isSymbolicLink()) io.unlinkSync(lockPath);
         } catch { /* lock file already gone */ }
     };
 }
 
 /**
+ * @param {typeof fs} io
  * @param {string} directory
  */
-function fsyncDirectory(directory) {
-    const flags = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW;
-    const fd = fs.openSync(directory, flags);
+function fsyncDirectory(io, directory) {
+    const flags = io.constants.O_RDONLY | io.constants.O_DIRECTORY | io.constants.O_NOFOLLOW;
+    const fd = io.openSync(directory, flags);
     try {
-        fs.fsyncSync(fd);
+        io.fsyncSync(fd);
     } finally {
-        fs.closeSync(fd);
+        io.closeSync(fd);
     }
 }
 
 /**
+ * @param {typeof fs} io
  * @param {string} filePath
  */
-function assertRegularFile(filePath) {
+function assertRegularFile(io, filePath) {
     let stat;
     try {
-        stat = fs.lstatSync(filePath);
+        stat = io.lstatSync(filePath);
     } catch (error) {
         const code = /** @type {{ code?: string }} */ (error).code;
         if (code === 'ENOENT') return null;
@@ -154,60 +224,68 @@ function assertRegularFile(filePath) {
 }
 
 /**
+ * @param {typeof fs} io
  * @param {string} directory
  * @param {string} filename
  * @param {Buffer | string} bytes
  */
-function atomicWrite(directory, filename, bytes) {
+function atomicWrite(io, directory, filename, bytes) {
+    revalidateDirectory(io, directory);
     const finalPath = path.join(directory, filename);
     const tmpPath = path.join(directory, `.${filename}.${crypto.randomBytes(8).toString('hex')}.tmp`);
-    assertRegularFile(finalPath);
+    assertRegularFile(io, finalPath);
     let fd;
     try {
-        fd = fs.openSync(
+        fd = io.openSync(
             tmpPath,
-            fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
+            io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL | io.constants.O_NOFOLLOW,
             0o600,
         );
-        fs.writeFileSync(fd, bytes);
-        fs.fsyncSync(fd);
+        io.writeFileSync(fd, bytes);
+        io.fsyncSync(fd);
     } catch (error) {
         if (fd !== undefined) {
-            try { fs.closeSync(fd); } catch { /* ignore */ }
+            try { io.closeSync(fd); } catch { /* ignore */ }
         }
-        try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+        try { io.unlinkSync(tmpPath); } catch { /* ignore */ }
         throw mapFs(error);
     }
-    fs.closeSync(fd);
+    io.closeSync(fd);
+    let renamed = false;
     try {
-        const tmpStat = fs.lstatSync(tmpPath);
+        const tmpStat = io.lstatSync(tmpPath);
         if (tmpStat.isSymbolicLink() || (tmpStat.mode & 0o777) !== 0o600) {
             throw authError('STATE_UNSAFE');
         }
-        fs.renameSync(tmpPath, finalPath);
-        fsyncDirectory(directory);
+        io.renameSync(tmpPath, finalPath);
+        renamed = true;
+        fsyncDirectory(io, directory);
     } catch (error) {
-        try { fs.unlinkSync(tmpPath); } catch { /* already renamed or removed */ }
+        if (!renamed) {
+            try { io.unlinkSync(tmpPath); } catch { /* already renamed or removed */ }
+        }
         throw mapFs(error);
     }
-    assertRegularFile(finalPath);
+    assertRegularFile(io, finalPath);
 }
 
 /**
+ * @param {typeof fs} io
  * @param {string} filePath
  * @returns {Buffer}
  */
-function readRegularFile(filePath) {
-    assertRegularFile(filePath);
+function readRegularFile(io, filePath) {
+    revalidateDirectory(io, path.dirname(filePath));
+    assertRegularFile(io, filePath);
     let fd;
     try {
-        fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-        return fs.readFileSync(fd);
+        fd = io.openSync(filePath, io.constants.O_RDONLY | io.constants.O_NOFOLLOW);
+        return io.readFileSync(fd);
     } catch (error) {
         throw mapFs(error);
     } finally {
         if (fd !== undefined) {
-            try { fs.closeSync(fd); } catch { /* ignore */ }
+            try { io.closeSync(fd); } catch { /* ignore */ }
         }
     }
 }
@@ -326,16 +404,17 @@ function assertStateShape(value) {
 }
 
 /**
- * @param {{ directory: string }} options
+ * @param {{ directory: string, fs?: typeof fs }} options
  */
 export function createJsonStateStore(options) {
-    const directory = prepareDirectory(options?.directory);
-    const release = acquireLock(directory);
+    const io = bindFs(options);
+    const directory = prepareDirectory(io, options?.directory);
+    const release = acquireLock(io, directory);
     const statePath = path.join(directory, STATE_NAME);
     let closed = false;
     try {
-        if (fs.existsSync(statePath) || fs.lstatSync(statePath, { throwIfNoEntry: false })) {
-            assertRegularFile(statePath);
+        if (io.existsSync(statePath) || io.lstatSync(statePath, { throwIfNoEntry: false })) {
+            assertRegularFile(io, statePath);
         }
     } catch (error) {
         release();
@@ -345,8 +424,9 @@ export function createJsonStateStore(options) {
     return {
         load() {
             if (closed) throw authError('STATE_UNSAFE');
-            if (!fs.existsSync(statePath)) return null;
-            const bytes = readRegularFile(statePath);
+            revalidateDirectory(io, directory);
+            if (!io.existsSync(statePath)) return null;
+            const bytes = readRegularFile(io, statePath);
             /** @type {unknown} */
             let parsed;
             try {
@@ -363,8 +443,8 @@ export function createJsonStateStore(options) {
             if (closed) throw authError('STATE_UNSAFE');
             const checked = assertStateShape(state);
             const bytes = Buffer.from(`${JSON.stringify(checked)}\n`, 'utf8');
-            atomicWrite(directory, STATE_NAME, bytes);
-            const written = readRegularFile(statePath);
+            atomicWrite(io, directory, STATE_NAME, bytes);
+            const written = readRegularFile(io, statePath);
             if (!written.equals(bytes)) throw authError('STATE_UNSAFE');
         },
         close() {
@@ -378,11 +458,12 @@ export function createJsonStateStore(options) {
 /**
  * Explicit dev-only P-256 key store. Production Keychain storage is 확인 필요.
  * Callers must opt in. Unavailable production storage must not call this factory.
- * @param {{ directory: string }} options
+ * @param {{ directory: string, fs?: typeof fs }} options
  */
 export function createDevFileKeyStore(options) {
-    const directory = prepareDirectory(options?.directory);
-    const release = acquireLock(directory);
+    const io = bindFs(options);
+    const directory = prepareDirectory(io, options?.directory);
+    const release = acquireLock(io, directory);
     let closed = false;
 
     /**
@@ -402,7 +483,7 @@ export function createDevFileKeyStore(options) {
         const filePath = keyPath(keyId);
         let exists = false;
         try {
-            exists = fs.existsSync(filePath);
+            exists = io.existsSync(filePath);
         } catch {
             throw authError('KEY_UNAVAILABLE');
         }
@@ -412,7 +493,7 @@ export function createDevFileKeyStore(options) {
         }
         let pem;
         try {
-            pem = readRegularFile(filePath);
+            pem = readRegularFile(io, filePath);
         } catch (error) {
             if (error instanceof AgentAuthError && error.code === 'STATE_UNSAFE') throw error;
             throw authError('KEY_UNAVAILABLE');
@@ -446,12 +527,7 @@ export function createDevFileKeyStore(options) {
             if (existing) return publicJwk(existing);
             const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
             const pem = privateKey.export({ type: 'pkcs8', format: 'pem' });
-            try {
-                atomicWrite(directory, `${keyId}.pem`, pem);
-            } catch (error) {
-                if (loadPrivate(keyId, false)) return publicJwk(/** @type {crypto.KeyObject} */ (loadPrivate(keyId, true)));
-                throw error;
-            }
+            atomicWrite(io, directory, `${keyId}.pem`, pem);
             return publicJwk(/** @type {crypto.KeyObject} */ (loadPrivate(keyId, true)));
         },
         /**

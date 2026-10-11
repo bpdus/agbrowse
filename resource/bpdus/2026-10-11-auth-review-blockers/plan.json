@@ -1,0 +1,104 @@
+{
+  "schema_version": 2,
+  "domain": "refactor",
+  "summary": "Fix paired-device key durability, revocation persistence, and storage path checks from the Codex review.",
+  "status": "READY",
+  "questions": [],
+  "verification": [
+    "npx vitest run test/unit/agent-auth-durability.test.mjs test/unit/agent-auth.test.mjs"
+  ],
+  "risks": [
+    "A failed save can leave a renamed file on disk while the call throws."
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Propagate key directory fsync failure",
+      "files": [
+        "skills/browser/agent-auth-store.mjs",
+        "test/unit/agent-auth-durability.test.mjs"
+      ],
+      "target": "ensureKey",
+      "depends_on": "none",
+      "change": "Do not reload a key and return success when directory fsync fails after rename.",
+      "effect": "ensureKey throws STATE_UNSAFE after an injected directory fsync failure.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "A caller would treat an undurable signing key as saved.",
+        "test_decision": "add",
+        "test_reason": "Existing tests cannot inject a directory fsync failure after rename.",
+        "subject": "ensureKey directory fsync failure",
+        "procedure": "Inject fsyncSync failure for a directory fd and call ensureKey.",
+        "pass_criterion": "The call throws STATE_UNSAFE and does not return a public key."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Fail closed on revocation save",
+      "files": [
+        "skills/browser/agent-auth.mjs",
+        "test/unit/agent-auth-durability.test.mjs"
+      ],
+      "target": "revokeDevice",
+      "depends_on": 1,
+      "change": "Mark the device revoked before save and merge disk revocations before every later save.",
+      "effect": "Existing tokens are rejected after a failed save, and a disk revocation survives a later save.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "A failed revocation would keep accepting tokens or erase a revocation already on disk.",
+        "test_decision": "add",
+        "test_reason": "Existing tests only cover a successful revocation save.",
+        "subject": "revocation save failure and disk reconcile",
+        "procedure": "Inject file and directory fsync failures during revoke, then save again. Also write a revocation to disk and pair another device.",
+        "pass_criterion": "Tokens are rejected and the revoked device stays revoked on disk."
+      }
+    },
+    {
+      "id": 3,
+      "title": "Reject unsafe storage paths before writes",
+      "files": [
+        "skills/browser/agent-auth-store.mjs",
+        "test/unit/agent-auth-durability.test.mjs"
+      ],
+      "target": "assertStoragePath",
+      "depends_on": 1,
+      "change": "lstat every ancestor and recheck directory owner and mode 0700 before each write.",
+      "effect": "Symlinked ancestors and group-writable directories are rejected before bytes change.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "A symlinked ancestor or loosened directory mode could redirect or expose state.",
+        "test_decision": "add",
+        "test_reason": "Existing checks only lstat the final directory at open.",
+        "subject": "ancestor symlink and directory mode",
+        "procedure": "Use a real ancestor symlink, an injected parent symlink, injected mode and uid, and chmod 0770 before confirm.",
+        "pass_criterion": "Each case throws STATE_UNSAFE and an existing state file is unchanged."
+      }
+    },
+    {
+      "id": 4,
+      "title": "Remove alternate approval paths and cap expired challenges",
+      "files": [
+        "docs/bpdus/APPROVAL-FLOW.md",
+        "skills/browser/agent-auth.mjs",
+        "test/unit/agent-auth-durability.test.mjs"
+      ],
+      "target": "approval flow and expiredChallenges",
+      "depends_on": "none",
+      "change": "State that approval happens only on the tailnet page and bound expired challenge ids to 1024.",
+      "effect": "The doc no longer treats chat as a decision path, and the expired id set cannot grow without limit.",
+      "verification": {
+        "method": "automated",
+        "risk": "medium",
+        "risk_reason": "An unbounded set can grow with expired challenges, and the doc still described chat decisions.",
+        "test_decision": "add",
+        "test_reason": "The cap is new behavior. The doc change is checked by reading the edited section.",
+        "subject": "expired challenge bound",
+        "procedure": "Issue and expire 1025 challenges, then exchange the oldest and the next id.",
+        "pass_criterion": "The oldest id is AUTH_INVALID and a retained id is AUTH_EXPIRED."
+      }
+    }
+  ]
+}

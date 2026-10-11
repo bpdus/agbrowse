@@ -313,7 +313,98 @@ export function createAuthService(options) {
     const issueTimes = new Map();
     const usedChallenges = new Set();
     const expiredChallenges = new Set();
+    const maxRememberedChallenges = 1024;
     let closed = false;
+
+    /**
+     * @param {string} id
+     */
+    function rememberExpired(id) {
+        expiredChallenges.add(id);
+        while (expiredChallenges.size > maxRememberedChallenges) {
+            const oldest = expiredChallenges.values().next().value;
+            if (!oldest) break;
+            expiredChallenges.delete(oldest);
+        }
+    }
+
+    /**
+     * Revocation is sticky. A disk record wins over a stale in-memory device,
+     * and an in-memory revocation is not cleared by an older disk record.
+     * @param {Record<string, any>} primary
+     * @param {Record<string, any>} disk
+     */
+    function mergeStickyRevocations(primary, disk) {
+        const merged = structuredClone(primary);
+        for (const [deviceId, diskDevice] of Object.entries(disk.devices ?? {})) {
+            if (!diskDevice?.revoked) continue;
+            const local = merged.devices[deviceId];
+            if (!local) {
+                merged.devices[deviceId] = structuredClone(diskDevice);
+                continue;
+            }
+            local.revoked = true;
+            if (diskDevice.epoch > local.epoch) local.epoch = diskDevice.epoch;
+        }
+        /** @type {Array<{ device_id: string, epoch: number, revoked_at: number }>} */
+        const revocations = [];
+        const seen = new Set();
+        /**
+         * @param {unknown} entryValue
+         */
+        const consider = (entryValue) => {
+            if (entryValue === null || typeof entryValue !== 'object') return;
+            const entry = /** @type {{ device_id?: string, epoch?: number, revoked_at?: number }} */ (entryValue);
+            if (typeof entry.device_id !== 'string') return;
+            const device = merged.devices[entry.device_id];
+            if (!device?.revoked || device.epoch !== entry.epoch) return;
+            const key = `${entry.device_id}:${entry.epoch}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            revocations.push({
+                device_id: entry.device_id,
+                epoch: /** @type {number} */ (entry.epoch),
+                revoked_at: /** @type {number} */ (entry.revoked_at),
+            });
+        };
+        for (const entry of disk.revocations ?? []) consider(entry);
+        for (const entry of primary.revocations ?? []) consider(entry);
+        merged.revocations = revocations;
+        return merged;
+    }
+
+    /**
+     * @param {Record<string, any> | null} disk
+     * @param {Record<string, any>} candidate
+     */
+    function assertSameIdentity(disk, candidate) {
+        if (!disk) return;
+        if (disk.gateway_id !== gatewayId || disk.audience !== audience || disk.resource !== resource) {
+            throw authError('STATE_UNSAFE');
+        }
+        if (disk.signing_key_id !== candidate.signing_key_id) throw authError('STATE_UNSAFE');
+        const diskKey = disk.public_key ?? {};
+        const candidateKey = candidate.public_key ?? {};
+        if (diskKey.x !== candidateKey.x || diskKey.y !== candidateKey.y) throw authError('STATE_UNSAFE');
+    }
+
+    /**
+     * Reload disk revocations before replacing the file so a revocation that
+     * landed on disk cannot be overwritten by stale memory.
+     * @param {Record<string, any>} next
+     */
+    function commitState(next) {
+        const disk = options.stateStore.load();
+        let candidate = next;
+        if (disk) {
+            assertSameIdentity(disk, next);
+            candidate = mergeStickyRevocations(next, disk);
+            if (state) state = mergeStickyRevocations(state, disk);
+        }
+        options.stateStore.save(candidate);
+        state = candidate;
+        return candidate;
+    }
 
     function assertOpen() {
         if (closed) throw authError('STATE_UNSAFE');
@@ -340,8 +431,7 @@ export function createAuthService(options) {
                 devices: {},
                 revocations: [],
             };
-            options.stateStore.save(fresh);
-            state = fresh;
+            commitState(fresh);
             return;
         }
         if (loaded.gateway_id !== gatewayId || loaded.audience !== audience || loaded.resource !== resource) {
@@ -384,7 +474,7 @@ export function createAuthService(options) {
         for (const [id, challenge] of challenges) {
             if (at >= challenge.exp) {
                 challenges.delete(id);
-                expiredChallenges.add(id);
+                rememberExpired(id);
             }
         }
     }
@@ -511,8 +601,7 @@ export function createAuthService(options) {
             revoked: false,
             created_at: at,
         };
-        options.stateStore.save(next);
-        state = next;
+        commitState(next);
         pendings.delete(pending.pending_id);
         return {
             device_id: deviceId,
@@ -584,7 +673,7 @@ export function createAuthService(options) {
         if (challenge.device_id !== device.device_id) throw authError('AUTH_INVALID');
         if (at >= challenge.exp) {
             challenges.delete(challengeId);
-            expiredChallenges.add(challengeId);
+            rememberExpired(challengeId);
             throw authError('AUTH_EXPIRED');
         }
         const payload = verifiedPayload(input.proof, CHALLENGE_HEADER_JSON, device.public_key);
@@ -671,12 +760,18 @@ export function createAuthService(options) {
             epoch: next.devices[deviceId].epoch,
             revoked_at: at,
         });
-        options.stateStore.save(next);
         state = next;
         for (const [id, challenge] of challenges) {
             if (challenge.device_id === deviceId) challenges.delete(id);
         }
-        return { device_id: deviceId, epoch: next.devices[deviceId].epoch, revoked: true };
+        let saved;
+        try {
+            saved = commitState(next);
+        } catch (error) {
+            state = mergeStickyRevocations(state ?? next, next);
+            throw error;
+        }
+        return { device_id: deviceId, epoch: saved.devices[deviceId].epoch, revoked: true };
     }
 
     function close() {
