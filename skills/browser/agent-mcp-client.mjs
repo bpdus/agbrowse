@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import { createTokenClient, createHttpsTransport, createLoopbackHttpTransport } from './agent-auth.mjs';
-import { createDevFileKeyStore } from './agent-auth-store.mjs';
+import { AUTH_ERROR_MESSAGES, createDevFileKeyStore } from './agent-auth-store.mjs';
 import { MCP_PROTOCOL_VERSION } from './agent-mcp.mjs';
 import { READ_ERROR_MESSAGES, readError } from './agent-read-error.mjs';
 
@@ -214,9 +214,59 @@ function postRaw(target, payload, headers) {
 }
 
 /**
+ * Map a gateway error to the client's fixed public error envelope.
+ * @param {unknown} request
+ * @param {any} parsed
+ * @param {'AUTH_INVALID' | 'INTERNAL'} [unknownCode]
+ */
+export function mapGatewayError(request, parsed, unknownCode = 'AUTH_INVALID') {
+    const code = [parsed?.error?.data?.code, parsed?.error?.code].find((candidate) => (
+        typeof candidate === 'string'
+        && (Object.hasOwn(READ_ERROR_MESSAGES, candidate) || Object.hasOwn(AUTH_ERROR_MESSAGES, candidate))
+    )) ?? unknownCode;
+    const failureMessage = Object.hasOwn(READ_ERROR_MESSAGES, code)
+        ? READ_ERROR_MESSAGES[/** @type {keyof typeof READ_ERROR_MESSAGES} */ (code)]
+        : AUTH_ERROR_MESSAGES[/** @type {keyof typeof AUTH_ERROR_MESSAGES} */ (code)];
+    const id = request && typeof request === 'object' && 'id' in request
+        ? /** @type {{ id?: unknown }} */ (request).id ?? null
+        : null;
+    return {
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32000, message: failureMessage, data: { code } },
+    };
+}
+
+/**
+ * Keep successful results intact while sanitizing JSON-RPC errors, including those returned with HTTP 2xx.
+ * @param {unknown} request
+ * @param {number} status
+ * @param {any} parsed
+ */
+export function mapGatewayResponse(request, status, parsed) {
+    const hasError = parsed !== null && typeof parsed === 'object' && Object.hasOwn(parsed, 'error');
+    if (status >= 200 && status < 300) {
+        return hasError ? mapGatewayError(request, parsed, 'INTERNAL') : parsed;
+    }
+    return mapGatewayError(request, parsed);
+}
+
+/**
  * @param {{ record: any, keyStore: { sign: (id: string, bytes: Buffer) => Buffer, close?: () => void }, gatewayUrl: string, now?: () => number }} options
  */
 export function connectMcpHttp(options) {
+    try {
+        return createMcpHttpClient(options);
+    } catch (error) {
+        try { options.keyStore.close?.(); } catch { /* already closed */ }
+        throw error;
+    }
+}
+
+/**
+ * @param {{ record: any, keyStore: { sign: (id: string, bytes: Buffer) => Buffer, close?: () => void }, gatewayUrl: string, now?: () => number }} options
+ */
+function createMcpHttpClient(options) {
     const origin = assertGatewayUrl(options.gatewayUrl, options.record.audience);
     const gateway = new URL(origin);
     const transport = gateway.protocol === 'http:'
@@ -238,6 +288,7 @@ export function connectMcpHttp(options) {
     });
     /** @type {string | null} */
     let mcpSessionId = null;
+    let closed = false;
 
     return {
         /**
@@ -265,19 +316,16 @@ export function connectMcpHttp(options) {
             } catch {
                 throw readError('INTERNAL');
             }
-            if (response.status >= 200 && response.status < 300) return parsed;
-            const code = typeof parsed?.error?.code === 'string' && Object.hasOwn(READ_ERROR_MESSAGES, parsed.error.code)
-                ? parsed.error.code
-                : 'AUTH_INVALID';
-            const failure = readError(code);
-            return {
-                jsonrpc: '2.0',
-                id: /** @type {{ id?: unknown }} */ (message).id ?? null,
-                error: { code: -32000, message: failure.message, data: { code: failure.code } },
-            };
+            return mapGatewayResponse(message, response.status, parsed);
         },
         close() {
-            tokens.close();
+            if (closed) return;
+            closed = true;
+            try {
+                tokens.close();
+            } finally {
+                options.keyStore.close?.();
+            }
         },
     };
 }
@@ -306,17 +354,42 @@ function parseArgs(argv) {
 }
 
 /**
- * @param {{ argv?: string[], stdin?: NodeJS.ReadableStream, stdout?: import('node:stream').Writable, stderr?: import('node:stream').Writable, exit?: (code: number) => void }} [options]
+ * @param {{ argv?: string[], stdin?: NodeJS.ReadableStream, stdout?: import('node:stream').Writable, stderr?: import('node:stream').Writable, exit?: (code: number) => void, signalSource?: { on: Function, off?: Function, removeListener?: Function } }} [options]
  */
 export async function runMcpStdioClient(options = {}) {
     const argv = options.argv ?? process.argv.slice(2);
     const stdout = options.stdout ?? process.stdout;
     const stderr = options.stderr ?? process.stderr;
     const exit = options.exit ?? ((code) => { process.exitCode = code; });
-    /** @type {{ close?: () => void } | null} */
+    /** @type {{ sign: (id: string, bytes: Buffer) => Buffer, close?: () => void } | null} */
     let keys = null;
-    /** @type {{ close?: () => void } | null} */
+    /** @type {{ request: (message: unknown) => Promise<any>, close?: () => void } | null} */
     let client = null;
+    /** @type {import('node:readline').Interface | null} */
+    let lines = null;
+    /** @type {130 | 143 | null} */
+    let signalCode = null;
+    /** @type {(code: 130 | 143) => void} */
+    let signalResolve = () => {};
+    const signaled = new Promise((resolve) => {
+        signalResolve = resolve;
+    });
+    const signalSource = options.signalSource ?? process;
+    const closeStores = () => {
+        try { client?.close(); } catch { /* already closed */ }
+        try { keys?.close(); } catch { /* already closed */ }
+    };
+    const onSignal = (signal) => {
+        if (signalCode !== null) return;
+        signalCode = signal === 'SIGINT' ? 130 : 143;
+        try { lines?.close(); } catch { /* input already closed */ }
+        closeStores();
+        signalResolve(signalCode);
+    };
+    const onSigint = () => onSignal('SIGINT');
+    const onSigterm = () => onSignal('SIGTERM');
+    signalSource.on('SIGINT', onSigint);
+    signalSource.on('SIGTERM', onSigterm);
     try {
         const args = parseArgs(argv);
         if (args.help) {
@@ -329,8 +402,9 @@ export async function runMcpStdioClient(options = {}) {
         keys = createDevFileKeyStore({ directory: args.keyDir });
         client = connectMcpHttp({ record, keyStore: keys, gatewayUrl: args.gatewayUrl });
         const input = options.stdin ?? process.stdin;
-        const lines = readline.createInterface({ input, crlfDelay: Infinity });
+        lines = readline.createInterface({ input, crlfDelay: Infinity });
         for await (const line of lines) {
+            if (signalCode !== null) break;
             if (!line.trim()) continue;
             /** @type {any} */
             let message;
@@ -340,12 +414,22 @@ export async function runMcpStdioClient(options = {}) {
                 stderr.write('agbrowse-mcp-client: error code=INVALID_ARGUMENTS\n');
                 continue;
             }
-            const response = await client.request(message);
+            const interrupted = Symbol('interrupted');
+            const response = await Promise.race([
+                client.request(message),
+                signaled.then(() => interrupted),
+            ]);
+            if (response === interrupted || signalCode !== null) break;
             if (response) stdout.write(`${JSON.stringify(response)}\n`);
         }
-        exit(0);
-        return 0;
+        const status = signalCode ?? 0;
+        exit(status);
+        return status;
     } catch (error) {
+        if (signalCode !== null) {
+            exit(signalCode);
+            return signalCode;
+        }
         const code = error && typeof /** @type {{ code?: string }} */ (error).code === 'string'
             && Object.hasOwn(READ_ERROR_MESSAGES, /** @type {{ code: string }} */ (error).code)
             ? /** @type {{ code: string }} */ (error).code
@@ -354,8 +438,14 @@ export async function runMcpStdioClient(options = {}) {
         exit(1);
         return 1;
     } finally {
-        try { client?.close(); } catch { /* already closed */ }
-        try { keys?.close(); } catch { /* already closed */ }
+        if (typeof signalSource.off === 'function') {
+            signalSource.off('SIGINT', onSigint);
+            signalSource.off('SIGTERM', onSigterm);
+        } else if (typeof signalSource.removeListener === 'function') {
+            signalSource.removeListener('SIGINT', onSigint);
+            signalSource.removeListener('SIGTERM', onSigterm);
+        }
+        closeStores();
     }
 }
 

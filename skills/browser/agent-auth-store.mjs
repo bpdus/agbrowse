@@ -21,6 +21,7 @@ export const AUTH_ERROR_MESSAGES = Object.freeze({
     VERSION_UNSUPPORTED: 'Protocol version is not supported.',
     RATE_LIMITED: 'Rate limit was reached.',
     STATE_UNSAFE: 'Stored state is not safe to use.',
+    STATE_LOCK_STALE: 'The writer lock is stale; remove the exact lock file path shown in the error message manually.',
     KEY_UNAVAILABLE: 'Signing key is unavailable.',
 });
 
@@ -176,6 +177,61 @@ function acquireLock(io, directory) {
             0o600,
         );
     } catch (error) {
+        if (/** @type {{ code?: string }} */ (error).code === 'EEXIST') {
+            let existingFd;
+            try {
+                const original = io.lstatSync(lockPath);
+                if (original.isSymbolicLink() || !original.isFile() || original.uid !== process.getuid()
+                    || (original.mode & 0o777) !== 0o600) throw authError('STATE_UNSAFE');
+                existingFd = io.openSync(lockPath, io.constants.O_RDONLY | io.constants.O_NOFOLLOW);
+                const opened = io.fstatSync(existingFd);
+                if (!opened.isFile() || opened.uid !== process.getuid() || (opened.mode & 0o777) !== 0o600
+                    || opened.dev !== original.dev || opened.ino !== original.ino) throw authError('STATE_UNSAFE');
+                const contents = String(io.readFileSync(existingFd, 'utf8'));
+                const match = /^([1-9]\d*)\n?$/.exec(contents);
+                if (!match) throw authError('STATE_UNSAFE');
+                const pid = Number(match[1]);
+                if (!Number.isSafeInteger(pid)) throw authError('STATE_UNSAFE');
+                let stale = false;
+                try {
+                    process.kill(pid, 0);
+                } catch (killError) {
+                    stale = /** @type {{ code?: string }} */ (killError).code === 'ESRCH';
+                }
+                if (stale) {
+                    const current = io.lstatSync(lockPath);
+                    if (current.isSymbolicLink() || !current.isFile() || current.dev !== original.dev || current.ino !== original.ino) {
+                        throw authError('STATE_UNSAFE');
+                    }
+                    throw new AgentAuthError(
+                        'STATE_LOCK_STALE',
+                        `The writer lock owner is no longer running. Remove "${lockPath}" manually before retrying.`,
+                    );
+                }
+            } catch (lockError) {
+                throw mapFs(lockError);
+            } finally {
+                if (existingFd !== undefined) {
+                    try { io.closeSync(existingFd); } catch { /* already closed */ }
+                }
+            }
+        }
+        throw mapFs(error);
+    }
+    let owner;
+    try {
+        owner = io.fstatSync(fd);
+        io.fchmodSync(fd, 0o600);
+        io.writeFileSync(fd, `${process.pid}\n`);
+    } catch (error) {
+        try { io.closeSync(fd); } catch { /* already closed */ }
+        try {
+            if (!owner) throw error;
+            const stat = io.lstatSync(lockPath);
+            if (stat.isFile() && stat.uid === process.getuid() && stat.dev === owner.dev && stat.ino === owner.ino) {
+                io.unlinkSync(lockPath);
+            }
+        } catch { /* incomplete lock could not be safely removed */ }
         throw mapFs(error);
     }
     let released = false;
@@ -185,7 +241,10 @@ function acquireLock(io, directory) {
         try { io.closeSync(fd); } catch { /* already closed */ }
         try {
             const stat = io.lstatSync(lockPath);
-            if (!stat.isSymbolicLink()) io.unlinkSync(lockPath);
+            if (!stat.isSymbolicLink() && stat.isFile() && stat.uid === process.getuid()
+                && (stat.mode & 0o777) === 0o600 && stat.dev === owner.dev && stat.ino === owner.ino) {
+                io.unlinkSync(lockPath);
+            }
         } catch { /* lock file already gone */ }
     };
 }
