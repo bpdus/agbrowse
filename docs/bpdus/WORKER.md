@@ -45,7 +45,7 @@ Naver 로그인이 필요하면 저장소 루트에서 `bin/bpdus/login-naver.sh
 
 로그인 스크립트는 `~/.agbrowse-bpdus/profile.lock`, `profile.lock.reclaiming`, 프로필의 `SingletonLock`, `SingletonSocket`, `SingletonCookie`가 있으면 실행을 거부한다. 잠금을 자동으로 지우지 않는다. Chrome의 마지막 창만 닫아도 macOS에서 Chrome 프로세스가 남을 수 있으므로, 워커를 다시 시작하기 전에 Chrome 메뉴에서 **Quit Google Chrome**을 선택한다.
 
-worker와 gateway가 모두 멈춰 있으면 `~/.agbrowse-bpdus/bin/start-in-herdr.sh`로 다시 시작한다. gateway가 계속 실행 중이면 전체 launcher가 거부하므로 기존 herdr worker pane에서 `node skills/browser/agent-worker.mjs`만 다시 실행한다.
+worker와 gateway가 모두 멈춰 있으면 `~/.agbrowse-bpdus/bin/start-in-herdr.sh`로 다시 시작한다. gateway가 계속 실행 중이면 전체 launcher가 거부하므로 기존 herdr worker pane에서 `cd ~/.agbrowse-bpdus/src && node skills/browser/agent-worker.mjs 2>&1 | tee -a ~/.agbrowse-bpdus/logs/worker.log`만 실행한다.
 
 ## 파이프 전송
 
