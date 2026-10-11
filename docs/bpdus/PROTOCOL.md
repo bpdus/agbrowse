@@ -3,7 +3,7 @@ note_type: spec
 content_mode: reference
 title: Agent Browser Gateway Protocol draft v0
 status: draft
-summary: MCP 전송, paired-device-v1 인증, 요청·결과 스키마, snapshot/ref, 승인 이벤트, 오류 코드, 버전 협상의 제안 계약이다.
+summary: 구현된 paired-device-v1 인증 계약과, 아직 구현하지 않은 MCP·승인 제안을 구분한다.
 created: 2026-10-11
 updated: 2026-10-11
 language: ko
@@ -15,11 +15,12 @@ related_notes:
   - ./README.md
   - ./BASELINE.md
   - ./APPROVAL-FLOW.md
+  - ./SERVE.md
 ---
 
 # Agent Browser Gateway Protocol draft v0
 
-이 문서는 에이전트와 iMac 브라우저 게이트웨이 사이의 통신 표준 **draft v0**이다. 제안 도메인 버전은 `0.1.0`이다. 아래 도구 이름, 필드, JSON 예시는 **제안 계약**이며 현재 코드에 구현되어 있지 않다. 정식 명칭은 확인 필요다.
+이 문서는 에이전트와 iMac 브라우저 게이트웨이 사이의 통신 표준 **draft v0**이다. 도메인 버전은 `0.1.0`이다. `paired-device-v1` 인증은 현재 checkout에 구현되어 있다. MCP 도구, snapshot, 승인 상태 머신은 아직 제안이며 이 저장소에 없다. 정식 명칭은 확인 필요다.
 
 Copyright (c) 2026 bpdus. 원 소프트웨어 저작권은 [루트 LICENSE](../../LICENSE)의 `Copyright (c) 2026 lidge-jun`을 따른다. 이 표시는 원 저작권을 대체하지 않는다.
 
@@ -43,22 +44,59 @@ Host와 Origin을 검증한다. 임의 CORS를 허용하지 않는다. Tailscale
 
 ## 인증 프로필 `paired-device-v1`
 
-MVP 인증은 프로젝트 확장 프로필 `paired-device-v1`이다. 자체 challenge 방식을 MCP 표준 OAuth로 표현하지 않는다. OAuth 호환 프로필은 후속이다.
+구현된 인증은 `paired-device-v1`이다. 이것을 MCP 표준 OAuth로 표현하지 않는다. OAuth, DPoP, 키 회전은 후속이다.
 
-제안 절차는 다음과 같다.
+모듈을 import해도 수신 소켓은 열리지 않는다. `start()`만 `127.0.0.1`에 붙는다. 다른 주소는 거부한다. 포그라운드 진입은 `node skills/browser/agent-gateway.mjs --port 7420`이다. 기본 포트는 7420이다. 인증 없는 `GET /healthz`는 `{"ok":true}`만 반환한다. 선택적 tailnet 공개는 [SERVE.md](./SERVE.md)를 따른다.
 
-1. 정재가 iMac 관리 화면에서 제한 시간 동안 페어링을 연다.
-2. 클라이언트가 기기별 P-256 키를 만들고 공개키를 제출한다.
-3. 양쪽에 지문과 일회성 확인 코드를 보여 정재가 기기를 확인한다.
-4. 게이트웨이가 `device_id`, 공개키, 권한, `device_epoch`를 저장한다.
-5. 클라이언트가 challenge를 요청하면 서버는 32바이트 난수와 30초 만료의 challenge를 발급한다.
-6. 클라이언트는 프로토콜 구분값, 서버 식별자, 기기 ID, challenge ID, nonce, 요청 권한, resource를 P-256으로 서명한다.
-7. 서버가 등록 상태, 서명, 만료, 권한을 검사하고 challenge를 원자적으로 소비한 뒤 5분 접속 토큰을 발급한다.
-8. 브리지는 약 4분에 새 challenge로 갱신한다. 폐기는 `device_epoch` 증가로 즉시 적용한다.
+인증 HTTP 경로는 다음뿐이다. `GET /healthz`는 위에서 적었다.
 
-macOS Keychain 접근 방식과 박스의 키 저장 방식은 확인 필요다. 잠금 상태에서 키에 닿지 못하면 평문 파일로 바꾸지 않고 중단한다.
+| 메서드와 경로 | 결과 |
+|---|---|
+| `POST /auth/pair` | 열린 페어링 창 안의 pending 등록 |
+| `POST /auth/challenge` | 활성 기기의 challenge |
+| `POST /auth/token` | proof가 맞으면 접속 토큰 |
 
-접속 토큰 제안 필드: `iss`, `aud`, `sub`, `device_id`, `scope`, `iat`, `exp`, `jti`, `device_epoch`. 토큰에 적힌 권한과 현재 서버 정책의 교집합만 허용한다.
+`/mcp`, 브라우저·세션 조작, 승인 경로는 없다. 페어링 창을 열고 닫기, 확인 코드 대조, 폐기는 프로세스 안 운영자 API다. 인증되지 않은 HTTP 관리 엔드포인트로 열지 않는다. 확인 코드는 응답 데이터로만 돌아가며 라이브러리 로그에 찍지 않는다.
+
+Tailscale 신원 헤더는 믿지 않는다. Host는 허용 목록과 정확히 같아야 한다. Origin이 있으면 허용된 값만 받는다. CORS 헤더는 붙이지 않는다. 본문은 JSON만 받고 16 KiB를 넘기면 거부한다. `aud`와 `resource`는 서버 설정값에 묶이며 요청 Host로 정하지 않는다.
+
+### 서명
+
+Compact JWS만 쓴다. `alg`는 `ES256`으로 고정하고, 서명은 64바이트 IEEE-P1363이다. 다른 알고리즘, 원격 키 참조, 개인 키 JWK 필드, P-256이 아닌 곡선은 거부한다.
+
+challenge proof 헤더는 다음 바이트와 같다.
+
+```text
+{"alg":"ES256","typ":"paired-device-v1+challenge"}
+```
+
+접속 토큰 헤더는 다음 바이트와 같다.
+
+```text
+{"alg":"ES256","typ":"paired-device-v1+access"}
+```
+
+payload는 아래 순서로 고정한 canonical UTF-8 JSON이다. JWS 서명 입력은 ASCII인 `base64url(header).base64url(payload)`다. scope 배열은 중복을 제거한 뒤 오름차순으로 두며, 시각은 정수 epoch 초다. proof의 payload 바이트는 서버가 저장한 challenge 바이트와 같아야 한다.
+
+challenge payload 순서: `protocol_version`, `purpose`, `gateway_id`, `aud`, `device_id`, `challenge_id`, `nonce`, `resource`, `requested_scopes`, `iat`, `exp`, `expires_in`.
+
+`protocol_version`은 `"0.1.0"`, `purpose`는 `"paired-device-v1"`이다. `nonce`는 32바이트를 base64url로 둔 값이다. `exp`는 `iat + 30`이고 `expires_in`은 30이다. `now >= exp`이면 만료다.
+
+접속 토큰 claim 순서: `iss`, `aud`, `sub`, `device_id`, `scope`, `iat`, `exp`, `jti`, `device_epoch`.
+
+`iss`는 gateway ID, `sub`와 `device_id`는 기기 ID, `exp`는 `iat + 300`이다. 서버 서명 키는 기기 키와 따로 둔다. 발급 응답의 토큰 자체가 인증된 결과다. 서명, 발급자, audience, 기기 바인딩, 시각, epoch를 검사한다. 유효 scope는 토큰 scope와 현재 기기 정책의 교집합이다. `iat`가 현재보다 30초를 넘겨 미래이면 거부한다. 그 여유로 만료 시각을 늘리지 않는다.
+
+지문은 `{"crv":"P-256","kty":"EC","x":"...","y":"..."}`의 SHA-256을 base64url로 둔 값이다.
+
+### 한도
+
+페어링 창 기본 TTL은 120초다. pending 등록은 32개까지다. 확인 코드 시도는 pending마다 5회다. 기기마다 60초에 challenge 30회까지 발급한다. 메모리에 두는 미사용 challenge는 32개까지다. 재시작하면 페어링 창과 challenge는 사라진다. 등록, 서버 신원, 폐기 목록은 남는다. 다시 페어링하면 새 `device_id`를 만들고, 폐기된 항목은 그대로 둔다.
+
+클라이언트는 페어링 때 gateway ID, audience, 서버 공개 키를 고정한다. 토큰은 메모리에만 둔다. 발급 뒤 240초가 되면 사람 입력 없이 새 challenge와 토큰을 받는다. 동시에 온 갱신은 진행 중인 하나를 공유한다. 갱신이 실패하면 만료된 토큰을 돌려주지 않는다. 폐기는 epoch를 올리고 곧바로 challenge, proof, 이미 발급한 토큰을 거부한다.
+
+운영 전송은 HTTPS와 일반 인증서 검증을 요구한다. 테스트만 루프백 HTTP를 명시적으로 넣을 수 있다. Keychain 연동은 확인 필요이며 구현되어 있지 않다. `createDevFileKeyStore`는 개발용으로 명시해서 고른다. 운영 저장소가 없다고 파일로 자동 전환하지 않는다.
+
+상태 파일은 버전 1 JSON이다. gateway 신원과 공개 키, 기기, 부여 scope, epoch, 폐기 목록을 담는다. 개인 키는 키 저장소에만 둔다. 디렉터리는 `0700`, 파일과 임시 파일은 `0600`이다. 심볼릭 링크, 다른 소유자, 느슨한 권한, 읽을 수 없는 상태, 지원하지 않는 버전은 실패로 닫는다. 쓰기는 임시 파일, flush, rename, 디렉터리 flush 순서다. 상태 디렉터리의 쓰기 잠금은 하나이며, 잠긴 이유를 추정해 빼앗지 않는다. 저장이 실패하면 등록이나 폐기 성공을 보고하지 않는다. 신원을 자동으로 다시 만들거나 깨진 상태를 덮어쓰지 않는다.
 
 ## 요청 공통 필드
 
@@ -76,37 +114,41 @@ macOS Keychain 접근 방식과 박스의 키 저장 방식은 확인 필요다.
 
 ## 제안 JSON 예시
 
-서명 값과 ID는 설명용이다. 스키마는 제안 계약이다.
+아래 challenge·token 예시는 구현된 인증 본문이다. 그 다음 MCP 예시는 아직 구현하지 않은 제안이다. 인증 요청에 없는 필드를 넣으면 거부한다.
 
-### challenge
+### `POST /auth/challenge` 응답의 서명 payload
 
 ```json
 {
   "protocol_version": "0.1.0",
-  "challenge_id": "ch_01",
   "purpose": "paired-device-v1",
   "gateway_id": "gw_imac",
-  "device_id": "dev_grokbot",
-  "nonce": "<base64url-32-random-bytes>",
-  "resource": "https://<gateway-host>/mcp",
+  "aud": "https://gw.example/mcp",
+  "device_id": "dev_example",
+  "challenge_id": "ch_example",
+  "nonce": "<base64url-32-bytes>",
+  "resource": "https://gw.example/mcp",
   "requested_scopes": ["browser:read", "cart:write"],
+  "iat": 1700000000,
+  "exp": 1700000030,
   "expires_in": 30
 }
 ```
 
-### proof
+HTTP 응답은 이 객체의 UTF-8 바이트를 base64url로 둔 `payload`를 준다. 클라이언트는 그 바이트를 그대로 서명한다.
+
+### `POST /auth/token`
 
 ```json
 {
   "protocol_version": "0.1.0",
-  "request_id": "req_auth_01",
-  "challenge_id": "ch_01",
-  "device_id": "dev_grokbot",
-  "proof": "<compact-JWS-over-the-complete-challenge>"
+  "challenge_id": "ch_example",
+  "device_id": "dev_example",
+  "proof": "<compact-jws>"
 }
 ```
 
-서버는 요청자가 지정한 임의 키 URL이나 `alg` 값을 신뢰하지 않는다. 허용 알고리즘 목록은 서버가 고정한다.
+성공 응답은 `token`, `token_type` `"Bearer"`, `expires_in` 300을 포함한다. 서버는 원격 키 URL이나 다른 `alg`를 받지 않는다.
 
 ### MCP `tools/call` 관찰
 
@@ -406,10 +448,19 @@ ref는 그 snapshot에 종속된다. 새 snapshot, 탐색, 새로고침, 관련 
 
 | 코드 | 의미 | 처리 |
 |---|---|---|
-| `AUTH_EXPIRED` | 접속 토큰이 만료됐다. | 브리지가 갱신한 뒤 같은 `idempotency_key`로 재요청한다. |
-| `DEVICE_REVOKED` | 기기가 폐기됐다. | 연결을 닫고 자동 복구하지 않는다. |
-| `DOMAIN_DENIED` | origin이 허용 목록 밖이다. | 작업을 중단한다. |
-| `ACTION_DENIED` | 도구 또는 동작이 권한 밖이다. | 작업을 중단한다. |
+| `PAIRING_CLOSED` | 페어링 창이 없거나 닫혔다. | 등록하지 않는다. |
+| `PAIRING_EXPIRED` | 페어링 창이나 pending이 만료됐다. | 등록하지 않는다. |
+| `AUTH_INVALID` | 서명, audience, 기기, epoch, 형식이 맞지 않는다. | 토큰을 발급하거나 수락하지 않는다. |
+| `AUTH_EXPIRED` | challenge 또는 접속 토큰이 만료됐다. | 만료된 토큰을 돌려주지 않는다. |
+| `CHALLENGE_USED` | challenge를 이미 소비했다. | 두 번째 proof는 거부한다. |
+| `DEVICE_REVOKED` | 기기가 폐기됐다. | challenge, proof, 기존 토큰을 거부한다. |
+| `SCOPE_DENIED` | 요청 scope가 허용 밖이다. | 그 권한으로 발급하지 않는다. |
+| `VERSION_UNSUPPORTED` | 상태 또는 프로토콜 버전을 지원하지 않는다. | 상태를 덮어쓰지 않고 거부한다. |
+| `RATE_LIMITED` | pending, challenge 저장, 발급 속도를 넘겼다. | 새로 만들지 않는다. |
+| `STATE_UNSAFE` | 경로, 권한, 잠금, 상태 내용이 안전하지 않다. | 성공으로 보고하지 않는다. |
+| `KEY_UNAVAILABLE` | 서명 키를 쓸 수 없다. | 파일 저장소로 자동 전환하지 않는다. |
+| `DOMAIN_DENIED` | origin이 허용 목록 밖이다. | 작업을 중단한다. 승인 제안용이며 인증 게이트웨이는 구현하지 않았다. |
+| `ACTION_DENIED` | 도구 또는 동작이 권한 밖이다. | 작업을 중단한다. 승인 제안용이며 인증 게이트웨이는 구현하지 않았다. |
 | `STALE_REF` | ref가 현재 snapshot에 속하지 않는다. | 다시 관찰한다. |
 | `STATE_CHANGED` | 문서나 checkout이 바뀌었다. | 다시 관찰한다. 승인과 다르면 재승인한다. |
 | `APPROVAL_REQUIRED` | 쓰기에 승인이 필요하다. | `AWAITING_APPROVAL`과 `approval_id`를 반환한다. |
@@ -420,8 +471,7 @@ ref는 그 snapshot에 종속된다. 새 snapshot, 탐색, 새로고침, 관련 
 | `TRUST_EVIDENCE_INSUFFICIENT` | 중계 경로의 사용자 증거가 부족하다. | 토큰을 발급하지 않는다. |
 | `HUMAN_REQUIRED` | 로그인, MFA, 캡차 등 사람 조작이 필요하다. | 자동화로 우회하지 않는다. |
 | `SITE_UNSUPPORTED` | 검증하지 않은 흐름이다. | 사람에게 넘긴다. |
-| `OUTCOME_UNKNOWN` | 쓰기 결과를 확인하지 못했다. | 자동 재시도하지 않고 주문·전송을 조회한다. |
-| `VERSION_UNSUPPORTED` | 프로토콜 버전을 모른다. | 호환 버전 정보를 돌려주고 거부한다. |
+| `OUTCOME_UNKNOWN` | 쓰기 결과를 확인하지 못했다. | 자동 재시도하지 않고 주문·전송을 조회한다. 승인 제안용이며 인증 게이트웨이는 구현하지 않았다. |
 
 인증 실패는 HTTP 401로 둘 수 있다. 권한 부족은 적절한 HTTP 권한 오류와 위 코드로 함께 표현한다.
 
