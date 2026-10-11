@@ -54,6 +54,7 @@ function fakeWorker() {
                 return { session_id: sessionId, tab_id: 'tab-1', frame_id: 'frame_main', document_epoch: 1 };
             }
             if (op === 'browser.session.close') return { closed: true };
+            if (op === 'naver.login_status') return { status: 'logged_out', evidence: 'login_link' };
             const state = sessions.get(payload.session_id);
             if (!state) {
                 const error = new Error('super-secret-cookie-value');
@@ -198,23 +199,53 @@ describe('agent mcp dispatcher', () => {
         expect(source).not.toMatch(/\.click\(|\.fill\(|\.press\(|\.type\(|setInputFiles|playwright/);
     });
 
-    it('lists the four cart tools and requires both scopes before direct offline dispatch', async () => {
+    it('lists login status and keeps cart read and write scopes separate', async () => {
         const ctx = await startedSession();
         const before = ctx.worker.calls.length;
         const list = await handle(ctx.mcp, { jsonrpc: '2.0', id: 90, method: 'tools/list' }, { headers: ctx.headers });
         const tools = list.body.result.tools;
+        const loginStatus = tools.find((tool) => tool.name === 'naver.login_status');
+        expect(loginStatus.inputSchema.required).toEqual(['protocol_version', 'request_id', 'session_id']);
+        expect(loginStatus.inputSchema.additionalProperties).toBe(false);
+        expect(loginStatus.description).toContain('browser:read');
         expect(tools.map((tool) => tool.name).filter((name) => name.startsWith('naver.cart.') || name === 'naver.product.read')).toEqual([
             'naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set',
         ]);
         expect(tools.filter((tool) => tool.name.startsWith('naver.cart.')).every((tool) => tool.inputSchema.additionalProperties === false)).toBe(true);
-        const denied = await handle(ctx.mcp, toolCall(91, 'naver.cart.read', {
+
+        const login = await handle(ctx.mcp, toolCall(91, 'naver.login_status', {
+            protocol_version: '0.1.0', request_id: 'req_login_status', session_id: ctx.sessionId,
+        }), { headers: ctx.headers });
+        expect(login.body.result.structuredContent).toEqual({ status: 'logged_out', evidence: 'login_link' });
+        expect(login.body.result.content[0].text).toBe('{"status":"logged_out","evidence":"login_link"}');
+        expect(ctx.worker.calls.at(-1)).toEqual({ op: 'naver.login_status', payload: { session_id: ctx.sessionId } });
+        expect(JSON.stringify(login.body)).not.toMatch(/Fixture Private Name|example\.test|nidlogin|url=/i);
+
+        const cartRead = await handle(ctx.mcp, toolCall(92, 'naver.cart.read', {
+            protocol_version: '0.1.0', request_id: 'req_cart_read', session_id: ctx.sessionId,
+        }), { headers: ctx.headers });
+        const productRead = await handle(ctx.mcp, toolCall(93, 'naver.product.read', {
+            protocol_version: '0.1.0', request_id: 'req_product_read', session_id: ctx.sessionId,
+        }), { headers: ctx.headers });
+        expect(cartRead.body.result.isError).toBe(false);
+        expect(productRead.body.result.isError).toBe(false);
+
+        const denied = await handle(ctx.mcp, toolCall(94, 'naver.cart.prepare', {
             protocol_version: '0.1.0', request_id: 'req_cart_denied', session_id: ctx.sessionId,
+            product_ref: `pref_${'1'.repeat(24)}`, option_ids: ['blue'], quantity: 1, expected_unit_price: 12000,
         }), { headers: ctx.headers });
         expect(denied.status).toBe(403);
         expect(denied.body.error.code).toBe('SCOPE_DENIED');
-        expect(ctx.worker.calls.slice(before)).toEqual([]);
+        expect(ctx.worker.calls.slice(before).some((call) => call.op === 'naver.cart.prepare')).toBe(false);
 
-        const allowed = await handle(ctx.mcp, toolCall(92, 'naver.cart.set', {
+        const deniedSet = await handle(ctx.mcp, toolCall(95, 'naver.cart.set', {
+            protocol_version: '0.1.0', request_id: 'req_cart_set_denied', session_id: ctx.sessionId,
+            intent_id: `ci_${'2'.repeat(24)}`, idempotency_key: 'denied-1',
+        }), { headers: ctx.headers });
+        expect(deniedSet.status).toBe(403);
+        expect(deniedSet.body.error.code).toBe('SCOPE_DENIED');
+
+        const allowed = await handle(ctx.mcp, toolCall(96, 'naver.cart.set', {
             protocol_version: '0.1.0', request_id: 'req_cart_dry', session_id: ctx.sessionId,
             intent_id: `ci_${'1'.repeat(24)}`, idempotency_key: 'dry-1',
         }), {
@@ -242,8 +273,9 @@ describe('agent mcp dispatcher', () => {
         }), { headers: ctx.headers, auth });
         await blocker.entered;
         const cartCallStart = ctx.worker.calls.length;
-        const cartPending = handle(ctx.mcp, toolCall(94, 'naver.cart.read', {
+        const cartPending = handle(ctx.mcp, toolCall(94, 'naver.cart.prepare', {
             protocol_version: '0.1.0', request_id: 'req_cart_queued', session_id: ctx.sessionId,
+            product_ref: `pref_${'1'.repeat(24)}`, option_ids: ['blue'], quantity: 1, expected_unit_price: 12000,
         }), { headers: ctx.headers, auth });
         while (authCalls < 3) await new Promise((resolve) => setImmediate(resolve));
         scopesGranted = false;
@@ -252,7 +284,7 @@ describe('agent mcp dispatcher', () => {
         const denied = await cartPending;
         expect(denied.status).toBe(403);
         expect(denied.body.error.code).toBe('SCOPE_DENIED');
-        expect(ctx.worker.calls.slice(cartCallStart).some((call) => call.op === 'naver.cart.read')).toBe(false);
+        expect(ctx.worker.calls.slice(cartCallStart).some((call) => call.op === 'naver.cart.prepare')).toBe(false);
     });
 
     it('redacts listing output and rejects stale, cross-session, and restarted reads', async () => {

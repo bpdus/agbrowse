@@ -24,6 +24,7 @@ function socketDir() {
 describe('agent ipc', () => {
     it('cart operation allowlist offline', () => {
         expect(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set'].every(isAllowedWorkerOperation)).toBe(true);
+        expect(isAllowedWorkerOperation('naver.login_status')).toBe(true);
         expect(isAllowedWorkerOperation('naver.cart.checkout')).toBe(false);
         expect(isAllowedWorkerOperation('browser.evaluate')).toBe(false);
     });

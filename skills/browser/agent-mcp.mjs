@@ -35,6 +35,7 @@ const TOOL_NAMES = [
     'browser.session.close',
     'browser.observe',
     'naver.search.list',
+    'naver.login_status',
     'naver.search.result.read',
     'naver.product.read',
     'naver.cart.read',
@@ -43,6 +44,7 @@ const TOOL_NAMES = [
 ];
 
 const CART_TOOL_NAMES = new Set(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set']);
+const CART_WRITE_TOOL_NAMES = new Set(['naver.cart.prepare', 'naver.cart.set']);
 
 const TOOLS = [
     {
@@ -73,23 +75,28 @@ const TOOLS = [
         }),
     },
     {
+        name: 'naver.login_status',
+        description: 'Navigate to the fixed Naver homepage and return only a redacted login status enum. Requires browser:read.',
+        inputSchema: schema(['protocol_version', 'request_id', 'session_id'], {}),
+    },
+    {
         name: 'naver.search.result.read',
         description: 'Read one listing item already present in the current snapshot. Does not open the destination.',
         inputSchema: schema(['protocol_version', 'request_id', 'session_id', 'ref'], {}),
     },
     {
         name: 'naver.product.read',
-        description: 'Inspect the currently open supported product page. Read-only; requires browser:read and cart:write.',
+        description: 'Inspect the currently open supported product page. Read-only; requires browser:read.',
         inputSchema: schema(['protocol_version', 'request_id', 'session_id'], {}),
     },
     {
         name: 'naver.cart.read',
-        description: 'Inspect the currently open supported cart page. Read-only; requires browser:read and cart:write.',
+        description: 'Inspect the currently open supported cart page. Read-only; requires browser:read.',
         inputSchema: schema(['protocol_version', 'request_id', 'session_id'], {}),
     },
     {
         name: 'naver.cart.prepare',
-        description: 'Prepare an absolute target cart quantity. Inspection-only dry-run by default.',
+        description: 'Prepare an absolute target cart quantity. Requires browser:read and cart:write; inspection-only dry-run by default.',
         inputSchema: schema(['protocol_version', 'request_id', 'session_id', 'product_ref', 'option_ids', 'quantity', 'expected_unit_price'], {
             product_ref: { type: 'string', pattern: '^pref_[a-f0-9]{24}$' },
             option_ids: { type: 'array', maxItems: 12, items: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,128}$' } },
@@ -100,7 +107,7 @@ const TOOLS = [
     },
     {
         name: 'naver.cart.set',
-        description: 'Set an absolute target quantity from a prepared intent. Inspection-only dry-run by default.',
+        description: 'Set an absolute target quantity from a prepared intent. Requires browser:read and cart:write; inspection-only dry-run by default.',
         inputSchema: schema(['protocol_version', 'request_id', 'session_id', 'intent_id', 'idempotency_key'], {
             intent_id: { type: 'string', pattern: '^ci_[a-f0-9]{24}$' },
             idempotency_key: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9._:-]{1,64}$' },
@@ -391,7 +398,7 @@ export function createMcpDispatcher(options) {
         if (record.protocol_version !== DOMAIN_PROTOCOL_VERSION) {
             return toolFailure(message.id, requestId, undefined, 'VERSION_UNSUPPORTED', mcpSession.id, tool);
         }
-        if (CART_TOOL_NAMES.has(tool)
+        if (CART_WRITE_TOOL_NAMES.has(tool)
             && (!Array.isArray(principal?.scopes) || !principal.scopes.includes(READ_SCOPE) || !principal.scopes.includes(CART_WRITE_SCOPE))) {
             return authOutcome(403, 'SCOPE_DENIED', mcpSession.id, tool, requestId);
         }
@@ -485,10 +492,10 @@ export function createMcpDispatcher(options) {
 
                 // Check before the worker's durable idempotency lookup, then again
                 // after waiting for the shared per-session queue.
-                await assertCartPrincipal(refreshPrincipal, principal);
+                await assertToolPrincipal(refreshPrincipal, principal, CART_WRITE_TOOL_NAMES.has(tool));
                 const result = await mutex.runExclusive(sessionId, async () => {
                     requireBinding(principal, mcpSession.id, sessionId);
-                    await assertCartPrincipal(refreshPrincipal, principal);
+                    await assertToolPrincipal(refreshPrincipal, principal, CART_WRITE_TOOL_NAMES.has(tool));
                     const output = await invoke(tool, { ...cartPayload, worker_id: workerId });
                     return output;
                 });
@@ -550,6 +557,21 @@ export function createMcpDispatcher(options) {
                     return commitSnapshot(principal, mcpSession, requestId, { ...current, session_id: sessionId }, null, limit);
                 });
                 return toolOutcome(message.id, snapshot, false, mcpSession.id, requestId, tool);
+            }
+
+            if (tool === 'naver.login_status') {
+                if (unknownField(record, ['protocol_version', 'request_id', 'session_id'])) throw readError('INVALID_ARGUMENTS');
+                await assertToolPrincipal(refreshPrincipal, principal, false);
+                const result = await mutex.runExclusive(sessionId, async () => {
+                    requireBinding(principal, mcpSession.id, sessionId);
+                    await assertToolPrincipal(refreshPrincipal, principal, false);
+                    return invoke('naver.login_status', { session_id: sessionId });
+                });
+                const status = ['logged_in', 'logged_out', 'unknown'].includes(result?.status) ? result.status : 'unknown';
+                let evidence = 'none';
+                if (status === 'logged_out' && result?.evidence === 'login_link') evidence = 'login_link';
+                if (status === 'logged_in' && ['logout_control', 'account_menu'].includes(result?.evidence)) evidence = result.evidence;
+                return toolOutcome(message.id, { status, evidence }, false, mcpSession.id, requestId, tool);
             }
 
             if (unknownField(record, ['protocol_version', 'request_id', 'session_id', 'ref'])) throw readError('INVALID_ARGUMENTS');
@@ -744,12 +766,13 @@ export function createMcpDispatcher(options) {
     return { handle, dropMcpSession, dropAll };
 }
 
-/** Revalidate both scopes and the device epoch after any queue wait. */
-async function assertCartPrincipal(refreshPrincipal, original) {
+/** Revalidate the read scope, optional write scope, device, and epoch after queue waits. */
+async function assertToolPrincipal(refreshPrincipal, original, requireCartWrite) {
     let current;
     try { current = await refreshPrincipal(); } catch { throw readError('SCOPE_DENIED'); }
     if (current?.device_id !== original.device_id || current?.epoch !== original.epoch) throw readError('ACTION_DENIED');
-    if (!Array.isArray(current?.scopes) || !current.scopes.includes(READ_SCOPE) || !current.scopes.includes(CART_WRITE_SCOPE)) {
+    if (!Array.isArray(current?.scopes) || !current.scopes.includes(READ_SCOPE)
+        || (requireCartWrite && !current.scopes.includes(CART_WRITE_SCOPE))) {
         throw readError('SCOPE_DENIED');
     }
 }
