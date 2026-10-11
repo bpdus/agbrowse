@@ -948,7 +948,7 @@ export function createAgentRuntime(config) {
                             ? await binding.page.evaluate(readLoginStatusFromDocument)
                             : null;
                         if (!value || !['logged_in', 'logged_out', 'unknown'].includes(value.status)
-                            || !['login_link', 'logout_control', 'account_menu', 'none'].includes(value.evidence)) {
+                            || !['logout_link', 'login_link', 'none'].includes(value.evidence)) {
                             return { status: 'unknown', evidence: 'none' };
                         }
                         return { status: value.status, evidence: value.evidence };

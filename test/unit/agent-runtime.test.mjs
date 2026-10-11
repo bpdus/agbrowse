@@ -780,11 +780,11 @@ describe('agent-runtime', () => {
         };
         pages[0].evaluate = async (fn) => {
             expect(fn.name).toBe('readLoginStatusFromDocument');
-            return { status: 'logged_in', evidence: 'account_menu' };
+            return { status: 'logged_in', evidence: 'logout_link' };
         };
 
         const result = await runtime.dispatchRead('naver.login_status', { session_id: first.sessionId });
-        expect(result).toEqual({ status: 'logged_in', evidence: 'account_menu' });
+        expect(result).toEqual({ status: 'logged_in', evidence: 'logout_link' });
         expect(decisions.slice(0, 2).map(({ fetched, aborted }) => ({ fetched, aborted })))
             .toEqual([{ fetched: 1, aborted: false }, { fetched: 1, aborted: false }]);
         expect(decisions.slice(2).every(({ fetched, aborted }) => fetched === 0 && aborted)).toBe(true);

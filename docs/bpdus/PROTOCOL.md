@@ -116,7 +116,7 @@ challenge payload 순서: `protocol_version`, `purpose`, `gateway_id`, `aud`, `d
 
 `naver.login_status`는 `browser:read` scope만 요구한다. `protocol_version`, `request_id`, `session_id`만 받고, 현재 세션 탭을 고정 주소 `https://www.naver.com/`로 이동한다. 이 호출 중에만 해당 주소와 페이지 표시를 위한 `https://ssl.pstatic.net`, `https://s.pstatic.net` 정적 호스트의 GET/HEAD 요청을 허용한다. 리다이렉트도 같은 정책으로 검사하며, 쓰기 요청과 WebSocket은 계속 차단한다. 로그인 주소를 따라가거나 로그인 동작을 수행하지 않는다.
 
-MCP 결과는 `{"status":"logged_in|logged_out|unknown","evidence":"login_link|logout_control|account_menu|none"}` 두 필드뿐이다. 상단에 표시된 `nid.naver.com/nidlogin` 링크가 있으면 `logged_out`이다. 그 링크가 없고 표시된 로그아웃 컨트롤이나 계정 메뉴 표식이 있으면 `logged_in`이다. 나머지는 `unknown`이다. 이름, 이메일, URL, DOM 텍스트, 쿠키를 결과에 포함하지 않는다.
+MCP 결과는 `{"status":"logged_in|logged_out|unknown","evidence":"logout_link|login_link|none"}` 두 필드뿐이다. 문서 어디에서든 `nid.naver.com/nidlogin.logout` 링크 대상이 있으면 `logged_in`이다. 없고 `nid.naver.com/nidlogin.login` 링크 대상이 있으면 `logged_out`이다. 둘 다 있으면 `logged_in`이 우선하며, 대상 링크가 없으면 `unknown`이다. 이름, 이메일, URL, DOM 텍스트, 쿠키를 결과에 포함하지 않는다.
 
 ## 네이버 장바구니 도구
 
