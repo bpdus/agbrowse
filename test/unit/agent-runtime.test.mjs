@@ -748,6 +748,7 @@ describe('agent-runtime', () => {
         const pages = [makePage('login-status-one'), makePage('login-status-two')];
         let index = 0;
         made.context.newPage = async () => pages[index++];
+        trace.launchImpl = () => made.context;
         const runtime = createAgentRuntime();
         active = runtime;
         await runtime.start();
