@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { assertLoginNavigation, classifyLoginRequest, createLoginController, isLogoutUrl, waitForProfileRelease } from '../../skills/browser/agent-login.mjs';
+
+const oldGetComputedStyle = globalThis.getComputedStyle;
+afterEach(() => {
+    if (oldGetComputedStyle === undefined) delete globalThis.getComputedStyle;
+    else globalThis.getComputedStyle = oldGetComputedStyle;
+});
 
 describe('agent login policy', () => {
     it('blocks logout and non-allowlisted destinations before request handling', () => {
@@ -34,6 +40,7 @@ describe('agent login policy', () => {
 
     it('binds visible refs to their real selector elements when hidden inputs precede them', async () => {
         const dom = new JSDOM('<input type="hidden" name="csrf"><input name="username" placeholder="Username">', { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
+        globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
         dom.window.HTMLElement.prototype.getBoundingClientRect = function () { return this.type === 'hidden' ? { width: 0, height: 0 } : { width: 100, height: 20 }; };
         const selector = 'a,button,input,select,textarea,[role="button"],[role="link"],[tabindex]';
         const all = [...dom.window.document.querySelectorAll(selector)];
@@ -42,15 +49,11 @@ describe('agent login policy', () => {
             url: () => dom.window.location.href,
             on() {},
             evaluate: (fn) => dom.window.Function(`return (${fn.toString()})()`)(),
-            locator: () => ({
-                nth: (index) => {
-                    const element = all[index];
-                    return {
-                        evaluate: (fn) => fn(element),
-                        fill: async (value) => { filled = { element, value }; },
-                    };
-                },
-            }),
+        $$: async (selector) => [...dom.window.document.querySelectorAll(selector)].map((element) => ({
+            evaluate: async (fn) => fn(element),
+            fill: async (value) => { filled = { element, value }; },
+            dispose: async () => {},
+        })),
         };
         const controller = createLoginController(page);
         const { controls } = await controller.snapshot();
@@ -59,7 +62,7 @@ describe('agent login policy', () => {
         expect(filled).toEqual({ element: all[1], value: 'operator' });
         const refreshed = await controller.snapshot();
         all[1].setAttribute('name', 'changed');
-        await expect(controller.typeLoginText({ ref: refreshed.controls[0].ref, text: 'operator' })).rejects.toMatchObject({ code: 'STALE_REF' });
+        await expect(controller.typeLoginText({ ref: refreshed.controls[0].ref, text: 'operator' })).rejects.toMatchObject({ code: 'REF_STALE' });
         dom.window.close();
     });
 });

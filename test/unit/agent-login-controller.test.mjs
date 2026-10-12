@@ -20,10 +20,12 @@ function pageWith(html) {
         on(name, cb) { listeners[name] = cb; }, mainFrame() { return 'main'; },
         url() { return dom.window.location.href; },
         async evaluate(fn) { return fn(); },
-        locator() { return { nth(i) { const el = elements[i]; return {
+        async $$(selector) { return [...dom.window.document.querySelectorAll(selector)].map((el) => ({
             async evaluate(fn) { return fn(el); },
             async fill(value) { el.value = value; }, async click() { el.click(); },
-        }; }, async evaluate(fn) { return fn(dom.window.document.activeElement); } }; },
+            async dispose() {},
+        })); },
+        locator() { return { async evaluate(fn) { return fn(dom.window.document.activeElement); }, async fill(value) { dom.window.document.activeElement.value = value; } }; },
         mouse: { async click(...args) { this.last = args; } },
         keyboard: { async press(key) { this.last = key; } },
     };
@@ -45,7 +47,25 @@ describe('login controller', () => {
         const controller = createLoginController(page);
         const snap = await controller.snapshot();
         page.listeners.framenavigated('main');
-        await expect(controller.click({ ref: snap.controls[0].ref })).rejects.toMatchObject({ code: 'STALE_REF' });
+        await expect(controller.click({ ref: snap.controls[0].ref })).rejects.toMatchObject({ code: 'REF_STALE' });
         await expect(controller.pressLoginKey('Meta+Q')).rejects.toMatchObject({ code: 'ACTION_DENIED' });
+    });
+    it('rejects refs when their original element is removed or replaced', async () => {
+        const page = pageWith('<button>Continue</button><button>Cancel</button>');
+        const controller = createLoginController(page);
+        const snap = await controller.snapshot();
+        const buttons = [...page.dom.window.document.querySelectorAll('button')];
+        let cancelClicks = 0;
+        buttons[1].addEventListener('click', () => { cancelClicks += 1; });
+        buttons[0].remove();
+        await expect(controller.click({ ref: snap.controls[0].ref })).rejects.toMatchObject({ code: 'REF_STALE' });
+        expect(cancelClicks).toBe(0);
+
+        const replaced = await controller.snapshot();
+        const original = page.dom.window.document.querySelector('button');
+        const replacement = original.cloneNode(true);
+        original.replaceWith(replacement);
+        await expect(controller.click({ ref: replaced.controls[0].ref })).rejects.toMatchObject({ code: 'REF_STALE' });
+        expect(cancelClicks).toBe(0);
     });
 });

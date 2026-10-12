@@ -31,6 +31,7 @@ export const READ_ERROR_MESSAGES = Object.freeze({
     NAVIGATION_FAILED: 'The login page could not be opened.',
     PASSWORD_REFUSED: 'Password fields cannot be filled by this tool.',
     PROFILE_RELEASE_TIMEOUT: 'Chrome has not released the dedicated profile.',
+    REF_STALE: 'The ref no longer points to its original element.',
     SCOPE_DENIED: 'Requested scope was denied.',
     SESSION_CLOSED: 'Session is closed.',
     SESSION_NOT_FOUND: 'Session was not found.',

@@ -70,33 +70,44 @@ export function createLoginController(page) {
     let refs = new Map();
     const protectedIdentity = new Set();
     let revision = 0;
-    const invalidate = () => { refs = new Map(); revision += 1; };
+    const disposeRefs = (items) => {
+        for (const item of items.values()) void item.handle.dispose().catch(() => {});
+    };
+    const invalidate = () => { const old = refs; refs = new Map(); revision += 1; disposeRefs(old); };
     page.on?.('framenavigated', (frame) => { if (!page.mainFrame || frame === page.mainFrame()) invalidate(); });
 
     async function snapshotLoginPage() {
         const revisionAtStart = revision;
-        const nodes = await page.evaluate(() => {
-            const visible = (el) => {
+        const selector = 'a,button,input,select,textarea,[role="button"],[role="link"],[tabindex]';
+        const handles = await page.$$(selector);
+        const nodes = [];
+        for (let index = 0; index < handles.length; index += 1) {
+            const handle = handles[index];
+            if (nodes.length >= 120) { await handle.dispose(); continue; }
+            const node = await handle.evaluate((el) => {
                 const rect = el.getBoundingClientRect();
                 const style = getComputedStyle(el);
-                return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-            };
-            const selector = 'a,button,input,select,textarea,[role="button"],[role="link"],[tabindex]';
-            return Array.from(document.querySelectorAll(selector)).map((el, index) => ({ el, index }))
-                .filter(({ el }) => visible(el)).slice(0, 120).map(({ el, index }) => {
+                if (!(rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none')) return null;
                 const e = /** @type {HTMLElement & HTMLInputElement} */ (el);
                 const label = e.getAttribute('aria-label') || e.getAttribute('placeholder') || e.innerText || e.getAttribute('title') || '';
-                return { index, tag: e.tagName.toLowerCase(), type: e.getAttribute('type') || '', label: label.trim().slice(0, 200), name: e.getAttribute('name') || '', id: e.id || '', autocomplete: e.getAttribute('autocomplete') || '' };
+                return { tag: e.tagName.toLowerCase(), type: e.getAttribute('type') || '', label: label.trim().slice(0, 200), name: e.getAttribute('name') || '', id: e.id || '', autocomplete: e.getAttribute('autocomplete') || '' };
             });
-        });
-        if (revision !== revisionAtStart) throw readError('STATE_CHANGED');
+            if (node) nodes.push({ handle, node });
+            else await handle.dispose();
+        }
+        if (revision !== revisionAtStart) {
+            for (const { handle } of nodes) await handle.dispose().catch(() => {});
+            throw readError('STATE_CHANGED');
+        }
+        const oldRefs = refs;
         refs = new Map();
-        const controls = nodes.map((node, index) => {
+        disposeRefs(oldRefs);
+        const controls = nodes.map(({ handle, node }, index) => {
             const ref = `lr_${index + 1}`;
             const identity = `${node.tag}|${node.name}|${node.id}|${node.autocomplete}`;
             const isPassword = node.type === 'password' || /(?:current-password|new-password)/i.test(node.autocomplete) || protectedIdentity.has(identity);
             if (isPassword) protectedIdentity.add(identity);
-            refs.set(ref, { index: node.index, identity, passwordIdentity: isPassword, revision });
+            refs.set(ref, { handle, identity, passwordIdentity: isPassword, revision });
             return { ref, role: node.tag === 'input' ? 'input' : node.tag, label: node.label, type: isPassword ? 'password' : node.type, redacted: isPassword };
         });
         return { url: new URL(page.url()).origin, controls };
@@ -104,23 +115,23 @@ export function createLoginController(page) {
 
     function resolveLoginRef(ref) {
         const item = refs.get(ref);
-        if (!item || item.revision !== revision) throw readError('STALE_REF');
+        if (!item || item.revision !== revision) throw readError('REF_STALE');
         return item;
     }
 
-    async function locatorFor(item) {
-        const locator = page.locator('a,button,input,select,textarea,[role="button"],[role="link"],[tabindex]').nth(item.index);
-        const info = await locator.evaluate((el) => ({ type: el.getAttribute('type') || '', autocomplete: el.getAttribute('autocomplete') || '', name: el.getAttribute('name') || '', id: el.id || '' }));
-        const identity = `${String((await locator.evaluate((el) => el.tagName)).toLowerCase())}|${info.name}|${info.id}|${info.autocomplete}`;
-        if (identity !== item.identity) throw readError('STALE_REF');
-        if (isPasswordTarget({ ...info, passwordIdentity: item.passwordIdentity || protectedIdentity.has(identity) })) throw readError('PASSWORD_REFUSED');
-        return locator;
+    async function handleFor(item) {
+        const connected = await item.handle.evaluate((el) => el.isConnected).catch(() => false);
+        if (!connected) throw readError('REF_STALE');
+        const info = await item.handle.evaluate((el) => ({ type: el.getAttribute('type') || '', autocomplete: el.getAttribute('autocomplete') || '', name: el.getAttribute('name') || '', id: el.id || '', tag: el.tagName.toLowerCase() })).catch(() => null);
+        if (!info || `${info.tag}|${info.name}|${info.id}|${info.autocomplete}` !== item.identity) throw readError('REF_STALE');
+        if (isPasswordTarget({ ...info, passwordIdentity: item.passwordIdentity || protectedIdentity.has(item.identity) })) throw readError('PASSWORD_REFUSED');
+        return item.handle;
     }
 
     return {
         snapshot: snapshotLoginPage,
         async click(input) {
-            if (typeof input?.ref === 'string') await (await locatorFor(resolveLoginRef(input.ref))).click();
+            if (typeof input?.ref === 'string') await (await handleFor(resolveLoginRef(input.ref))).click();
             else if (Number.isFinite(input?.x) && Number.isFinite(input?.y)) {
                 const size = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
                 if (input.x < 0 || input.y < 0 || input.x >= size.width || input.y >= size.height) throw readError('INVALID_ARGUMENTS');
@@ -132,7 +143,7 @@ export function createLoginController(page) {
         },
         async typeLoginText(input) {
             if (typeof input.text !== 'string' || input.text.length > 1000) throw readError('INVALID_ARGUMENTS');
-            if (typeof input.ref === 'string') await (await locatorFor(resolveLoginRef(input.ref))).fill(input.text);
+            if (typeof input.ref === 'string') await (await handleFor(resolveLoginRef(input.ref))).fill(input.text);
             else {
                 const focused = page.locator(':focus');
                 const info = await focused.evaluate((el) => ({ type: el.getAttribute('type') || '', autocomplete: el.getAttribute('autocomplete') || '', name: el.getAttribute('name') || '', id: el.id || '' })).catch(() => null);
