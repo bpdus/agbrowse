@@ -119,13 +119,13 @@ export async function bootstrapLocalClient(options) {
     const pending = await options.auth.submitPairing({
         publicKey,
         name: options.name ?? 'local',
-        requestedScopes: ['browser:read'],
+        requestedScopes: options.scopes ?? ['browser:read'],
     });
     const confirmed = await options.auth.confirmPairing({
         pendingId: pending.pending_id,
         code: pending.confirmation_code,
         fingerprint: pending.fingerprint,
-        grantedScopes: ['browser:read'],
+        grantedScopes: options.scopes ?? ['browser:read'],
     });
     createClientStore({ directory: options.directory }).save({
         version: 1,
@@ -135,7 +135,7 @@ export async function bootstrapLocalClient(options) {
         audience: confirmed.server.audience,
         resource: confirmed.server.resource,
         public_key: confirmed.server.public_key,
-        scopes: ['browser:read'],
+        scopes: options.scopes ?? ['browser:read'],
     });
     return { device_id: confirmed.device_id };
 }
@@ -348,6 +348,7 @@ function parseArgs(argv) {
         else if (arg === '--client-dir') args.clientDir = next();
         else if (arg === '--key-dir') args.keyDir = next();
         else if (arg === '--gateway-url') args.gatewayUrl = next();
+        else if (arg === '--scope') { args.scopes ??= []; args.scopes.push(...next().split(',')); }
         else throw readError('INVALID_ARGUMENTS');
     }
     return args;
@@ -400,6 +401,11 @@ export async function runMcpStdioClient(options = {}) {
         if (!args.clientDir || !args.keyDir || !args.gatewayUrl) throw readError('INVALID_ARGUMENTS');
         const record = createClientStore({ directory: args.clientDir }).load();
         keys = createDevFileKeyStore({ directory: args.keyDir });
+        if (args.scopes) {
+            const selected = [...new Set(args.scopes)].sort();
+            if (!selected.includes('browser:read') || selected.some((scope) => !/^[a-z0-9:._-]{1,64}$/.test(scope))) throw readError('SCOPE_DENIED');
+            record.scopes = selected;
+        }
         client = connectMcpHttp({ record, keyStore: keys, gatewayUrl: args.gatewayUrl });
         const input = options.stdin ?? process.stdin;
         lines = readline.createInterface({ input, crlfDelay: Infinity });

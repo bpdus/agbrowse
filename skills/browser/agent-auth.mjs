@@ -789,6 +789,20 @@ export function createAuthService(options) {
         return { device_id: deviceId, epoch: savedDevice.epoch, revoked: true };
     }
 
+    function grantDeviceScope(deviceId, scope) {
+        ensureIdentity();
+        if (typeof deviceId !== 'string' || !state.devices[deviceId]) throw authError('AUTH_INVALID');
+        const current = state.devices[deviceId];
+        if (current.revoked) throw authError('DEVICE_REVOKED');
+        const normalized = normalizeScopes([scope], false)[0];
+        if (current.scopes.includes(normalized)) return { device_id: deviceId, epoch: current.epoch, scopes: current.scopes.slice() };
+        const next = structuredClone(state);
+        next.devices[deviceId].scopes = normalizeScopes([...current.scopes, normalized], false);
+        next.devices[deviceId].epoch += 1;
+        const saved = commitState(next);
+        return { device_id: deviceId, epoch: saved.devices[deviceId].epoch, scopes: saved.devices[deviceId].scopes.slice() };
+    }
+
     function close() {
         if (closed) return;
         closed = true;
@@ -808,6 +822,7 @@ export function createAuthService(options) {
         exchangeProof: (/** @type {any} */ input) => enqueue(() => exchangeProof(input)),
         authenticate: (/** @type {string} */ token) => enqueue(() => authenticate(token)),
         revokeDevice: (/** @type {string} */ deviceId) => enqueue(() => revokeDevice(deviceId)),
+        grantDeviceScope: (deviceId, scope) => enqueue(() => grantDeviceScope(deviceId, scope)),
         close,
     };
 }
