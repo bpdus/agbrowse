@@ -6,6 +6,7 @@
  */
 
 import * as http from 'node:http';
+import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createAuthService } from './agent-auth.mjs';
 import {
@@ -17,7 +18,7 @@ import {
 } from './agent-auth-store.mjs';
 import { connectReadEndpoint } from './agent-ipc.mjs';
 import { createMcpDispatcher } from './agent-mcp.mjs';
-import { consumeCredentialsToken, handleCredentialsRequest } from './agent-credentials-admin.mjs';
+import { consumeCredentialsToken } from './agent-credentials-admin.mjs';
 
 const BODY_BYTES = 16 * 1024;
 const PROTOCOL_VERSION = '0.1.0';
@@ -228,6 +229,7 @@ export function createGateway(options) {
     const credentialOrigin = options.credentials?.origin ?? 'https://jjbyuns-imac.tail8f1886.ts.net:8443';
     let credentialWindow = Date.now();
     let credentialRequests = 0;
+    const credentialSessions = new Map();
     /** @type {http.Server | null} */
     let server = null;
     let starting = false;
@@ -265,7 +267,7 @@ export function createGateway(options) {
             if (url.pathname === '/admin/naver-credentials') {
                 const securityHeaders = { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'content-security-policy': "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" };
                 if (req.method === 'GET') {
-                    const html = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Naver credentials</title><form method="post" autocomplete="off"><label>One-time token <input name="token" required></label><label>Naver ID <input name="account" required></label><label>Password <input name="password" type="password" required></label><button>Save</button></form>';
+                    const html = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Naver credentials</title><form method="post" autocomplete="off"><label>One-time token <input name="token" required></label><button>Continue</button></form>';
                     res.writeHead(200, { ...securityHeaders, 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) }); res.end(html); return;
                 }
                 if (req.method !== 'POST') { sendMcp(res, { status: 405, headers: securityHeaders }); return; }
@@ -280,14 +282,26 @@ export function createGateway(options) {
                 catch (error) { sendMcp(res, { status: error?.status === 413 ? 413 : 400, headers: securityHeaders }); return; }
                 const form = new URLSearchParams(raw.toString('utf8'));
                 const keys = [...form.keys()];
-                if (keys.length !== 3 || new Set(keys).size !== 3 || !['token','account','password'].every((key) => form.has(key))) { sendMcp(res, { status: 400, headers: securityHeaders }); return; }
-                const token = form.get('token'); const account = form.get('account'); const password = form.get('password');
+                if (new Set(keys).size !== keys.length) { sendMcp(res, { status: 400, headers: securityHeaders }); return; }
+                if (keys.length === 1 && form.has('token')) {
+                    let valid = false;
+                    try { valid = await consumeToken(form.get('token')); } catch { valid = false; }
+                    if (!valid) { sendMcp(res, { status: 400, headers: securityHeaders }); return; }
+                    const session = randomBytes(32).toString('hex');
+                    credentialSessions.set(session, Date.now() + 5 * 60_000);
+                    const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Naver credentials</title><form method="post" autocomplete="off"><input type="hidden" name="csrf" value="${session}"><label>Naver ID <input name="account" required></label><label>Password <input name="password" type="password" required></label><button>Save</button></form>`;
+                    res.writeHead(200, { ...securityHeaders, 'set-cookie': `naver_credential_session=${session}; HttpOnly; SameSite=Strict; Path=/admin/naver-credentials; Max-Age=300`, 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) }); res.end(html); return;
+                }
+                if (keys.length !== 3 || !['csrf','account','password'].every((key) => form.has(key))) { sendMcp(res, { status: 400, headers: securityHeaders }); return; }
+                const cookies = singleHeader(req, 'cookie') ?? '';
+                const session = /(?:^|;\\s*)naver_credential_session=([a-f0-9]{64})(?:;|$)/.exec(cookies)?.[1];
+                const expires = session ? credentialSessions.get(session) : undefined;
+                if (!session || expires === undefined || expires <= Date.now() || form.get('csrf') !== session) { if (session) credentialSessions.delete(session); sendMcp(res, { status: 403, headers: securityHeaders }); return; }
+                credentialSessions.delete(session);
+                const account = form.get('account'); const password = form.get('password');
                 let saved = false;
                 try {
-                    const result = await handleCredentialsRequest({ token, account, password }, {
-                        consume: consumeToken,
-                        save: (id, secret) => credentialsWorker.call('credentials.naver.save', { account: id, password: secret }),
-                    });
+                    const result = await credentialsWorker.call('credentials.naver.save', { account, password });
                     saved = result?.result === 'saved';
                 } catch { saved = false; }
                 const html = saved ? 'saved' : 'Registration failed. Generate a new token and try again.';

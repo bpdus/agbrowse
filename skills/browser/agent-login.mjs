@@ -156,16 +156,23 @@ export function createLoginController(page) {
         return item.handle;
     }
 
+    async function ensureHumanMayContinue(target = null) {
+        if (target && await target.evaluate((el) => /captcha|ncpt/i.test(`${el.id || ''} ${el.getAttribute('name') || ''} ${el.getAttribute('class') || ''} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('placeholder') || ''}`)).catch(() => true)) throw readError('HUMAN_REQUIRED');
+        if (typeof page.evaluate === 'function' && await Promise.resolve().then(() => page.evaluate(classifyLoginProgress)).catch(() => 'needs_human') === 'needs_human') throw readError('HUMAN_REQUIRED');
+    }
+
     return {
         snapshot: snapshotLoginPage,
         async click(input) {
             if (input && Object.hasOwn(input, 'ref')) {
                 if (typeof input.ref !== 'string') throw readError('REF_STALE');
                 const item = resolveLoginRef(input.ref);
+                await ensureHumanMayContinue(item.handle);
                 if (credentialsFilled && await item.handle.evaluate((el) => Boolean(el.closest('form')?.querySelector('#id[name="id"],#pw[name="pw"]')))) throw readError('ACTION_DENIED');
                 await (await handleFor(item)).click();
             }
             else if (Number.isFinite(input?.x) && Number.isFinite(input?.y)) {
+                await ensureHumanMayContinue();
                 const size = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
                 if (input.x < 0 || input.y < 0 || input.x >= size.width || input.y >= size.height) throw readError('INVALID_ARGUMENTS');
                 if (credentialsFilled && await page.evaluate(({x,y}) => { const el = document.elementFromPoint(x,y); return Boolean(el?.closest('form')?.querySelector('#id[name="id"],#pw[name="pw"]')); }, input)) throw readError('ACTION_DENIED');
@@ -179,10 +186,13 @@ export function createLoginController(page) {
             if (typeof input.text !== 'string' || input.text.length > 1000) throw readError('INVALID_ARGUMENTS');
             if (Object.hasOwn(input, 'ref')) {
                 if (typeof input.ref !== 'string') throw readError('REF_STALE');
-                await (await handleFor(resolveLoginRef(input.ref))).fill(input.text);
+                const item = resolveLoginRef(input.ref);
+                await ensureHumanMayContinue(item.handle);
+                await (await handleFor(item)).fill(input.text);
             }
             else {
                 const focused = page.locator(':focus');
+                await ensureHumanMayContinue(focused);
                 const info = await focused.evaluate((el) => ({ type: el.getAttribute('type') || '', autocomplete: el.getAttribute('autocomplete') || '', name: el.getAttribute('name') || '', id: el.id || '' })).catch(() => null);
                 if (!info) throw readError('ACTION_DENIED');
                 const identity = `${String(await focused.evaluate((el) => el.tagName).catch(() => '')).toLowerCase()}|${info.name}|${info.id}|${info.autocomplete}`;
@@ -196,6 +206,7 @@ export function createLoginController(page) {
             if (typeof key !== 'string' || !SAFE_KEYS.has(key) || /^[A-Za-z0-9]$/.test(key) || key === 'Enter' && false) throw readError('ACTION_DENIED');
             if (credentialsFilled && key === 'Enter') throw readError('ACTION_DENIED');
             const focused = page.locator(':focus');
+            await ensureHumanMayContinue(focused);
             const info = await focused.evaluate((el) => ({ type: el.getAttribute('type') || '', autocomplete: el.getAttribute('autocomplete') || '', name: el.getAttribute('name') || '', id: el.id || '' })).catch(() => null);
             if (info) {
                 const identity = `${String(await focused.evaluate((el) => el.tagName).catch(() => '')).toLowerCase()}|${info.name}|${info.id}|${info.autocomplete}`;
@@ -206,30 +217,41 @@ export function createLoginController(page) {
             return { pressed: true };
         },
         async fillCredentials(readCredentials) {
+            let idHandle = null; let passwordHandle = null;
             try {
+                await ensureHumanMayContinue();
                 if (new URL(page.url()).origin !== 'https://nid.naver.com' || new URL(page.url()).pathname !== '/nidlogin.login') return { result: 'failed', reason: 'wrong_page' };
                 const ids = page.locator('input#id[name="id"]'); const passwords = page.locator('input#pw[name="pw"]');
                 if (await ids.count() !== 1 || await passwords.count() !== 1 || !await ids.isVisible() || !await passwords.isVisible()) return { result: 'failed', reason: 'fields_unavailable' };
-                const valid = await Promise.all([ids, passwords].map((locator) => locator.evaluate((el) => {
+                idHandle = await ids.elementHandle(); passwordHandle = await passwords.elementHandle();
+                if (!idHandle || !passwordHandle) return { result: 'failed', reason: 'fields_unavailable' };
+                const valid = await Promise.all([idHandle, passwordHandle].map((handle) => handle.evaluate((el) => {
                     const form = el.form; const action = form?.getAttribute('action') || '/nidlogin.login';
                     let url; try { url = new URL(action, location.href); } catch { return false; }
                     return el instanceof el.ownerDocument.defaultView.HTMLInputElement && url.origin === 'https://nid.naver.com' && url.pathname === '/nidlogin.login';
                 })));
                 if (!valid.every(Boolean)) return { result: 'failed', reason: 'fields_untrusted' };
-                if (!await ids.evaluate((el) => el.form === document.querySelector('input#pw[name="pw"]')?.form)) return { result: 'failed', reason: 'fields_untrusted' };
+                if (!await idHandle.evaluate((el) => el.form === document.querySelector('input#pw[name="pw"]')?.form)) return { result: 'failed', reason: 'fields_untrusted' };
                 const values = await readCredentials();
                 if (values?.result !== 'credentials') {
                     const reasons = new Set(['invalid_input','account_unavailable','keychain_read_failed','state_unsafe']);
                     return { result: 'failed', reason: reasons.has(values?.reason) ? values.reason : 'credentials_unavailable' };
                 }
+                await ensureHumanMayContinue();
+                const recheck = async (handle, selector) => handle.evaluate((el, expected) => el.isConnected && el === document.querySelector(expected), selector).catch(() => false);
+                if (!await recheck(idHandle, 'input#id[name="id"]') || !await recheck(passwordHandle, 'input#pw[name="pw"]')) return { result: 'failed', reason: 'fields_changed' };
                 protectedIdentity.add('input|pw|pw|'); credentialsFilled = true;
-                await ids.fill(values.account); await passwords.fill(values.password);
+                await idHandle.fill(values.account);
+                if (!await recheck(passwordHandle, 'input#pw[name="pw"]')) return { result: 'failed', reason: 'fields_changed' };
+                await passwordHandle.fill(values.password);
                 invalidate();
                 return { result: 'filled', reason: 'none' };
             } catch { return { result: 'failed', reason: 'fill_failed' }; }
+            finally { await Promise.all([idHandle, passwordHandle].filter(Boolean).map((handle) => handle.dispose().catch(() => {}))); }
         },
         async submit() {
             try {
+                await ensureHumanMayContinue();
                 if (!credentialsFilled || new URL(page.url()).origin !== 'https://nid.naver.com' || new URL(page.url()).pathname !== '/nidlogin.login') return { result: 'failed', reason: 'not_filled' };
                 const button = page.locator('#log.login');
                 if (await button.count() !== 1 || !await button.isVisible()) return { result: 'failed', reason: 'button_unavailable' };
@@ -242,7 +264,7 @@ export function createLoginController(page) {
             try { return { status: await page.evaluate(classifyLoginProgress) }; } catch { return { status: 'unknown' }; }
         },
         async screenshot() {
-            try { return await page.screenshot({ type: 'png', mask: [page.locator('input#pw[name="pw"]')] }); }
+            try { return await page.screenshot({ type: 'png', mask: [page.locator('input#id[name="id"]'), page.locator('input#pw[name="pw"]')] }); }
             catch { if (credentialsFilled) throw readError('ACTION_DENIED'); return await page.screenshot({ type: 'png' }); }
         },
         clear: invalidate,

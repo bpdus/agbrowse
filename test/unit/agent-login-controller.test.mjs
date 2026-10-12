@@ -30,7 +30,7 @@ function pageWith(html) {
             async fill(value) { el.value = value; }, async click() { el.click(); },
             async dispose() {},
         })); },
-        locator(selector) { return { async count() { return dom.window.document.querySelectorAll(selector).length; }, async isVisible() { return true; }, async evaluate(fn) { return fn(dom.window.document.querySelector(selector) ?? dom.window.document.activeElement); }, async fill(value) { dom.window.document.querySelector(selector).value = value; }, async click() { dom.window.document.querySelector(selector).click(); } }; },
+        locator(selector) { return { async count() { return dom.window.document.querySelectorAll(selector).length; }, async isVisible() { return true; }, async evaluate(fn) { return fn(dom.window.document.querySelector(selector) ?? dom.window.document.activeElement); }, async elementHandle() { const el = dom.window.document.querySelector(selector); return el ? { async evaluate(fn, arg) { return fn(el, arg); }, async fill(value) { el.value = value; }, async dispose() {} } : null; }, async fill(value) { dom.window.document.querySelector(selector).value = value; }, async click() { dom.window.document.querySelector(selector).click(); } }; },
         mouse: { async click(...args) { this.last = args; } },
         keyboard: { async press(key) { this.last = key; } },
     };

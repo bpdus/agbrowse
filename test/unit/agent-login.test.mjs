@@ -121,4 +121,62 @@ describe('agent login policy', () => {
         expect(clicks).toBe(0);
         dom.window.close();
     });
+
+    it('hands off captcha controls and masks both credential fields in screenshots', async () => {
+        const dom = new JSDOM('<form><input id="id" name="id"><input id="pw" name="pw" type="password"><input id="captcha" name="captcha"></form>', { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
+        globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
+        dom.window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 100, height: 20 });
+        let screenshotOptions;
+        const page = {
+            url: () => dom.window.location.href, on() {},
+            evaluate: (fn) => dom.window.Function(`return (${fn.toString()})()`)(),
+            $$: async (selector) => [...dom.window.document.querySelectorAll(selector)].map((element) => ({ evaluate: async (fn) => fn(element), fill: async () => {}, click: async () => {}, dispose: async () => {} })),
+            locator: (selector) => ({ selector, evaluate: async (fn) => fn(dom.window.document.querySelector(selector)), count: async () => 1, isVisible: async () => true }),
+            screenshot: async (options) => { screenshotOptions = options; return Buffer.from('png'); },
+        };
+        const controller = createLoginController(page);
+        const { controls } = await controller.snapshot();
+        const captchaRef = controls[2].ref;
+        await expect(controller.typeLoginText({ ref: captchaRef, text: '1234' })).rejects.toMatchObject({ code: 'HUMAN_REQUIRED' });
+        await expect(controller.click({ ref: captchaRef })).rejects.toMatchObject({ code: 'HUMAN_REQUIRED' });
+        await controller.screenshot();
+        expect(screenshotOptions.mask).toHaveLength(2);
+        expect(screenshotOptions.mask.map((locator) => locator.selector)).toEqual(['input#id[name="id"]', 'input#pw[name="pw"]']);
+        dom.window.close();
+    });
+
+    it('fails closed when validated credential fields are replaced during keychain access', async () => {
+        const dom = new JSDOM('<form><input id="id" name="id"><input id="pw" name="pw" type="password"><button id="log" class="login">Login</button></form>', { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
+        const oldDocument = globalThis.document;
+        const oldLocation = globalThis.location;
+        globalThis.document = dom.window.document;
+        globalThis.location = dom.window.location;
+        globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
+        dom.window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 100, height: 20 });
+        let fills = 0;
+        const wrap = (element) => ({
+            evaluate: async (fn, arg) => fn(element, arg), fill: async () => { fills += 1; }, click: async () => {}, dispose: async () => {},
+        });
+        const page = {
+            url: () => dom.window.location.href, on() {},
+            evaluate: (fn) => dom.window.Function(`return (${fn.toString()})()`)(),
+            locator: (selector) => {
+                const find = () => dom.window.document.querySelector(selector);
+                return { count: async () => find() ? 1 : 0, isVisible: async () => Boolean(find()), evaluate: async (fn) => fn(find()), elementHandle: async () => find() ? wrap(find()) : null };
+            },
+            $$: async () => [],
+        };
+        const controller = createLoginController(page);
+        const outcome = await controller.fillCredentials(async () => {
+            const replacement = dom.window.document.createElement('input');
+            replacement.id = 'id'; replacement.name = 'id';
+            dom.window.document.querySelector('#id').replaceWith(replacement);
+            return { result: 'credentials', account: 'account', password: 'password' };
+        });
+        expect(outcome).toEqual({ result: 'failed', reason: 'fields_changed' });
+        expect(fills).toBe(0);
+        dom.window.close();
+        if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
+        if (oldLocation === undefined) delete globalThis.location; else globalThis.location = oldLocation;
+    });
 });
