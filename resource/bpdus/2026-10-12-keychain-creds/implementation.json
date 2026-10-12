@@ -6,7 +6,7 @@
   "tasks": [
     {
       "task_id": 1,
-      "status": "complete",
+      "status": "DONE",
       "changed_files": [
         "skills/browser/agent-naver-credentials.mjs",
         "test/unit/agent-naver-credentials.test.mjs"
@@ -14,7 +14,7 @@
     },
     {
       "task_id": 2,
-      "status": "complete",
+      "status": "DONE",
       "changed_files": [
         "skills/browser/agent-credentials-admin.mjs",
         "bin/bpdus/credentials-token.sh",
@@ -27,7 +27,7 @@
     },
     {
       "task_id": 3,
-      "status": "complete",
+      "status": "DONE",
       "changed_files": [
         "skills/browser/agent-login.mjs",
         "skills/browser/agent-runtime.mjs",
@@ -41,7 +41,7 @@
     },
     {
       "task_id": 4,
-      "status": "complete_with_concerns",
+      "status": "DONE_WITH_CONCERNS",
       "changed_files": [
         "docs/bpdus/LAUNCHAGENTS.md",
         "test/fixtures/agent-login-progress",
