@@ -14,7 +14,12 @@ export function encodeSecurityArgument(value) {
 }
 
 function safeDirectory(home) {
-    const directory = path.join(home, '.agbrowse-bpdus', 'state');
+    const root = path.join(home, '.agbrowse-bpdus');
+    fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+    const rootStat = fs.lstatSync(root);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory() || rootStat.uid !== process.getuid()) throw readError('STATE_UNSAFE');
+    if ((rootStat.mode & 0o777) !== 0o700) fs.chmodSync(root, 0o700);
+    const directory = path.join(root, 'state');
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     const stat = fs.lstatSync(directory);
     if (stat.isSymbolicLink() || !stat.isDirectory() || stat.uid !== process.getuid()) throw readError('STATE_UNSAFE');
@@ -50,7 +55,7 @@ function runSecurity(args, options = {}) {
         let settled = false;
         const finish = (result) => { if (!settled) { settled = true; clearTimeout(timer); resolve(result); } };
         try {
-            child = spawn(SECURITY, args, { shell: false, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+            child = spawn(SECURITY, args, { shell: false, stdio: ['pipe', options.capture ? 'pipe' : 'ignore', 'ignore'], windowsHide: true });
         } catch { finish({ ok: false }); return; }
         child.stdout?.on('data', (chunk) => { stdout += chunk.toString('utf8'); if (stdout.length > 8192) { child.kill(); finish({ ok: false }); } });
         child.on('error', () => finish({ ok: false }));
@@ -87,7 +92,7 @@ export function createNaverCredentialStore(options = {}) {
                 } catch { return { result: 'failed', reason: 'account_unavailable' }; }
             }
             if (typeof selected !== 'string' || !selected || /[\0\r\n]/.test(selected)) return { result: 'failed', reason: 'account_unavailable' };
-            const result = await runSecurity(['find-generic-password', '-s', SERVICE, '-a', selected, '-w', keychain], commandOptions);
+            const result = await runSecurity(['find-generic-password', '-s', SERVICE, '-a', selected, '-w', keychain], { ...commandOptions, capture: true });
             if (!result.ok) return { result: 'failed', reason: 'keychain_read_failed' };
             return { result: 'credentials', account: selected, password: result.stdout.replace(/\n$/, '') };
         },

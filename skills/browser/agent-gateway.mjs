@@ -17,7 +17,7 @@ import {
 } from './agent-auth-store.mjs';
 import { connectReadEndpoint } from './agent-ipc.mjs';
 import { createMcpDispatcher } from './agent-mcp.mjs';
-import { consumeCredentialsToken } from './agent-credentials-admin.mjs';
+import { consumeCredentialsToken, handleCredentialsRequest } from './agent-credentials-admin.mjs';
 
 const BODY_BYTES = 16 * 1024;
 const PROTOCOL_VERSION = '0.1.0';
@@ -263,7 +263,7 @@ export function createGateway(options) {
                 return;
             }
             if (url.pathname === '/admin/naver-credentials') {
-                const securityHeaders = { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" };
+                const securityHeaders = { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'content-security-policy': "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" };
                 if (req.method === 'GET') {
                     const html = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Naver credentials</title><form method="post" autocomplete="off"><label>One-time token <input name="token" required></label><label>Naver ID <input name="account" required></label><label>Password <input name="password" type="password" required></label><button>Save</button></form>';
                     res.writeHead(200, { ...securityHeaders, 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) }); res.end(html); return;
@@ -275,17 +275,20 @@ export function createGateway(options) {
                 if (Date.now() - credentialWindow >= 60_000) { credentialWindow = Date.now(); credentialRequests = 0; }
                 credentialRequests += 1;
                 if (credentialRequests > 5) { sendMcp(res, { status: 429, headers: securityHeaders }); req.resume(); return; }
-                const raw = await readBody(req);
+                let raw;
+                try { raw = await readBody(req); }
+                catch (error) { sendMcp(res, { status: error?.status === 413 ? 413 : 400, headers: securityHeaders }); return; }
                 const form = new URLSearchParams(raw.toString('utf8'));
                 const keys = [...form.keys()];
                 if (keys.length !== 3 || new Set(keys).size !== 3 || !['token','account','password'].every((key) => form.has(key))) { sendMcp(res, { status: 400, headers: securityHeaders }); return; }
                 const token = form.get('token'); const account = form.get('account'); const password = form.get('password');
                 let saved = false;
                 try {
-                    if (token && account && password && await consumeToken(token)) {
-                        const result = await credentialsWorker.call('credentials.naver.save', { account, password });
-                        saved = result?.result === 'saved';
-                    }
+                    const result = await handleCredentialsRequest({ token, account, password }, {
+                        consume: consumeToken,
+                        save: (id, secret) => credentialsWorker.call('credentials.naver.save', { account: id, password: secret }),
+                    });
+                    saved = result?.result === 'saved';
                 } catch { saved = false; }
                 const html = saved ? 'saved' : 'Registration failed. Generate a new token and try again.';
                 res.writeHead(saved ? 200 : 400, { ...securityHeaders, 'content-type': 'text/plain; charset=utf-8', 'content-length': Buffer.byteLength(html) }); res.end(html); return;

@@ -447,7 +447,10 @@ export function createMcpDispatcher(options) {
                     const reasons = new Set(['none','wrong_page','fields_unavailable','fields_untrusted','credentials_unavailable','invalid_input','account_unavailable','keychain_read_failed','state_unsafe','fill_failed']);
                     return toolOutcome(message.id, { protocol_version: DOMAIN_PROTOCOL_VERSION, request_id: requestId, result: output?.result === 'filled' ? 'filled' : 'failed', reason: reasons.has(output?.reason) ? output.reason : 'fill_failed' }, false, mcpSession.id, requestId, tool);
                 }
-                if (tool === 'login.submit') return toolOutcome(message.id, { protocol_version: DOMAIN_PROTOCOL_VERSION, request_id: requestId, result: output?.result === 'submitted' ? 'submitted' : 'failed', reason: typeof output?.reason === 'string' && /^[a-z_]{1,40}$/.test(output.reason) ? output.reason : 'submit_failed' }, false, mcpSession.id, requestId, tool);
+                if (tool === 'login.submit') {
+                    const reasons = new Set(['none','not_filled','button_unavailable','button_untrusted','submit_failed']);
+                    return toolOutcome(message.id, { protocol_version: DOMAIN_PROTOCOL_VERSION, request_id: requestId, result: output?.result === 'submitted' ? 'submitted' : 'failed', reason: reasons.has(output?.reason) ? output.reason : 'submit_failed' }, false, mcpSession.id, requestId, tool);
+                }
                 if (tool === 'login.check_progress') {
                     const states = new Set(['logged_in','needs_phone_approval','needs_human','login_page','unknown']);
                     return toolOutcome(message.id, { protocol_version: DOMAIN_PROTOCOL_VERSION, request_id: requestId, status: states.has(output?.status) ? output.status : 'unknown' }, false, mcpSession.id, requestId, tool);

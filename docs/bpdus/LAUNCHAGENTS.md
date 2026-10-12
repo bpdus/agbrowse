@@ -38,7 +38,8 @@ bin/bpdus/install-launchagents.sh install \
   --audience https://jjbyuns-imac.tail8f1886.ts.net:8443/mcp \
   --allowed-host jjbyuns-imac.tail8f1886.ts.net:8443 \
   --allowed-host jjbyuns-imac.tail8f1886.ts.net \
-  --allowed-host 127.0.0.1:7420
+  --allowed-host 127.0.0.1:7420 \
+  --allowed-origin https://jjbyuns-imac.tail8f1886.ts.net:8443
 ```
 
 gateway는 계속 loopback `127.0.0.1`에만 바인딩한다. 설치기는 GUI 도메인과 소유 사용자, Node, 소스 파일, 설정을 확인하고 두 plist를 검증한 뒤 설치한다. 설치 전 출력만 확인하려면 `install --dry-run all`을 사용한다. `worker` 또는 `gateway`를 지정하면 해당 plist 하나만 출력한다.
@@ -86,7 +87,11 @@ bin/bpdus/grant-login-scope.sh DEVICE_ID
 launchctl kickstart -k gui/$(id -u)/me.bpdus.agbrowse.worker
 ```
 
-로그인 모드의 탐색 허용 호스트는 `nid.naver.com`, proper subdomain인 `*.pstatic.net`, 정확히 `ncpt.naver.com`뿐이며 HTTPS 기본 포트만 허용한다. `nid.naver.com/nidlogin.logout`은 모든 모드에서 차단한다. 로그인 도구는 한 worker 소유 페이지에만 동작한다. snapshot ref는 페이지 이동과 모드 종료 뒤 무효가 된다. 비밀번호 필드 입력은 거부한다. 따라서 이 구현은 사람이 스크립트를 실행하거나 Chrome을 종료하는 절차를 없애지만, 비밀번호 기반 로그인을 무인으로 완료하지는 못한다. 비밀번호 없는 흐름은 가능할 수 있으며, 비밀번호·2단계 인증·passkey 처리는 후속 결정이다. Naver 자격 증명은 저장하지 않는다.
+정재는 GUI로 로그인한 iMac의 터미널에서 `bin/bpdus/credentials-token.sh`를 실행한다. 명령은 15분 유효한 일회용 토큰을 로컬 `0600` 파일에 기록하고 터미널에만 표시한다. 표시된 토큰을 복사해 `https://jjbyuns-imac.tail8f1886.ts.net:8443/admin/naver-credentials`를 열고 토큰, Naver ID, 비밀번호를 제출한다. 성공 응답은 `saved`뿐이며 값은 Naver Keychain의 `agbrowse.naver` 항목으로 저장된다. 실패하면 새 토큰을 발급한다. 게이트웨이 LaunchAgent에는 위 설치 예시처럼 정확한 `--allowed-origin` 값이 있어야 한다.
+
+에이전트 로그인 순서는 `login.start` → `login.fill_credentials` → `login.submit` → `login.check_progress` 반복 확인이다. `fill_credentials`는 신뢰된 Naver 로그인 페이지의 실제 ID·비밀번호 입력란을 채우지만 제출하지 않는다. 로그인 페이지가 아닌 경우 `login.submit`은 실패한다. `needs_human`은 캡차가 감지된 상태이며 자동 해결하지 않는다. `needs_phone_approval`은 휴대폰·새 기기 승인 상태이므로 사람이 승인해야 한다. 확인이 끝나면 `login.end`로 로그인 모드를 종료하고 새 일반 세션에서 `naver.login_status`를 호출한다.
+
+로그인 모드의 탐색 허용 호스트는 `nid.naver.com`, proper subdomain인 `*.pstatic.net`, 정확히 `ncpt.naver.com`뿐이며 HTTPS 기본 포트만 허용한다. `nid.naver.com/nidlogin.logout`은 모든 모드에서 차단한다. 로그인 도구는 한 worker 소유 페이지에만 동작한다. snapshot ref는 페이지 이동과 모드 종료 뒤 무효가 된다. 비밀번호 필드의 snapshot label은 숨기며 스크린샷에서는 마스킹한다. Keychain 비밀번호는 도구 응답·로그·오류에 포함하지 않는다.
 
 `login-naver.sh`는 기존 수동 절차를 위한 legacy fallback으로 남아 있다. 새 로그인 흐름에는 사용하지 않는다.
 

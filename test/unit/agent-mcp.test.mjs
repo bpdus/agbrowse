@@ -292,6 +292,9 @@ describe('agent mcp dispatcher', () => {
         const denied = await handle(ctx.mcp, toolCall(101, 'login.start', { protocol_version: '0.1.0', request_id: 'login_denied' }), { headers: ctx.headers });
         expect(denied.status).toBe(403);
         expect(denied.body.error.code).toBe('SCOPE_DENIED');
+        const deniedFill = await handle(ctx.mcp, toolCall(105, 'login.fill_credentials', { protocol_version: '0.1.0', request_id: 'fill_denied' }), { headers: ctx.headers });
+        expect(deniedFill.body.error.code).toBe('SCOPE_DENIED');
+        expect(ctx.worker.calls.some((call) => call.op === 'login.fill_credentials')).toBe(false);
         const grantedAuth = async () => ({ device_id: 'dev_a', epoch: 1, scopes: ['browser:read', 'login:operate'] });
         const list = await handle(ctx.mcp, { jsonrpc: '2.0', id: 102, method: 'tools/list' }, { headers: ctx.headers, auth: grantedAuth });
         expect(list.body.result.tools.some((tool) => tool.name === 'login.start')).toBe(true);
@@ -329,6 +332,22 @@ describe('agent mcp dispatcher', () => {
         expect(denied.status).toBe(403);
         expect(denied.body.error.code).toBe('SCOPE_DENIED');
         expect(ctx.worker.calls.slice(cartCallStart).some((call) => call.op === 'naver.cart.prepare')).toBe(false);
+    });
+
+    it('rechecks login scope after queueing and stops credential fill after revocation', async () => {
+        const ctx = await startedSession();
+        const blocker = ctx.worker.blockNext('login.start');
+        let scopesGranted = true; let authCalls = 0;
+        const auth = async () => { authCalls += 1; return { device_id: 'dev_a', epoch: 1, scopes: scopesGranted ? ['browser:read','login:operate'] : ['browser:read'] }; };
+        const starting = handle(ctx.mcp, toolCall(106, 'login.start', { protocol_version:'0.1.0', request_id:'start_queue' }), { headers:ctx.headers, auth });
+        await blocker.entered;
+        const callStart = ctx.worker.calls.length;
+        const pending = handle(ctx.mcp, toolCall(107, 'login.fill_credentials', { protocol_version:'0.1.0', request_id:'fill_queue' }), { headers:ctx.headers, auth });
+        while (authCalls < 3) await new Promise((resolve) => setImmediate(resolve));
+        scopesGranted = false; blocker.release(); await starting;
+        const denied = await pending;
+        expect(denied.status).toBe(403); expect(denied.body.error.code).toBe('SCOPE_DENIED');
+        expect(ctx.worker.calls.slice(callStart).some((call) => call.op === 'login.fill_credentials')).toBe(false);
     });
 
     it('redacts listing output and rejects stale, cross-session, and restarted reads', async () => {

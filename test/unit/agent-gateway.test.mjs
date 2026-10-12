@@ -109,11 +109,17 @@ describe('loopback auth gateway', () => {
         const page = await request(port, { path: '/admin/naver-credentials', headers: { host } });
         expect(page.status).toBe(200); expect(page.headers['cache-control']).toBe('no-store'); expect(page.headers['referrer-policy']).toBe('no-referrer');
         const payload = new URLSearchParams({ token: 'token-sentinel', account: 'id-sentinel', password: 'pw-sentinel' }).toString();
-        const submit = (origin) => request(port, { path: '/admin/naver-credentials', method: 'POST', headers: { host, origin, 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(payload) }, body: payload });
+        const submit = (origin) => request(port, { path: '/admin/naver-credentials', method: 'POST', headers: { host, ...(origin ? { origin } : {}), 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(payload) }, body: payload });
         const denied = await submit('https://evil.example'); expect(denied.status).toBe(403); expect(denied.body).not.toContain('sentinel');
+        const missingOrigin = await submit(undefined); expect(missingOrigin.status).toBe(403);
+        const oversizedBody = 'x'.repeat(16 * 1024 + 1);
+        const oversized = await request(port, { path: '/admin/naver-credentials', method: 'POST', headers: { host, origin: 'https://jjbyuns-imac.tail8f1886.ts.net:8443', 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(oversizedBody) }, body: oversizedBody });
+        expect(oversized.status).toBe(413); expect(oversized.headers['content-security-policy']).toContain("default-src 'none'");
         const accepted = await submit('https://jjbyuns-imac.tail8f1886.ts.net:8443');
         expect(accepted.status).toBe(200); expect(accepted.body).toBe('saved'); expect(accepted.body).not.toContain('sentinel');
         expect(saves).toEqual([{ account: 'id-sentinel', password: 'pw-sentinel' }]);
+        for (let index = 0; index < 4; index += 1) await submit('https://jjbyuns-imac.tail8f1886.ts.net:8443');
+        expect((await submit('https://jjbyuns-imac.tail8f1886.ts.net:8443')).status).toBe(429);
     });
 
     it('listens only after start and only on 127.0.0.1', async () => {

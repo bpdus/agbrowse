@@ -59,7 +59,8 @@ export function consumeCredentialsToken(candidate, options = {}) {
 export async function handleCredentialsRequest(input, options = {}) {
     const { token, account, password } = input ?? {};
     if (typeof token !== 'string' || typeof account !== 'string' || typeof password !== 'string') return { result: 'failed', reason: 'invalid_input' };
-    if (!await consumeCredentialsToken(token, options)) return { result: 'failed', reason: 'token_invalid' };
+    const consume = options.consume ?? ((value) => consumeCredentialsToken(value, options));
+    if (!await consume(token)) return { result: 'failed', reason: 'token_invalid' };
     return options.save ? options.save(account, password) : { result: 'failed', reason: 'unavailable' };
 }
 
