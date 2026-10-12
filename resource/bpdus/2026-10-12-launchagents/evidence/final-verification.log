@@ -1,0 +1,9 @@
+PASS bash -n bin/bpdus/install-launchagents.sh bin/bpdus/login-naver.sh bin/bpdus/logs-in-herdr.sh
+PASS bash -n test/integration/bpdus-launchagents.test.sh test/integration/bpdus-login-naver.test.sh test/integration/bpdus-logs-in-herdr.test.sh
+PASS npx vitest run test/unit/agent-runtime.test.mjs test/unit/agent-worker.test.mjs test/unit/agent-gateway.test.mjs — 3 files, 38 tests
+PASS bash test/integration/bpdus-launchagents.test.sh
+PASS bash test/integration/bpdus-login-naver.test.sh
+PASS bash test/integration/bpdus-logs-in-herdr.test.sh
+PASS git diff --check
+LIMITATION The shell harness stubs plutil on Linux. Native macOS plutil -lint was not available here.
+PENDING iMac-only verification: SSH-to-GUI Launch Services, keychain cookie persistence, gateway health on deployment, crash recovery, repeated remote restarts, reboot behavior, and existing herdr/Tailscale mappings.

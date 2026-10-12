@@ -1,0 +1,4 @@
+Scope: only the LaunchAgent installer, login and log-view shell scripts, their requested regression tests, and BPDUS deployment docs changed. Worktree was clean before this task; all remaining modifications are within the numbered plan and its implementation records.
+Requirements: local behavior covers exact launch args, staged plist generation, lifecycle controls, loopback-only gateway host, config persistence, safe GUI login handoff, and a log-only herdr tab.
+Safety: installation validates both generated plists and source files before replacement; lifecycle commands target exact labels; login restoration verifies worker/Chrome shutdown and profile locks; no lock deletion or keychain override was added.
+Verification: all user-specified local commands passed. Native macOS plist validation and target iMac GUI/keychain/deployment checks remain pending because this workspace is Linux and is not the deployment iMac.

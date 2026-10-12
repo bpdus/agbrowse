@@ -51,26 +51,9 @@ MCP `initialize` 요청의 `params.protocolVersion`은 `"2025-11-25"`로 지정�
 
 운영용 키 저장소는 macOS Keychain을 예정한다. Keychain 연동은 확인 필요이며 구현되어 있지 않다. `createDevFileKeyStore`는 개발할 때 명시적으로 고르는 파일 저장소다. 운영 저장소를 쓸 수 없다고 파일 저장소로 자동 전환하지 않는다. 이 프로세스는 Chrome을 켜지 않는다.
 
-## iMac 실행 (herdr)
+## iMac 서비스 실행
 
-iMac에서는 gateway(`:7420`)와 worker를 herdr의 `agbrowse` 탭에서 실행한다. 왼쪽 pane에는 worker가, 오른쪽 pane에는 gateway가 뜬다. `nohup`은 사용하지 않는다. 저장소 밖에 있는 `~/.agbrowse-bpdus/bin/start-in-herdr.sh`를 실행한다. 이 launcher의 파일 권한은 `0700`이어야 하며, iMac을 재부팅한 뒤에는 다시 실행한다. worker나 gateway가 이미 실행 중이면 launcher가 시작을 거부한다.
-
-gateway는 다음 인자로 실행한다.
-
-```bash
-node skills/browser/agent-gateway.mjs \
-  --port 7420 \
-  --host 127.0.0.1 \
-  --state-dir ~/.agbrowse-bpdus/state \
-  --key-dir ~/.agbrowse-bpdus/keys \
-  --gateway-id imac-bpdus \
-  --audience https://jjbyuns-imac.tail8f1886.ts.net:8443/mcp \
-  --allowed-host jjbyuns-imac.tail8f1886.ts.net:8443 \
-  --allowed-host jjbyuns-imac.tail8f1886.ts.net \
-  --allowed-host 127.0.0.1:7420
-```
-
-worker와 gateway의 출력은 각각 `~/.agbrowse-bpdus/logs/worker.log`와 `~/.agbrowse-bpdus/logs/gateway.log`에 이어서 기록된다. 두 로그는 herdr에서 어떤 기기로 접속해도 볼 수 있다. 종료하려면 각 pane에서 `Ctrl-C`를 눌러 프로세스에 `SIGINT`를 보낸다.
+iMac의 worker와 gateway는 GUI 사용자 세션에서 LaunchAgents로 실행한다. herdr 기반 서비스에서의 이전, 설치 설정, SSH 재시작과 상태 확인은 [LaunchAgents 운영 안내](./LAUNCHAGENTS.md)를 따른다. herdr는 서비스 프로세스 대신 로그를 보는 용도로 사용할 수 있다.
 
 ## 기존 Serve 설정 확인
 

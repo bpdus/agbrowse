@@ -195,6 +195,10 @@ function restorePlaywrightDebug(saved) {
 function launchOptions() {
     return {
         channel: 'chrome',
+        ignoreDefaultArgs: [
+            '--use-mock-keychain',
+            '--password-store=basic',
+        ],
         headless: false,
         handleSIGINT: false,
         handleSIGTERM: false,

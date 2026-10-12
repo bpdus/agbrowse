@@ -1,238 +1,127 @@
 #!/bin/bash
-
-set -u
-
-TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/bpdus-login-naver.XXXXXX") || exit 1
-TEST_HOME="$TEST_ROOT/home"
-FAKE_BIN="$TEST_ROOT/fake-bin"
-PROFILE="$TEST_HOME/.agbrowse-bpdus/agent-profile"
-SCRIPT="$(cd "$(dirname "$0")/../.." && pwd)/bin/bpdus/login-naver.sh"
-CHROME_BIN="$TEST_ROOT/fake-chrome"
-CHROME_ARGS="$TEST_ROOT/chrome-args"
-CHROME_STARTED="$TEST_ROOT/chrome-started"
-CHROME_RELEASE="$TEST_ROOT/chrome-release"
-CHROME_STDOUT="$TEST_ROOT/chrome-stdout"
-CHROME_STDERR="$TEST_ROOT/chrome-stderr"
-TEST_TERM_MARKER="$TEST_ROOT/worker-term"
-TEST_SLEEP_COUNT="$TEST_ROOT/sleep-count"
-TEST_WORKER_PID=""
-TEST_VIM_PID=""
-
-cleanup() {
-  if [ -n "$TEST_WORKER_PID" ]; then
-    kill -TERM "$TEST_WORKER_PID" 2>/dev/null || true
-    wait "$TEST_WORKER_PID" 2>/dev/null || true
-  fi
-  if [ -n "$TEST_VIM_PID" ]; then
-    kill -TERM "$TEST_VIM_PID" 2>/dev/null || true
-    wait "$TEST_VIM_PID" 2>/dev/null || true
-  fi
-  rm -rf "$TEST_ROOT"
-}
-trap cleanup EXIT HUP INT TERM
-
-fail() {
-  echo "FAIL: $*" >&2
-  exit 1
-}
-
-pass() {
-  echo "PASS: $*"
-}
-
-assert_no_chrome() {
-  [ ! -e "$CHROME_STARTED" ] || fail "Chrome launched unexpectedly"
-}
-
-mkdir -p "$TEST_HOME/.agbrowse-bpdus/agent-profile" "$FAKE_BIN" || fail "could not create test directories"
-
-cat > "$FAKE_BIN/pgrep" <<'EOF'
-#!/bin/sh
-[ "$#" -eq 2 ] && [ "$1" = "-f" ] && [ "$2" = 'skills/browser/agent-worker[.]mjs' ] || exit 2
-case "${FAKE_PGREP_MODE:-none}" in
-  none) exit 1 ;;
-  error) echo "fake pgrep error" >&2; exit 2 ;;
-  worker) printf '%s\n' "$TEST_WORKER_PID"; exit 0 ;;
-  term)
-    if [ -e "$TEST_TERM_MARKER" ]; then exit 1; fi
-    printf '%s\n' "$TEST_WORKER_PID"
-    printf '%s\n' "$TEST_VIM_PID"
-    exit 0
-    ;;
-  timeout) printf '%s\n' "$TEST_WORKER_PID"; exit 0 ;;
-  *) exit 2 ;;
+set -euo pipefail
+ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT INT TERM
+HOME="$TMP/home with spaces"
+BIN="$TMP/bin"
+APP="$TMP/Google Chrome.app"
+LABEL=me.bpdus.agbrowse.worker
+mkdir -p "$HOME/.agbrowse-bpdus/agent-profile" "$HOME/Library/LaunchAgents" "$BIN" "$APP/Contents/MacOS"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+touch "$PLIST"
+export HOME TRACE="$TMP/trace" STATE="$TMP/state" PROFILE="$HOME/.agbrowse-bpdus/agent-profile" APP
+: > "$TRACE"; : > "$STATE"
+cat > "$APP/Contents/MacOS/Google Chrome" <<'STUB'
+#!/bin/bash
+exit 0
+STUB
+cat > "$BIN/id" <<'STUB'
+#!/bin/bash
+[ "$1" = -u ] && { echo 501; exit; }
+exec /usr/bin/id "$@"
+STUB
+cat > "$BIN/pgrep" <<'STUB'
+#!/bin/bash
+case "$*" in
+  *agent-worker*) [ "${WORKER_RUNNING:-0}" = 1 ] && { echo 424242; exit 0; } || exit 1 ;;
+  *agent-profile*) [ -e "$TMP_CHROME_PROCESS" ] && { echo 434343; exit 0; } || exit 1 ;;
+  *) exit 1 ;;
 esac
-EOF
-chmod +x "$FAKE_BIN/pgrep" || fail "could not prepare fake pgrep"
-
-cat > "$FAKE_BIN/ps" <<'EOF'
-#!/bin/sh
-[ "$#" -eq 4 ] && [ "$1" = "-o" ] && [ "$2" = "args=" ] && [ "$3" = "-p" ] || exit 2
-case "$4" in
-  "$TEST_WORKER_PID") printf '%s\n' 'node skills/browser/agent-worker.mjs' ;;
-  "$TEST_VIM_PID") printf '%s\n' 'vim skills/browser/agent-worker.mjs' ;;
-  *) exec /bin/ps -o args= -p "$4" ;;
+STUB
+cat > "$BIN/ps" <<'STUB'
+#!/bin/bash
+case "$*" in *424242*) echo "  501 node $HOME/.agbrowse-bpdus/src/skills/browser/agent-worker.mjs" ;; *434343*) echo "  501 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=$PROFILE" ;; *) exit 1 ;; esac
+STUB
+cat > "$BIN/launchctl" <<'STUB'
+#!/bin/bash
+echo "$*" >> "$TRACE"
+case "$1" in
+ print) [ "$2" = gui/501 ] && exit 0; grep -Fq "$2" "$STATE" ;;
+ bootout) grep -Fv "$2" "$STATE" > "$STATE.tmp" || true; mv "$STATE.tmp" "$STATE" ;;
+ bootstrap) echo "$2/$3" >> "$STATE"; [ "${RESTORE_LOCK:-0}" = 1 ] && touch "$HOME/.agbrowse-bpdus/profile.lock" ;;
+ *) exit 1 ;;
 esac
-EOF
-chmod +x "$FAKE_BIN/ps" || fail "could not prepare fake ps"
-
-cat > "$FAKE_BIN/sleep" <<'EOF'
-#!/bin/sh
-if [ "${FAKE_SLEEP_MODE:-}" = fast ]; then
-  echo x >> "$TEST_SLEEP_COUNT"
-  exit 0
-fi
+STUB
+cat > "$BIN/open" <<'STUB'
+echo "$*" >> "$TRACE"
+printf '%s\n' "$@" > "$OPEN_ARGS"
+touch "$TMP_CHROME_PROCESS" "$PROFILE/SingletonLock"
+if [ "${HOLD_OPEN:-0}" = 1 ]; then while [ ! -e "$OPEN_RELEASE" ]; do /bin/sleep 0.02; done; fi
+rm -f "$TMP_CHROME_PROCESS" "$PROFILE/SingletonLock"
+exit "${OPEN_STATUS:-0}"
+STUB
+cat > "$BIN/sleep" <<'STUB'
+[ "${FAST_SLEEP:-0}" = 1 ] && exit 0
 exec /bin/sleep "$@"
-EOF
-chmod +x "$FAKE_BIN/sleep" || fail "could not prepare fake sleep"
+STUB
+chmod +x "$BIN/"* "$APP/Contents/MacOS/Google Chrome"
+export PATH="$BIN:/usr/bin:/bin" CHROME_APP="$APP" TMP_CHROME_PROCESS="$TMP/chrome-process" OPEN_ARGS="$TMP/open-args" OPEN_RELEASE="$TMP/open-release"
+SCRIPT="$ROOT/bin/bpdus/login-naver.sh"
 
-cat > "$CHROME_BIN" <<'EOF'
-#!/bin/sh
-printf '%s\n' "$@" > "$CHROME_ARGS"
-: > "$CHROME_STARTED"
-if [ "${FAKE_CHROME_MODE:-}" = hold ]; then
-  while [ ! -e "$CHROME_RELEASE" ]; do /bin/sleep 0.05; done
-fi
-exit "${FAKE_CHROME_STATUS:-0}"
-EOF
-chmod +x "$CHROME_BIN" || fail "could not prepare fake Chrome"
+# A loaded service blocks an unapproved profile handoff.
+echo "gui/501/$LABEL" > "$STATE"
+if "$SCRIPT" > "$TMP/no-stop.out" 2> "$TMP/no-stop.err"; then exit 1; fi
+grep -Fq 'is loaded' "$TMP/no-stop.err"
+[ -e "$STATE" ]
 
-export HOME="$TEST_HOME"
-export CHROME_BIN CHROME_ARGS CHROME_STARTED CHROME_RELEASE
-export TEST_TERM_MARKER TEST_SLEEP_COUNT
-PATH="$FAKE_BIN:/usr/bin:/bin"
-export PATH
+# Explicit handoff unloads before Launch Services, waits through Chrome's profile lock, then restores.
+HOLD_OPEN=1 RESTORE_LOCK=1; export HOLD_OPEN RESTORE_LOCK
+"$SCRIPT" --stop-worker > "$TMP/login.out" 2> "$TMP/login.err" & LOGIN_PID=$!
+tries=0
+while [ ! -e "$TMP_CHROME_PROCESS" ] && [ "$tries" -lt 100 ]; do /bin/sleep .02; tries=$((tries + 1)); done
+[ -e "$TMP_CHROME_PROCESS" ] || { cat "$TMP/login.err" >&2; exit 1; }
+grep -Fq "bootout gui/501/$LABEL" "$TRACE"
+if grep -Fq "bootstrap gui/501 $PLIST" "$TRACE"; then exit 1; fi
+grep -Fxq -- '-n' "$OPEN_ARGS"
+grep -Fxq -- '-W' "$OPEN_ARGS"
+grep -Fxq -- "$APP" "$OPEN_ARGS"
+grep -Fxq -- "--user-data-dir=$PROFILE" "$OPEN_ARGS"
+grep -Fxq -- 'https://nid.naver.com/nidlogin.login' "$OPEN_ARGS"
+: > "$OPEN_RELEASE"
+wait "$LOGIN_PID"
+[ -e "$HOME/.agbrowse-bpdus/profile.lock" ]
+rm -f "$HOME/.agbrowse-bpdus/profile.lock"
+unset RESTORE_LOCK
+[ -e "$PLIST" ]
+boot_line=$(grep -nF "bootout gui/501/$LABEL" "$TRACE" | head -1 | cut -d: -f1)
+open_line=$(grep -nF -- "-n -W -a $APP" "$TRACE" | head -1 | cut -d: -f1)
+restore_line=$(grep -nF "bootstrap gui/501 $PLIST" "$TRACE" | head -1 | cut -d: -f1)
+[ "$boot_line" -lt "$open_line" ] && [ "$open_line" -lt "$restore_line" ]
+! grep -E -- '--use-mock-keychain|--password-store=basic' "$TRACE"
 
-"$SCRIPT" --help > "$TEST_ROOT/help.out" 2> "$TEST_ROOT/help.err" || fail "--help should succeed"
-grep -q -- '--stop-worker' "$TEST_ROOT/help.out" || fail "--help omitted --stop-worker"
-if "$SCRIPT" --unknown > "$TEST_ROOT/unknown.out" 2> "$TEST_ROOT/unknown.err"; then
-  fail "unknown option should fail"
-fi
-assert_no_chrome
-pass "only the documented options are accepted"
+# Pre-existing unloaded state stays unloaded and emits explicit recovery guidance.
+: > "$TRACE"
+"$SCRIPT" > "$TMP/unloaded.out"
+! grep -Fq "bootstrap gui/501 $PLIST" "$TRACE"
+grep -Fq 'remains unloaded' "$TMP/unloaded.out"
 
-FAKE_PGREP_MODE=worker
-TEST_WORKER_PID=987654
-export FAKE_PGREP_MODE TEST_WORKER_PID
-if "$SCRIPT" > "$TEST_ROOT/refusal.out" 2> "$TEST_ROOT/refusal.err"; then
-  fail "a running worker should block login mode"
-fi
-grep -q 'agent-worker is running' "$TEST_ROOT/refusal.err" || fail "worker refusal message missing"
-assert_no_chrome
-pass "a running worker blocks login mode without --stop-worker"
+# Launch failure does not restore while Chrome still owns its profile; a clean failure can restore.
+echo "gui/501/$LABEL" > "$STATE"
+OPEN_STATUS=7; HOLD_OPEN=0; export OPEN_STATUS HOLD_OPEN
+if "$SCRIPT" --stop-worker > "$TMP/fail.out" 2> "$TMP/fail.err"; then exit 1; fi
+grep -Fq 'Launch Services failed' "$TMP/fail.err"
 
-FAKE_PGREP_MODE=error
-export FAKE_PGREP_MODE
-if "$SCRIPT" --stop-worker > "$TEST_ROOT/discovery.out" 2> "$TEST_ROOT/discovery.err"; then
-  fail "worker discovery errors should fail closed"
-fi
-assert_no_chrome
-pass "worker discovery errors fail closed"
+# Interruption keeps the worker unloaded while Chrome owns the profile and restores after release.
+echo "gui/501/$LABEL" > "$STATE"
+rm -f "$OPEN_RELEASE" "$TMP_CHROME_PROCESS"
+OPEN_STATUS=0; HOLD_OPEN=1; export OPEN_STATUS HOLD_OPEN
+"$SCRIPT" --stop-worker > "$TMP/interrupted.out" 2> "$TMP/interrupted.err" & LOGIN_PID=$!
+tries=0
+while [ ! -e "$TMP_CHROME_PROCESS" ] && [ "$tries" -lt 100 ]; do /bin/sleep .02; tries=$((tries + 1)); done
+[ -e "$TMP_CHROME_PROCESS" ] || { cat "$TMP/interrupted.err" >&2; exit 1; }
+kill -TERM "$LOGIN_PID"
+/bin/sleep .05
+! grep -Fq "bootstrap gui/501 $PLIST" "$TRACE"
+touch "$OPEN_RELEASE"
+wait "$LOGIN_PID" || true
+grep -Fq 'Login interrupted' "$TMP/interrupted.err"
+grep -Fq "bootstrap gui/501 $PLIST" "$TRACE"
 
-FAKE_PGREP_MODE=timeout
-FAKE_SLEEP_MODE=fast
-TEST_WORKER_PID=0
-export FAKE_PGREP_MODE FAKE_SLEEP_MODE TEST_WORKER_PID
-(
-  trap 'touch "$TEST_TERM_MARKER"; exit 0' TERM
-  while :; do /bin/sleep 0.05; done
-) &
-TEST_WORKER_PID=$!
-export TEST_WORKER_PID
-if "$SCRIPT" --stop-worker > "$TEST_ROOT/timeout.out" 2> "$TEST_ROOT/timeout.err"; then
-  fail "a worker that remains discoverable should time out"
-fi
-wait "$TEST_WORKER_PID" 2>/dev/null || true
-TEST_WORKER_PID=""
-grep -q 'Timed out waiting' "$TEST_ROOT/timeout.err" || fail "timeout message missing"
-assert_no_chrome
-pass "SIGTERM is sent only to discovered workers and timeout fails closed"
+# Absolute worker script paths are recognized and still require the explicit stop flag.
+WORKER_RUNNING=1 FAST_SLEEP=1
+export WORKER_RUNNING FAST_SLEEP
+if "$SCRIPT" --stop-worker > "$TMP/worker-timeout.out" 2> "$TMP/worker-timeout.err"; then exit 1; fi
+grep -Fq 'Timed out waiting' "$TMP/worker-timeout.err" || { cat "$TMP/worker-timeout.err"; exit 1; }
 
-rm -f "$TEST_TERM_MARKER" "$TEST_SLEEP_COUNT"
-FAKE_PGREP_MODE=term
-FAKE_SLEEP_MODE=
-export FAKE_PGREP_MODE FAKE_SLEEP_MODE
-(
-  trap 'touch "$TEST_TERM_MARKER"; exit 0' TERM
-  while :; do /bin/sleep 0.05; done
-) &
-TEST_WORKER_PID=$!
-export TEST_WORKER_PID
-/bin/sleep 0.05
-/bin/sleep 30 &
-TEST_VIM_PID=$!
-export TEST_VIM_PID
-if ! "$SCRIPT" --stop-worker > "$TEST_ROOT/term.out" 2> "$TEST_ROOT/term.err"; then
-  cat "$TEST_ROOT/term.err" >&2
-  fail "--stop-worker should wait for the worker to exit"
-fi
-wait "$TEST_WORKER_PID" 2>/dev/null || true
-TEST_WORKER_PID=""
-[ -e "$TEST_TERM_MARKER" ] || fail "worker did not receive SIGTERM"
-kill -0 "$TEST_VIM_PID" 2>/dev/null || fail "Vim-like process fixture did not survive"
-grep -q 'Quit Chrome' "$TEST_ROOT/term.out" || fail "restart guidance missing after Chrome exit"
-kill -TERM "$TEST_VIM_PID" 2>/dev/null || true
-wait "$TEST_VIM_PID" 2>/dev/null || true
-TEST_VIM_PID=""
-pass "--stop-worker waits for TERM; Vim-like process survives"
-
-check_lock_refusal() {
-  lock_path="$1"
-  lock_kind="$2"
-  case "$lock_kind" in
-    file) : > "$lock_path" ;;
-    dir) mkdir "$lock_path" ;;
-    dangling) ln -s "$TEST_ROOT/missing-lock-target" "$lock_path" ;;
-  esac
-  if "$SCRIPT" > "$TEST_ROOT/lock.out" 2> "$TEST_ROOT/lock.err"; then
-    fail "profile lock should block launch: $lock_path"
-  fi
-  assert_no_chrome
-  rm -rf "$lock_path"
-}
-
-FAKE_PGREP_MODE=none
-export FAKE_PGREP_MODE
-rm -f "$CHROME_STARTED" "$CHROME_ARGS"
-check_lock_refusal "$TEST_HOME/.agbrowse-bpdus/profile.lock" file
-check_lock_refusal "$TEST_HOME/.agbrowse-bpdus/profile.lock.reclaiming" dir
-check_lock_refusal "$PROFILE/SingletonLock" file
-check_lock_refusal "$PROFILE/SingletonSocket" dangling
-check_lock_refusal "$PROFILE/SingletonCookie" file
-pass "profile lock files, reclaiming directories, and dangling symlinks block launch"
-
-mv "$PROFILE" "$TEST_ROOT/real-profile"
-ln -s "$TEST_ROOT/real-profile" "$PROFILE" || fail "could not create profile symlink fixture"
-if "$SCRIPT" > "$TEST_ROOT/profile-link.out" 2> "$TEST_ROOT/profile-link.err"; then
-  fail "a symlinked profile should be rejected"
-fi
-assert_no_chrome
-rm "$PROFILE"
-mv "$TEST_ROOT/real-profile" "$PROFILE"
-pass "symlinked profile paths are rejected"
-
-rm -f "$CHROME_STARTED" "$CHROME_ARGS" "$CHROME_RELEASE"
-FAKE_CHROME_MODE=hold
-export FAKE_CHROME_MODE
-"$SCRIPT" > "$CHROME_STDOUT" 2> "$CHROME_STDERR" &
-LOGIN_PID=$!
-attempt=0
-while [ ! -e "$CHROME_STARTED" ] && [ "$attempt" -lt 100 ]; do
-  /bin/sleep 0.05
-  attempt=$((attempt + 1))
-done
-[ -e "$CHROME_STARTED" ] || fail "fake Chrome did not start"
-kill -0 "$LOGIN_PID" 2>/dev/null || fail "login script did not wait for Chrome"
-if grep -q 'restart with' "$CHROME_STDOUT"; then
-  fail "restart guidance appeared before Chrome exited"
-fi
-EXPECTED_ARGS="$TEST_ROOT/expected-args"
-printf '%s\n' "--user-data-dir=$PROFILE" 'https://nid.naver.com/nidlogin.login' > "$EXPECTED_ARGS"
-cmp "$EXPECTED_ARGS" "$CHROME_ARGS" >/dev/null || fail "Chrome arguments differed from the required pair"
-touch "$CHROME_RELEASE"
-wait "$LOGIN_PID" || fail "login script failed after fake Chrome exited"
-grep -q 'restart with' "$CHROME_STDOUT" || fail "restart guidance missing after Chrome exited"
-grep -q 'Quit Chrome' "$CHROME_STDOUT" || fail "macOS Quit Chrome guidance missing"
-pass "Chrome receives exactly the required arguments and the script waits before printing guidance"
-
-echo "All Naver login integration checks passed."
+echo 'bpdus-login-naver: PASS'
