@@ -104,12 +104,15 @@ describe('agent login policy', () => {
         expect(isLogoutUrl('https://nid.naver.com/nidlogin.logout?foo=1')).toBe(true);
         expect(classifyLoginRequest('https://nid.naver.com/nidlogin.logout?foo=1', 'GET')).toBe('deny');
         expect(classifyLoginRequest('https://example.com/', 'GET')).toBe('deny');
+        expect(classifyLoginRequest('https://www.naver.com/', 'GET')).toBe('deny');
         expect(classifyLoginRequest('https://evilpstatic.net/a.js', 'GET')).toBe('deny');
     });
     it('allows only secure login and static resource requests', () => {
         expect(classifyLoginRequest('https://nid.naver.com/nidlogin.login', 'POST')).toBe('allow');
         expect(classifyLoginRequest('https://ssl.pstatic.net/a.js', 'GET')).toBe('allow');
         expect(classifyLoginRequest('https://ncpt.naver.com/static/ncaptcha-api.js', 'GET')).toBe('allow');
+        expect(classifyLoginRequest('https://nca.naver.com/challenge', 'GET')).toBe('allow');
+        expect(classifyLoginRequest('https://nca.naver.com:443/challenge', 'GET')).toBe('allow');
         expect(classifyLoginRequest('http://nid.naver.com/nidlogin.login', 'GET')).toBe('deny');
         expect(classifyLoginRequest('https://ncpt.naver.com/challenge', 'POST')).toBe('deny');
     });

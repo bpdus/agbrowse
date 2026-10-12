@@ -380,21 +380,25 @@ async function abortRoute(route) {
  * A 3xx Location is classified before the next hop is requested.
  * @param {import('playwright-core').Route} route
  */
-async function guardRequest(route, pagePolicies, getMode = () => 'normal') {
+async function guardRequest(route, pagePolicies, getMode = () => 'normal', logLoginBlock = () => {}) {
     try {
         const request = route.request();
         const method = requestMethod(request);
         const url = requestUrl(request);
         let page = null;
         try { page = request.frame?.().page?.() ?? null; } catch { page = null; }
-        if (isLogoutUrl(url)) { await abortRoute(route); return; }
         const mode = getMode();
+        const block = async () => {
+            if (mode === 'login') logLoginBlock(request, url, method);
+            await abortRoute(route);
+        };
+        if (isLogoutUrl(url)) { await block(); return; }
         if (mode === 'login' || mode === 'transitioning') {
             const loginProbe = page && pagePolicies.get(page)?.requestPolicy?.operation === 'naver.login_status';
-            if (mode !== 'login' || (!loginProbe && classifyLoginRequest(url, method) !== 'allow') || chainHasWebSocket(request)) { await abortRoute(route); return; }
+            if (mode !== 'login' || (!loginProbe && classifyLoginRequest(url, method) !== 'allow') || chainHasWebSocket(request)) { await block(); return; }
             if (loginProbe) {
                 const policy = pagePolicies.get(page).requestPolicy;
-                if (!redirectChainAllowed(request, policy)) { await abortRoute(route); return; }
+                if (!redirectChainAllowed(request, policy)) { await block(); return; }
                 const response = await route.fetch({ maxRedirects: 0 });
                 const status = response.status?.() ?? 0;
                 if (status >= 300 && status < 400) {
@@ -419,10 +423,10 @@ async function guardRequest(route, pagePolicies, getMode = () => 'normal') {
                 const location = response.headers?.().location;
                 let next;
                 try { if (typeof location !== 'string' || !location) throw new Error(); next = new URL(location, currentUrl).href; }
-                catch { await abortRoute(route); return; }
+                catch { await block(); return; }
                 const nextMethod = status === 307 || status === 308 ? currentMethod : 'GET';
-                if (currentMethod === 'POST' && (nextMethod !== 'GET' || new URL(next).hostname.toLowerCase() !== 'nid.naver.com')) { await abortRoute(route); return; }
-                if (classifyLoginRequest(next, nextMethod) !== 'allow') { await abortRoute(route); return; }
+                if (currentMethod === 'POST' && (nextMethod !== 'GET' || new URL(next).hostname.toLowerCase() !== 'nid.naver.com')) { await block(); return; }
+                if (classifyLoginRequest(next, nextMethod) !== 'allow') { await block(); return; }
                 currentUrl = next; currentMethod = nextMethod;
                 response = await route.fetch({ url: currentUrl, method: currentMethod, maxRedirects: 0 });
             }
@@ -552,11 +556,11 @@ async function guardWebSocket(ws) {
 /**
  * @param {import('playwright-core').BrowserContext} ctx
  */
-async function installContextGuards(ctx, pagePolicies, getMode = () => 'normal') {
+async function installContextGuards(ctx, pagePolicies, getMode = () => 'normal', logLoginBlock = () => {}) {
     if (typeof ctx.route !== 'function' || typeof ctx.addInitScript !== 'function') {
         throw new AgentRuntimeError('STARTUP_FAILED', 'Browser launch failed.');
     }
-    await ctx.route('**/*', (route) => guardRequest(route, pagePolicies, getMode));
+    await ctx.route('**/*', (route) => guardRequest(route, pagePolicies, getMode, logLoginBlock));
     if (typeof ctx.routeWebSocket === 'function') {
         /** @type {(url: URL) => boolean} */
         const allWebSockets = () => true;
@@ -591,6 +595,19 @@ export function createAgentRuntime(config) {
     let chain = Promise.resolve();
     /** @type {'normal' | 'transitioning' | 'login'} */
     let mode = 'normal';
+    let loginBlockedLogCount = 0;
+    const logLoginBlock = (request, value, method) => {
+        if (loginBlockedLogCount >= 200) return;
+        loginBlockedLogCount += 1;
+        let host;
+        try {
+            const url = new URL(value);
+            host = ['http:', 'https:'].includes(url.protocol) ? url.hostname : url.protocol.slice(0, -1) || 'unknown';
+        } catch { host = 'unknown'; }
+        let type = 'unknown';
+        try { type = request.resourceType?.() || 'unknown'; } catch {}
+        process.stderr.write(`agbrowse-login-blocked host=${host} method=${String(method).toUpperCase()} type=${type}\n`);
+    };
     /** @type {import('playwright-core').Page | null} */
     let loginPage = null;
     let loginController = null;
@@ -1104,13 +1121,14 @@ export function createAgentRuntime(config) {
                 if (mode === 'login') return { mode, ready: true };
                 if (mode === 'transitioning') return { mode, ready: false };
                 mode = 'transitioning'; sessions.clear();
+                loginBlockedLogCount = 0;
                 if (context) { try { await context.close(); } catch { throw readError('SHUTDOWN_FAILED'); } }
                 context = null; loginPage = null; loginController = null;
                 const { profileDir } = ensureDedicatedProfile();
                 await waitForProfileRelease(profileDir);
                 const playwright = await import('playwright-core');
                 context = await playwright.chromium.launchPersistentContext(profileDir, launchOptions());
-                watchContext(context); await installContextGuards(context, pagePolicies, () => mode);
+                watchContext(context); await installContextGuards(context, pagePolicies, () => mode, logLoginBlock);
                 loginPage = await context.newPage();
                 loginController = createLoginController(loginPage);
                 // The guard must apply the login allowlist to the initial goto.
