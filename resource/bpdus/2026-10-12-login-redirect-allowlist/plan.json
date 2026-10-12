@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "domain": "feature",
+  "summary": "Restrict Naver login-status redirects to the exact account and login pages.",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Restrict login-status redirects",
+      "files": ["skills/browser/agent-naver-login-status.mjs", "test/unit/agent-naver-login-status.test.mjs", "test/unit/agent-runtime.test.mjs"],
+      "target": "loginStatusPolicy and classifyLoginStatusRequest",
+      "depends_on": "none",
+      "change": "Allow only HTTPS redirects whose parsed origin and pathname exactly match the account URL or login URL, and verify rejected redirect destinations are not fetched.",
+      "effect": "Logout and unrelated Naver paths are aborted and login_status returns unknown; account and login destinations retain their status classifications.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "An unsafe redirect could trigger a logout request or other unintended navigation during a read-only login check.",
+        "test_decision": "add",
+        "test_reason": "The existing tests permitted broad Naver redirects and did not prove logout destinations were blocked before fetching.",
+        "subject": "Exact allowlist enforcement and abort-before-fetch behavior",
+        "procedure": "Run the three requested Vitest unit files.",
+        "pass_criterion": "Logout and other Naver paths are denied without destination fetches, while login and account pages classify correctly."
+      }
+    }
+  ],
+  "verification": ["npx vitest run test/unit/agent-naver-login-status.test.mjs test/unit/agent-runtime.test.mjs test/unit/agent-mcp.test.mjs"],
+  "risks": ["Naver may introduce a new legitimate login redirect path, which would remain blocked until explicitly allowlisted."],
+  "status": "READY"
+}

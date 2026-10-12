@@ -743,7 +743,7 @@ describe('agent-runtime', () => {
         expect(nextDocument.sandbox).not.toBe(firstDocument.sandbox);
     });
 
-    it('allows the fixed account URL and same-site login redirects only during login status on that page', async () => {
+    it('allows only exact account and login redirects during login status on that page', async () => {
         const made = makeContext(events);
         const pages = [makePage('login-status-one'), makePage('login-status-two')];
         let index = 0;
@@ -758,14 +758,15 @@ describe('agent-runtime', () => {
         const decisions = [];
 
         async function request(url, { page, method = 'GET', navigation = false, redirectedFrom, fetchResponses = [] } = {}) {
-            const decision = { url, page: page.targetId, method, navigation, fetched: 0, aborted: false };
+            const decision = { url, page: page.targetId, method, navigation, fetched: 0, fetchUrls: [], aborted: false };
             const routedRequest = makeRoutedRequest(url, { page, method, navigation, redirectedFrom });
             const responses = [...fetchResponses];
             await handler({
                 request: () => routedRequest,
                 async abort() { decision.aborted = true; },
-                async fetch() {
+                async fetch(options = {}) {
                     decision.fetched += 1;
+                    decision.fetchUrls.push(options.url || routedRequest.url());
                     return responses.shift() ?? { status: () => 200, headers: () => ({}) };
                 },
                 async fulfill() {},
@@ -792,7 +793,8 @@ describe('agent-runtime', () => {
             await request('https://www.naver.com/static/home.css', { page: pages[1] });
             await request('https://nid.naver.com/nidlogin.login', { page: pages[0], navigation: true, redirectedFrom: () => initial });
             await request('https://evil.example/redirected', { page: pages[0], navigation: true, redirectedFrom: () => initial });
-            await request('https://www.naver.com/redirected/path', { page: pages[0], navigation: true, redirectedFrom: () => initial });
+            await request('https://nid.naver.com/nidlogin.logout', { page: pages[0], navigation: true, redirectedFrom: () => initial });
+            await request('https://nid.naver.com/other', { page: pages[0], navigation: true, redirectedFrom: () => initial });
             pages[0].currentUrl = 'https://nid.naver.com/user2/help/myInfo';
         };
         pages[0].evaluate = async (fn) => {
@@ -807,7 +809,16 @@ describe('agent-runtime', () => {
         expect(decisions.slice(2, 5).every(({ fetched, aborted }) => fetched === 0 && aborted)).toBe(true);
         expect(decisions[5]).toMatchObject({ fetched: 1, aborted: false, url: 'https://nid.naver.com/nidlogin.login' });
         expect(decisions[6]).toMatchObject({ fetched: 0, aborted: true, url: 'https://evil.example/redirected' });
-        expect(decisions[7]).toMatchObject({ fetched: 1, aborted: false, url: 'https://www.naver.com/redirected/path' });
+        expect(decisions[7]).toMatchObject({ fetched: 0, aborted: true, url: 'https://nid.naver.com/nidlogin.logout' });
+        expect(decisions[8]).toMatchObject({ fetched: 0, aborted: true, url: 'https://nid.naver.com/other' });
+
+        redirectTo = 'https://nid.naver.com/nidlogin.logout';
+        const beforeLogout = decisions.length;
+        expect(await runtime.dispatchRead('naver.login_status', { session_id: first.sessionId }))
+            .toEqual({ status: 'unknown', evidence: 'none' });
+        expect(decisions[beforeLogout]).toMatchObject({ fetched: 1, aborted: true });
+        expect(decisions[beforeLogout].url).toBe('https://nid.naver.com/user2/help/myInfo');
+        expect(decisions[beforeLogout].fetchUrls).toEqual(['https://nid.naver.com/user2/help/myInfo']);
 
         redirectTo = 'https://evil.example/redirected';
         expect(await runtime.dispatchRead('naver.login_status', { session_id: first.sessionId }))

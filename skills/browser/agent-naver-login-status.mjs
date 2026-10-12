@@ -9,11 +9,6 @@ export const LOGIN_STATUS_ACCOUNT_PATH = '/user2/help/myInfo';
 export const LOGIN_STATUS_LOGIN_PATH = '/nidlogin.login';
 export const LOGIN_STATUS_URL = `${LOGIN_STATUS_ORIGIN}${LOGIN_STATUS_ACCOUNT_PATH}`;
 
-const LOGIN_STATUS_REDIRECT_ORIGINS = Object.freeze([
-    LOGIN_STATUS_ORIGIN,
-    'https://www.naver.com',
-]);
-
 const LOGIN_STATUS_RESOURCE_ORIGINS = Object.freeze([
     'https://www.naver.com',
     'https://ssl.pstatic.net',
@@ -27,7 +22,6 @@ export function loginStatusPolicy() {
         navigationOrigin: LOGIN_STATUS_ORIGIN,
         navigationPath: LOGIN_STATUS_ACCOUNT_PATH,
         navigationPaths: Object.freeze([LOGIN_STATUS_ACCOUNT_PATH, LOGIN_STATUS_LOGIN_PATH]),
-        redirectOrigins: LOGIN_STATUS_REDIRECT_ORIGINS,
         resourceOrigins: LOGIN_STATUS_RESOURCE_ORIGINS,
         harnessOrigin: null,
     });
@@ -35,8 +29,8 @@ export function loginStatusPolicy() {
 
 /**
  * Classify one request under the temporary login-status page policy.
- * Redirect destinations are limited to the two exact Naver origins; the
- * initial navigation is limited to the account and login paths on nid.naver.com.
+ * Redirect destinations and the initial navigation are limited to the exact
+ * account and login paths on nid.naver.com.
  * @param {string} rawUrl
  * @param {string} method
  * @param {'navigation' | 'resource'} kind
@@ -60,7 +54,10 @@ export function classifyLoginStatusRequest(rawUrl, method, kind, policy = loginS
 
     if (kind === 'navigation') {
         if (options.redirected) {
-            return policy.redirectOrigins.includes(url.origin) ? 'allow' : 'deny-navigation';
+            return url.origin === policy.navigationOrigin
+                && policy.navigationPaths.includes(url.pathname)
+                ? 'allow'
+                : 'deny-navigation';
         }
         return url.origin === policy.navigationOrigin && policy.navigationPaths.includes(url.pathname)
             ? 'allow'

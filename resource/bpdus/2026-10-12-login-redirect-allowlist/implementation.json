@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "status": "DONE",
+  "summary": "Login-status redirects now allow only the exact HTTPS account and login paths.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-redirect-allowlist/plan.json",
+  "tasks": [
+    {
+      "task_id": 1,
+      "status": "PASS",
+      "changed_files": [
+        "/home/box/src/agbrowse/skills/browser/agent-naver-login-status.mjs",
+        "/home/box/src/agbrowse/test/unit/agent-naver-login-status.test.mjs",
+        "/home/box/src/agbrowse/test/unit/agent-runtime.test.mjs"
+      ]
+    }
+  ],
+  "inputs": [
+    {"path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-redirect-allowlist/plan.json", "sha256": "cb22c233894ead8e6241c3f4039273fd465dcb9e0401dfa3a55ee5ae74a5b164"},
+    {"path": "/home/box/src/agbrowse/skills/browser/agent-naver-login-status.mjs", "sha256": "61d346bb78fe71be1f4d2643cbb4994c4786b72e39c65abe0e06a6b009b6b666"},
+    {"path": "/home/box/src/agbrowse/test/unit/agent-naver-login-status.test.mjs", "sha256": "1b5bfe390a38e0510057f2e4f0006ab62e40f772bfcd2b2f6c29eddcaa281bb3"},
+    {"path": "/home/box/src/agbrowse/test/unit/agent-runtime.test.mjs", "sha256": "6fbb9d63049e17ac5b325560155350420c8d783faf0e4ceb2584dcaf55a38a4b"}
+  ],
+  "checks": [
+    {"name": "verification", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-redirect-allowlist/evidence/diff-check.log", "evidence_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"name": "tests", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-redirect-allowlist/evidence/vitest.log", "evidence_sha256": "7224e7b415d153e20ec25698021a5d6ff8f723894a8c092b4063e3888aeb280a"},
+    {"name": "self_review", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-redirect-allowlist/evidence/diff-check.log", "evidence_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+  ]
+}

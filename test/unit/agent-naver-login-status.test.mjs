@@ -75,7 +75,7 @@ describe('Naver login status adapter', () => {
         }
     });
 
-    it('allows only the fixed account and login navigations and same-site redirects temporarily', () => {
+    it('allows only the exact account and login navigations and redirects temporarily', () => {
         const policy = loginStatusPolicy();
         expect(LOGIN_STATUS_ORIGIN).toBe('https://nid.naver.com');
         expect(LOGIN_STATUS_URL).toBe('https://nid.naver.com/user2/help/myInfo');
@@ -91,8 +91,11 @@ describe('Naver login status adapter', () => {
         expect(classifyLoginStatusRequest(`https://nid.naver.com${LOGIN_STATUS_LOGIN_PATH}`, 'GET', 'navigation', policy)).toBe('allow');
         expect(classifyLoginStatusRequest('https://nid.naver.com/other', 'GET', 'navigation', policy)).toBe('deny-navigation');
         expect(classifyLoginStatusRequest('https://www.naver.com/other', 'GET', 'navigation', policy)).toBe('deny-navigation');
-        expect(classifyLoginStatusRequest('https://www.naver.com/redirected/path', 'GET', 'navigation', policy, { redirected: true })).toBe('allow');
+        expect(classifyLoginStatusRequest(LOGIN_STATUS_URL, 'GET', 'navigation', policy, { redirected: true })).toBe('allow');
         expect(classifyLoginStatusRequest(`https://nid.naver.com${LOGIN_STATUS_LOGIN_PATH}`, 'GET', 'navigation', policy, { redirected: true })).toBe('allow');
+        expect(classifyLoginStatusRequest('https://nid.naver.com/nidlogin.login?foo=bar', 'GET', 'navigation', policy, { redirected: true })).toBe('allow');
+        expect(classifyLoginStatusRequest('https://nid.naver.com/nidlogin.logout', 'GET', 'navigation', policy, { redirected: true })).toBe('deny-navigation');
+        expect(classifyLoginStatusRequest('https://nid.naver.com/other', 'GET', 'navigation', policy, { redirected: true })).toBe('deny-navigation');
         expect(classifyLoginStatusRequest('https://evil.example/resource', 'GET', 'navigation', policy, { redirected: true })).toBe('deny-navigation');
         expect(classifyLoginStatusRequest('http://www.naver.com/', 'GET', 'navigation', policy, { redirected: true })).toBe('deny-navigation');
         expect(classifyLoginStatusRequest('https://attacker.test@nid.naver.com/user2/help/myInfo', 'GET', 'navigation', policy)).toBe('deny-navigation');
