@@ -48,7 +48,7 @@ describe('agent login policy', () => {
         const page = {
             url: () => dom.window.location.href,
             on() {},
-            evaluate: (fn) => dom.window.Function(`return (${fn.toString()})()`)(),
+            evaluate: async (fn, arg) => fn(arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg),
         $$: async (selector) => [...dom.window.document.querySelectorAll(selector)].map((element) => ({
             evaluate: async (fn) => fn(element),
             fill: async (value) => { filled = { element, value }; },
@@ -129,7 +129,7 @@ describe('agent login policy', () => {
         let screenshotOptions;
         const page = {
             url: () => dom.window.location.href, on() {},
-            evaluate: (fn) => dom.window.Function(`return (${fn.toString()})()`)(),
+            evaluate: async (fn, arg) => fn(arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg),
             $$: async (selector) => [...dom.window.document.querySelectorAll(selector)].map((element) => ({ evaluate: async (fn) => fn(element), fill: async () => {}, click: async () => {}, dispose: async () => {} })),
             locator: (selector) => ({ selector, evaluate: async (fn) => fn(dom.window.document.querySelector(selector)), count: async () => 1, isVisible: async () => true }),
             screenshot: async (options) => { screenshotOptions = options; return Buffer.from('png'); },
@@ -140,8 +140,8 @@ describe('agent login policy', () => {
         await expect(controller.typeLoginText({ ref: captchaRef, text: '1234' })).rejects.toMatchObject({ code: 'HUMAN_REQUIRED' });
         await expect(controller.click({ ref: captchaRef })).rejects.toMatchObject({ code: 'HUMAN_REQUIRED' });
         await controller.screenshot();
-        expect(screenshotOptions.mask).toHaveLength(2);
-        expect(screenshotOptions.mask.map((locator) => locator.selector)).toEqual(['input#id[name="id"]', 'input#pw[name="pw"]']);
+        expect(screenshotOptions.mask).toHaveLength(1);
+        expect(screenshotOptions.mask[0].selector).toBe('input[type="text"],input[type="email"],input[type="tel"],input[type="password"]');
         dom.window.close();
     });
 
@@ -160,7 +160,7 @@ describe('agent login policy', () => {
         });
         const page = {
             url: () => dom.window.location.href, on() {},
-            evaluate: (fn) => dom.window.Function(`return (${fn.toString()})()`)(),
+            evaluate: async (fn, arg) => fn(arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg),
             locator: (selector) => {
                 const find = () => dom.window.document.querySelector(selector);
                 return { count: async () => find() ? 1 : 0, isVisible: async () => Boolean(find()), evaluate: async (fn) => fn(find()), elementHandle: async () => find() ? wrap(find()) : null };
@@ -169,9 +169,7 @@ describe('agent login policy', () => {
         };
         const controller = createLoginController(page);
         const outcome = await controller.fillCredentials(async () => {
-            const replacement = dom.window.document.createElement('input');
-            replacement.id = 'id'; replacement.name = 'id';
-            dom.window.document.querySelector('#id').replaceWith(replacement);
+            dom.window.document.querySelector('#id').name = 'renamed';
             return { result: 'credentials', account: 'account', password: 'password' };
         });
         expect(outcome).toEqual({ result: 'failed', reason: 'fields_changed' });
@@ -191,7 +189,7 @@ describe('agent login policy', () => {
             dom.window.document.body.append(form);
         }],
         ['changes the validated form action in place', (dom) => {
-            dom.window.document.querySelector('form').action = 'https://example.invalid/collect';
+            dom.window.document.querySelector('form').action = 'https://nid.naver.com/collect';
         }],
         ['navigates the top-level page during keychain access', (dom) => {
             dom.window.history.pushState({}, '', 'https://example.invalid/collect');
@@ -210,7 +208,7 @@ describe('agent login policy', () => {
             fill: async () => { filled += 1; }, dispose: async () => {},
         });
         const page = {
-            url: () => dom.window.location.href, on() {}, evaluate: (fn) => dom.window.Function(`return (${fn.toString()})()`)(),
+            url: () => dom.window.location.href, on() {}, evaluate: async (fn, arg) => fn(arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg),
             locator: (selector) => {
                 const find = () => dom.window.document.querySelector(selector);
                 return { count: async () => find() ? 1 : 0, isVisible: async () => Boolean(find()), evaluate: async (fn) => fn(find()), elementHandle: async () => find() ? wrap(find()) : null };

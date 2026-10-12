@@ -24,13 +24,15 @@ function pageWith(html) {
         dom, listeners, calls: [],
         on(name, cb) { listeners[name] = cb; }, mainFrame() { return 'main'; },
         url() { return dom.window.location.href; },
-        async evaluate(fn) { return fn(); },
+        async screenshot(options) { this.screenshotOptions = options; return Buffer.from('png'); },
+        async evaluate(fn, arg) { return fn(arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg); },
         async $$(selector) { return [...dom.window.document.querySelectorAll(selector)].map((el) => ({
             async evaluate(fn) { return fn(el); },
             async fill(value) { el.value = value; }, async click() { el.click(); },
+            async evaluateHandle(fn) { const value = fn(el); return { element: value, async evaluate(callback) { return callback(value); }, locator(selector) { return { selector, handle: value }; }, async dispose() {} }; },
             async dispose() {},
         })); },
-        locator(selector) { return { async count() { return dom.window.document.querySelectorAll(selector).length; }, async isVisible() { return true; }, async evaluate(fn) { return fn(dom.window.document.querySelector(selector) ?? dom.window.document.activeElement); }, async elementHandle() { const el = dom.window.document.querySelector(selector); return el ? { async evaluate(fn, arg) { return fn(el, arg); }, async fill(value) { el.value = value; }, async dispose() {} } : null; }, async fill(value) { dom.window.document.querySelector(selector).value = value; }, async click() { dom.window.document.querySelector(selector).click(); } }; },
+        locator(selector) { return { async count() { return dom.window.document.querySelectorAll(selector).length; }, async isVisible() { return true; }, async evaluate(fn) { return fn(dom.window.document.querySelector(selector) ?? dom.window.document.activeElement); }, async elementHandle() { const el = dom.window.document.querySelector(selector); return el ? { element: el, async evaluate(fn, arg) { return fn(el, arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg); }, locator(target) { return { selector: target, handle: el }; }, async evaluateHandle(fn) { const value = fn(el); return { element: value, async evaluate(callback) { return callback(value); }, locator(target) { return { selector: target, handle: value }; }, async dispose() {} }; }, async fill(value) { el.value = value; }, async dispose() {} } : null; }, async fill(value) { dom.window.document.querySelector(selector).value = value; }, async click() { dom.window.document.querySelector(selector).click(); } }; },
         mouse: { async click(...args) { this.last = args; } },
         keyboard: { async press(key) { this.last = key; } },
     };
@@ -58,6 +60,12 @@ describe('login controller', () => {
         expect(submits).toBe(0);
         expect(page.dom.window.document.querySelector('#id').value).toBe('account-sentinel');
         expect(page.dom.window.document.querySelector('#pw').value).toBe('password-sentinel');
+        const idField = page.dom.window.document.querySelector('#id');
+        const passwordField = page.dom.window.document.querySelector('#pw');
+        idField.id = 'renamed-id'; idField.name = 'renamed-account';
+        await controller.screenshot();
+        expect(page.screenshotOptions.mask.map((locator) => locator.handle)).toEqual([idField, passwordField]);
+        idField.id = 'id'; idField.name = 'id';
         page.dom.window.document.querySelector('#pw').type = 'text';
         const snap = await controller.snapshot();
         expect(JSON.stringify(snap)).not.toContain('password-sentinel');

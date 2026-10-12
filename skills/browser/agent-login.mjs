@@ -91,6 +91,7 @@ export function classifyLoginProgress(doc) {
 export function createLoginController(page) {
     const nonce = randomBytes(8).toString('hex');
     let refs = new Map();
+    let credentialMaskHandles = null;
     const protectedIdentity = new Set();
     let revision = 0;
     let snapshotSeq = 0;
@@ -99,7 +100,12 @@ export function createLoginController(page) {
         for (const item of items.values()) void item.handle.dispose().catch(() => {});
     };
     const invalidate = () => { const old = refs; refs = new Map(); revision += 1; disposeRefs(old); };
-    page.on?.('framenavigated', (frame) => { if (!page.mainFrame || frame === page.mainFrame()) invalidate(); });
+    const clearCredentialMaskHandles = () => {
+        if (!credentialMaskHandles) return;
+        for (const handle of credentialMaskHandles) void handle.dispose().catch(() => {});
+        credentialMaskHandles = null;
+    };
+    page.on?.('framenavigated', (frame) => { if (!page.mainFrame || frame === page.mainFrame()) { invalidate(); clearCredentialMaskHandles(); } });
 
     async function snapshotLoginPage() {
         const revisionAtStart = revision;
@@ -225,13 +231,16 @@ export function createLoginController(page) {
                 if (await ids.count() !== 1 || await passwords.count() !== 1 || !await ids.isVisible() || !await passwords.isVisible()) return { result: 'failed', reason: 'fields_unavailable' };
                 idHandle = await ids.elementHandle(); passwordHandle = await passwords.elementHandle();
                 if (!idHandle || !passwordHandle) return { result: 'failed', reason: 'fields_unavailable' };
-                const valid = await Promise.all([idHandle, passwordHandle].map((handle) => handle.evaluate((el) => {
-                    const form = el.form; const action = form?.getAttribute('action') || '/nidlogin.login';
-                    let url; try { url = new URL(action, location.href); } catch { return false; }
-                    return el instanceof el.ownerDocument.defaultView.HTMLInputElement && url.origin === 'https://nid.naver.com' && url.pathname === '/nidlogin.login';
-                })));
-                if (!valid.every(Boolean)) return { result: 'failed', reason: 'fields_untrusted' };
-                if (!await idHandle.evaluate((el) => el.form === document.querySelector('input#pw[name="pw"]')?.form)) return { result: 'failed', reason: 'fields_untrusted' };
+                const expected = await page.evaluate(({ idField, passwordField }) => {
+                    const id = idField; const password = passwordField; const form = id.form;
+                    const Input = id.ownerDocument.defaultView?.HTMLInputElement;
+                    if (!Input || !(id instanceof Input) || !(password instanceof Input) || !form || password.form !== form) return null;
+                    const action = new URL(form.action, location.href);
+                    if (location.origin !== 'https://nid.naver.com' || action.protocol !== 'https:' || action.host !== 'nid.naver.com' || action.pathname !== '/nidlogin.login') return null;
+                    if (!['text', 'email', 'tel'].includes(id.type) || password.type !== 'password') return null;
+                    return { id: { id: id.id, name: id.name, type: id.type }, password: { id: password.id, name: password.name, type: password.type } };
+                }, { idField: idHandle, passwordField: passwordHandle }).catch(() => null);
+                if (!expected) return { result: 'failed', reason: 'fields_untrusted' };
                 formHandle = await idHandle.evaluateHandle((el) => el.form);
                 if (!formHandle || await formHandle.evaluate((form) => !form)) return { result: 'failed', reason: 'fields_untrusted' };
                 const values = await readCredentials();
@@ -240,23 +249,28 @@ export function createLoginController(page) {
                     return { result: 'failed', reason: reasons.has(values?.reason) ? values.reason : 'credentials_unavailable' };
                 }
                 await ensureHumanMayContinue();
-                const recheck = async (target, isPasswordTarget) => target.evaluate((el, args) => {
-                    const { idField, passwordField, form, passwordTarget } = args;
-                    if (!el.isConnected || !idField.isConnected || !passwordField.isConnected || !form.isConnected) return false;
-                    if (el !== (passwordTarget ? passwordField : idField) || idField.form !== form || passwordField.form !== form) return false;
-                    if (passwordField.type !== 'password') return false;
-                    try { return new URL(form.action, location.href).origin === 'https://nid.naver.com' && location.origin === 'https://nid.naver.com'; }
-                    catch { return false; }
-                }, { idField: idHandle, passwordField: passwordHandle, form: formHandle, passwordTarget: isPasswordTarget }).catch(() => false);
-                if (!await recheck(idHandle, false)) return { result: 'failed', reason: 'fields_changed' };
+                const recheck = async (targetName) => page.evaluate(({ idField, passwordField, form, expected, targetName }) => {
+                    const id = idField; const password = passwordField; const retainedForm = form;
+                    if (!id.isConnected || !password.isConnected || !retainedForm.isConnected || id.form !== retainedForm || password.form !== retainedForm || !retainedForm.contains(id) || !retainedForm.contains(password)) return false;
+                    if (location.origin !== 'https://nid.naver.com') return false;
+                    let action; try { action = new URL(retainedForm.action, location.href); } catch { return false; }
+                    if (action.protocol !== 'https:' || action.host !== 'nid.naver.com' || action.pathname !== '/nidlogin.login') return false;
+                    if (id.id !== expected.id.id || id.name !== expected.id.name || !['text', 'email', 'tel'].includes(id.type) || id.type !== expected.id.type) return false;
+                    if (password.id !== expected.password.id || password.name !== expected.password.name || password.type !== 'password' || password.type !== expected.password.type) return false;
+                    return targetName === 'id' ? id === idField : password === passwordField;
+                }, { idField: idHandle, passwordField: passwordHandle, form: formHandle, expected, targetName }).catch(() => false);
+                if (!await recheck('id')) return { result: 'failed', reason: 'fields_changed' };
                 protectedIdentity.add('input|pw|pw|'); credentialsFilled = true;
+                clearCredentialMaskHandles();
+                credentialMaskHandles = [idHandle, passwordHandle];
                 await idHandle.fill(values.account);
-                if (!await recheck(passwordHandle, true)) return { result: 'failed', reason: 'fields_changed' };
+                if (!await recheck('password')) return { result: 'failed', reason: 'fields_changed' };
                 await passwordHandle.fill(values.password);
+                idHandle = null; passwordHandle = null; formHandle = null;
                 invalidate();
                 return { result: 'filled', reason: 'none' };
             } catch { return { result: 'failed', reason: 'fill_failed' }; }
-            finally { await Promise.all([idHandle, passwordHandle, formHandle].filter(Boolean).map((handle) => handle.dispose().catch(() => {}))); }
+            finally { await Promise.all([idHandle, passwordHandle, formHandle].filter((handle) => handle && !credentialMaskHandles?.includes(handle)).map((handle) => handle.dispose().catch(() => {}))); }
         },
         async submit() {
             try {
@@ -273,9 +287,14 @@ export function createLoginController(page) {
             try { return { status: await page.evaluate(classifyLoginProgress) }; } catch { return { status: 'unknown' }; }
         },
         async screenshot() {
-            try { return await page.screenshot({ type: 'png', mask: [page.locator('input#id[name="id"]'), page.locator('input#pw[name="pw"]')] }); }
+            try {
+                let mask;
+                try { mask = credentialMaskHandles?.map((handle) => handle.locator('xpath=.')); } catch { mask = null; }
+                if (!mask || mask.length !== 2) mask = [page.locator('input[type="text"],input[type="email"],input[type="tel"],input[type="password"]')];
+                return await page.screenshot({ type: 'png', mask });
+            }
             catch { if (credentialsFilled) throw readError('ACTION_DENIED'); return await page.screenshot({ type: 'png' }); }
         },
-        clear: invalidate,
+        clear() { invalidate(); clearCredentialMaskHandles(); },
     };
 }

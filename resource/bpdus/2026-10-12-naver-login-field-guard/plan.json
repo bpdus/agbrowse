@@ -1,0 +1,31 @@
+{
+  "schema_version": 2,
+  "domain": "code",
+  "summary": "Revalidate retained Naver credential fields before each fill and mask them by node identity.",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Harden credential filling and screenshot masking",
+      "files": ["skills/browser/agent-login.mjs", "test/unit/agent-login.test.mjs", "test/unit/agent-login-controller.test.mjs"],
+      "target": "createLoginController.fillCredentials and screenshot",
+      "depends_on": "none",
+      "change": "Capture validated field id/name/type, recheck retained fields, form and top-level URL in one page evaluation before each fill, and use retained field handles for masks with a broad input fallback.",
+      "effect": "Mutated credentials are never filled, and renamed credential nodes remain masked.",
+      "estimated_loc": 65,
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "Credential handling has a direct secret exposure and wrong-form submission impact.",
+        "test_decision": "reuse",
+        "test_reason": "Existing Vitest suites cover credential flow, runtime and gateway; regression cases are added for renamed fields and the exact /collect action.",
+        "subject": "Credential field identity, trusted form constraints, and screenshot masking",
+        "procedure": "Run the login, login-controller, MCP, runtime, and gateway Vitest unit files.",
+        "pass_criterion": "All targeted suites pass; credential mutations fail before fill; renamed retained nodes are included in screenshot masks."
+      }
+    }
+  ],
+  "verification": ["npx vitest run test/unit/agent-login.test.mjs test/unit/agent-mcp.test.mjs test/unit/agent-runtime.test.mjs test/unit/agent-gateway.test.mjs test/unit/agent-login-controller.test.mjs"],
+  "risks": ["Browser-level screenshot behavior is represented by Playwright-shaped unit mocks; real-browser verification is not part of the requested checks."],
+  "status": "READY",
+  "questions": []
+}

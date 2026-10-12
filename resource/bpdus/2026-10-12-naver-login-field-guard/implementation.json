@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "status": "DONE",
+  "summary": "Revalidated retained Naver credential fields immediately before each fill and switched screenshot masks to retained node identity with an all-credential-input fallback.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-naver-login-field-guard/plan.json",
+  "tasks": [
+    {
+      "task_id": 1,
+      "status": "DONE",
+      "changed_files": [
+        "/home/box/src/agbrowse/skills/browser/agent-login.mjs",
+        "/home/box/src/agbrowse/test/unit/agent-login.test.mjs",
+        "/home/box/src/agbrowse/test/unit/agent-login-controller.test.mjs"
+      ]
+    }
+  ],
+  "inputs": [
+    {"path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-naver-login-field-guard/plan.json", "sha256": "3315247ba0154232e68f64dd9620f5372cc263eb341de1783764795120f15567"},
+    {"path": "/home/box/src/agbrowse/skills/browser/agent-login.mjs", "sha256": "504bf87ccec59d047f9aaaa05bd2fb1dcb807bf4265f08d1c757ee89c86f1cb7"},
+    {"path": "/home/box/src/agbrowse/test/unit/agent-login.test.mjs", "sha256": "110205060bf6d31b4b7e65e630fd6daf53725efd1a0e4ed6103a07e8ea172f17"},
+    {"path": "/home/box/src/agbrowse/test/unit/agent-login-controller.test.mjs", "sha256": "fdbd49ba45e36226f167fb39844994c5967271f84b18b306f77b5e50d3c348db"}
+  ],
+  "checks": [
+    {"name": "verification", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-naver-login-field-guard/evidence/self-review.log", "evidence_sha256": "98440891673cff1e85a634e69c09c6170bf793e5295bf28e7e50f6b8812b4893"},
+    {"name": "tests", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-naver-login-field-guard/evidence/vitest.log", "evidence_sha256": "7f6466b2d7b28e3b23df254939be55afe436278ff9d43463dcbfdf8ce678ed9a"},
+    {"name": "self_review", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-naver-login-field-guard/evidence/self-review.log", "evidence_sha256": "98440891673cff1e85a634e69c09c6170bf793e5295bf28e7e50f6b8812b4893"}
+  ]
+}
