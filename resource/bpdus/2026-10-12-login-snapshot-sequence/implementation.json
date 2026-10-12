@@ -1,0 +1,56 @@
+{
+  "schema_version": 2,
+  "status": "DONE",
+  "summary": "Login refs now include a monotonic snapshot sequence and stale refs cannot alias controls in later snapshots.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-snapshot-sequence/plan.json",
+  "tasks": [
+    {
+      "task_id": "1",
+      "status": "DONE",
+      "changed_files": [
+        "skills/browser/agent-login.mjs",
+        "test/unit/agent-login.test.mjs"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-snapshot-sequence/plan.json",
+      "sha256": "053ea16f0594832291620b432cd855441306870ba4bf6ec4ae21fcba7f8508db"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-login.mjs",
+      "sha256": "7d7caea391cf1ac08f63976b6d7485ed213211a05df06fae78dfbade7a061d08"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-login.test.mjs",
+      "sha256": "215dde76632a1f02f86ce4cb369c7e3bb806c8e0c51f5ff4c07dd9ed3cd045ba"
+    }
+  ],
+  "checks": [
+    {
+      "name": "verification",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-snapshot-sequence/evidence/unit-tests.log",
+      "evidence_sha256": "345a2b24fc59ca9b95885d6598434b62576a1475d4347d998ec05741006d43fd"
+    },
+    {
+      "name": "tests",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-snapshot-sequence/evidence/unit-tests.log",
+      "evidence_sha256": "345a2b24fc59ca9b95885d6598434b62576a1475d4347d998ec05741006d43fd"
+    },
+    {
+      "name": "launchagents_integration",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-snapshot-sequence/evidence/launchagents-integration.log",
+      "evidence_sha256": "4fccea5f7c4f7c2f01c7e0f92f6f2b1ee33893e771f583691878957e0bbc1db3"
+    },
+    {
+      "name": "self_review",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-snapshot-sequence/evidence/self-review.log",
+      "evidence_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

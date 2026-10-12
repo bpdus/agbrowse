@@ -70,6 +70,7 @@ export function createLoginController(page) {
     let refs = new Map();
     const protectedIdentity = new Set();
     let revision = 0;
+    let snapshotSeq = 0;
     const disposeRefs = (items) => {
         for (const item of items.values()) void item.handle.dispose().catch(() => {});
     };
@@ -102,8 +103,9 @@ export function createLoginController(page) {
         const oldRefs = refs;
         refs = new Map();
         disposeRefs(oldRefs);
+        snapshotSeq += 1;
         const controls = nodes.map(({ handle, node }, index) => {
-            const ref = `lr_${index + 1}`;
+            const ref = `s${snapshotSeq}_${index + 1}`;
             const identity = `${node.tag}|${node.name}|${node.id}|${node.autocomplete}`;
             const isPassword = node.type === 'password' || /(?:current-password|new-password)/i.test(node.autocomplete) || protectedIdentity.has(identity);
             if (isPassword) protectedIdentity.add(identity);
@@ -114,6 +116,8 @@ export function createLoginController(page) {
     }
 
     function resolveLoginRef(ref) {
+        const match = /^s(\d+)_\d+$/.exec(ref);
+        if (!match || Number(match[1]) !== snapshotSeq) throw readError('REF_STALE');
         const item = refs.get(ref);
         if (!item || item.revision !== revision) throw readError('REF_STALE');
         return item;
