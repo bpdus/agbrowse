@@ -139,13 +139,13 @@ service_processes() {
     read -r uid args <<EOFDETAILS
 $details
 EOFDETAILS
-    [ "$uid" = "$(id -u)" ] || continue
+    [ "$uid" = "$(id -u)" ] || { echo "Unmatched $service process PID $candidate (different user)." >&2; return 2; }
     read -r executable script_arg _ <<EOFARGS
 $args
 EOFARGS
     executable=${executable##*/}
-    [ "$executable" = node ] || continue
-    case "$script_arg" in "$expected"|*/"$expected") printf '%s\n' "$candidate"; matched=1 ;; esac
+    [ "$executable" = node ] || { echo "Unmatched $service process PID $candidate (not a Node process)." >&2; return 2; }
+    case "$args" in *"$expected"*) printf '%s\n' "$candidate"; matched=1 ;; *) echo "Unmatched $service process PID $candidate (different script)." >&2; return 2 ;; esac
   done
   [ "$matched" -eq 1 ]
 }

@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT INT TERM
-HOME="$TMP/home"
+HOME="$TMP/home with spaces"
 BIN="$TMP/bin"
 APP="$TMP/Google Chrome.app"
 LABEL=me.bpdus.agbrowse.worker
@@ -31,7 +31,7 @@ esac
 STUB
 cat > "$BIN/ps" <<'STUB'
 #!/bin/bash
-case "$*" in *424242*) echo "  501 node /Users/jjbyun/.agbrowse-bpdus/src/skills/browser/agent-worker.mjs" ;; *434343*) echo "  501 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=$PROFILE" ;; *) exit 1 ;; esac
+case "$*" in *424242*) echo "  501 node $HOME/.agbrowse-bpdus/src/skills/browser/agent-worker.mjs" ;; *434343*) echo "  501 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=$PROFILE" ;; *) exit 1 ;; esac
 STUB
 cat > "$BIN/launchctl" <<'STUB'
 #!/bin/bash
@@ -39,7 +39,7 @@ echo "$*" >> "$TRACE"
 case "$1" in
  print) [ "$2" = gui/501 ] && exit 0; grep -Fq "$2" "$STATE" ;;
  bootout) grep -Fv "$2" "$STATE" > "$STATE.tmp" || true; mv "$STATE.tmp" "$STATE" ;;
- bootstrap) echo "$2/$3" >> "$STATE" ;;
+ bootstrap) echo "$2/$3" >> "$STATE"; [ "${RESTORE_LOCK:-0}" = 1 ] && touch "$HOME/.agbrowse-bpdus/profile.lock" ;;
  *) exit 1 ;;
 esac
 STUB
@@ -66,11 +66,11 @@ grep -Fq 'is loaded' "$TMP/no-stop.err"
 [ -e "$STATE" ]
 
 # Explicit handoff unloads before Launch Services, waits through Chrome's profile lock, then restores.
-HOLD_OPEN=1; export HOLD_OPEN
+HOLD_OPEN=1 RESTORE_LOCK=1; export HOLD_OPEN RESTORE_LOCK
 "$SCRIPT" --stop-worker > "$TMP/login.out" 2> "$TMP/login.err" & LOGIN_PID=$!
 tries=0
 while [ ! -e "$TMP_CHROME_PROCESS" ] && [ "$tries" -lt 100 ]; do /bin/sleep .02; tries=$((tries + 1)); done
-[ -e "$TMP_CHROME_PROCESS" ]
+[ -e "$TMP_CHROME_PROCESS" ] || { cat "$TMP/login.err" >&2; exit 1; }
 grep -Fq "bootout gui/501/$LABEL" "$TRACE"
 if grep -Fq "bootstrap gui/501 $PLIST" "$TRACE"; then exit 1; fi
 grep -Fxq -- '-n' "$OPEN_ARGS"
@@ -80,6 +80,9 @@ grep -Fxq -- "--user-data-dir=$PROFILE" "$OPEN_ARGS"
 grep -Fxq -- 'https://nid.naver.com/nidlogin.login' "$OPEN_ARGS"
 : > "$OPEN_RELEASE"
 wait "$LOGIN_PID"
+[ -e "$HOME/.agbrowse-bpdus/profile.lock" ]
+rm -f "$HOME/.agbrowse-bpdus/profile.lock"
+unset RESTORE_LOCK
 [ -e "$PLIST" ]
 boot_line=$(grep -nF "bootout gui/501/$LABEL" "$TRACE" | head -1 | cut -d: -f1)
 open_line=$(grep -nF -- "-n -W -a $APP" "$TRACE" | head -1 | cut -d: -f1)
@@ -106,7 +109,7 @@ OPEN_STATUS=0; HOLD_OPEN=1; export OPEN_STATUS HOLD_OPEN
 "$SCRIPT" --stop-worker > "$TMP/interrupted.out" 2> "$TMP/interrupted.err" & LOGIN_PID=$!
 tries=0
 while [ ! -e "$TMP_CHROME_PROCESS" ] && [ "$tries" -lt 100 ]; do /bin/sleep .02; tries=$((tries + 1)); done
-[ -e "$TMP_CHROME_PROCESS" ]
+[ -e "$TMP_CHROME_PROCESS" ] || { cat "$TMP/interrupted.err" >&2; exit 1; }
 kill -TERM "$LOGIN_PID"
 /bin/sleep .05
 ! grep -Fq "bootstrap gui/501 $PLIST" "$TRACE"

@@ -1,0 +1,22 @@
+{
+  "schema_version": 2,
+  "status": "DONE",
+  "summary": "Fixed LaunchAgent process discovery for paths with spaces, made installer preflight reject unmatched PIDs before unload, and allowed successful worker restoration to reacquire the profile lock.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagent-review-blockers/plan.json",
+  "tasks": [
+    {"task_id": 1, "status": "DONE", "changed_files": ["/home/box/src/agbrowse/bin/bpdus/install-launchagents.sh", "/home/box/src/agbrowse/bin/bpdus/login-naver.sh", "/home/box/src/agbrowse/test/integration/bpdus-launchagents.test.sh", "/home/box/src/agbrowse/test/integration/bpdus-login-naver.test.sh"]},
+    {"task_id": 2, "status": "DONE", "changed_files": ["/home/box/src/agbrowse/bin/bpdus/login-naver.sh", "/home/box/src/agbrowse/test/integration/bpdus-login-naver.test.sh"]}
+  ],
+  "inputs": [
+    {"path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagent-review-blockers/plan.json", "sha256": "bf51b8d659ea7c7454c5be838770b636ff0f9dfe2b0741ad8b1d7e3b650163ee"},
+    {"path": "/home/box/src/agbrowse/bin/bpdus/install-launchagents.sh", "sha256": "4786106369c5ac247b3c46909ab124f6f7b60c6be66c13638c9f0e3e22dd7c78"},
+    {"path": "/home/box/src/agbrowse/bin/bpdus/login-naver.sh", "sha256": "a1b66ce197f9e2b2417174271aab268ada3bf979ea3d12bb849bda343df51052"},
+    {"path": "/home/box/src/agbrowse/test/integration/bpdus-launchagents.test.sh", "sha256": "080ce5566fb516f1454b0def5d2cf1e5e22835709907d97dfbe2f24cd0d302a8"},
+    {"path": "/home/box/src/agbrowse/test/integration/bpdus-login-naver.test.sh", "sha256": "7367c17ce95264e0630a4040db8e2ca2904d9eb4b210621c9201d26a2a651432"}
+  ],
+  "checks": [
+    {"name": "verification", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagent-review-blockers/evidence/verification.log", "evidence_sha256": "bb17e6d9bd8ab6f4a1d462767e0474aa8a319a97e3de1d6d5aa981fabdc62afc"},
+    {"name": "tests", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagent-review-blockers/evidence/verification.log", "evidence_sha256": "bb17e6d9bd8ab6f4a1d462767e0474aa8a319a97e3de1d6d5aa981fabdc62afc"},
+    {"name": "self_review", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagent-review-blockers/evidence/self-review.log", "evidence_sha256": "003cd1183dc2886b012969b5a1e6a0a2d653adbf0570c2dee165046be3aea699"}
+  ]
+}

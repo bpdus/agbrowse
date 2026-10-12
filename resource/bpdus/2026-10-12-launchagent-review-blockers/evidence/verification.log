@@ -1,0 +1,59 @@
+$ bash -n bin/bpdus/install-launchagents.sh bin/bpdus/login-naver.sh bin/bpdus/logs-in-herdr.sh test/integration/bpdus-launchagents.test.sh test/integration/bpdus-login-naver.test.sh test/integration/bpdus-logs-in-herdr.test.sh
+PASS
+$ bash test/integration/bpdus-launchagents.test.sh
+bpdus-launchagents: PASS
+$ bash test/integration/bpdus-login-naver.test.sh
+bpdus-login-naver: PASS
+$ bash test/integration/bpdus-logs-in-herdr.test.sh
+bpdus-logs-in-herdr: PASS
+$ npx vitest run test/unit/agent-runtime.test.mjs test/unit/agent-worker.test.mjs test/unit/agent-gateway.test.mjs
+
+ RUN  v3.2.6 /home/box/src/agbrowse
+
+agbrowse-mcp: tool=- status=401 ms=0 correlation=0a088fb2ec703a9e
+ ✓ test/unit/agent-gateway.test.mjs > loopback auth gateway > listens only after start and only on 127.0.0.1 19ms
+ ✓ test/unit/agent-gateway.test.mjs > loopback auth gateway > enforces host, origin, size, and route limits 34ms
+agbrowse-mcp: tool=- status=401 ms=0 correlation=3850b41609095188
+agbrowse-mcp: tool=- status=401 ms=0 correlation=93bddde116e5a525
+ ✓ test/unit/agent-gateway.test.mjs > loopback auth gateway > starts the foreground entry on loopback and rejects other bind addresses 403ms
+ ✓ test/unit/agent-gateway.test.mjs > loopback auth gateway > leaves bootstrap routes open and requires a token everywhere else 25ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > routes login status to read dispatch and the fixed cart tools to cart dispatch 3ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > does not import the legacy browser surfaces or start on import 0ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > starts and stops once when the signal is repeated 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > cleans up and exits nonzero when startup fails 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > exits on disconnect without relaunching 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > omits injected secrets from startup failure output 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > rejects profile, endpoint, and port arguments before launch 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > prints help without starting the runtime 0ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > keeps signal handlers through a pending startup 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > keeps signal handlers through a pending stop 0ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > answers --help from a direct process without launching Chrome 212ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > does not open a socket unless the runtime can dispatch reads 2ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > answers hello on the owner socket and keeps the payload out of logs 7ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > does nothing on import 3ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > returns only the lifecycle methods 2ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > serializes cart inspection through the runtime queue and fails live layouts closed 10ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > returns LOGIN_REQUIRED for a recognized login form without reading its value 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > blocks Naver login redirects before fetching them and records blocked order attempts 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > rejects a foreign profile or endpoint before launch 2ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > refuses a symlinked dedicated profile and does not fall back 1ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > refuses an unwritable dedicated profile and does not fall back 1ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > launches installed Chrome over the debugging pipe 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > keeps two sessions on their own targets when tabs move 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > fails a closed target without substituting another tab 4ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > clears bindings on disconnect and does not relaunch or replay 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > closes Chrome before releasing the lock and rejects old ids after restart 7ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > leaves an existing lock owner untouched and cleans up a failed launch 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > does not enroll a page that is not about:blank 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > turns a secret-bearing page creation failure into a stable code 13ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > keeps the profile lock when close fails and retries shutdown before restart 9ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > installs context interception before any page and blocks service workers 8ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > allows only exact account and login redirects during login status on that page 8ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > reinstalls the document watcher on each main-frame navigation 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > retries the watcher when the document element is missing and counts a restored mutation 5ms
+
+ Test Files  3 passed (3)
+      Tests  38 passed (38)
+   Start at  11:33:00
+   Duration  1.81s (transform 190ms, setup 0ms, collect 316ms, tests 833ms, environment 1ms, prepare 157ms)
+

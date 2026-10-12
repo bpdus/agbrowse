@@ -1,0 +1,1 @@
+PASS: diff has no whitespace errors; changes are limited to the three reported blockers and their regression fixtures.

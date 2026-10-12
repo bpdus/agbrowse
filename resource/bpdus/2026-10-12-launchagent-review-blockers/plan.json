@@ -1,0 +1,55 @@
+{
+  "schema_version": 2,
+  "domain": "feature",
+  "summary": "Fix LaunchAgent process discovery with paths containing spaces, reject mixed process ownership, and make login restoration tolerate worker lock reacquisition.",
+  "status": "READY",
+  "questions": [],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Validate full process command lines",
+      "files": ["bin/bpdus/install-launchagents.sh", "bin/bpdus/login-naver.sh", "test/integration/bpdus-launchagents.test.sh", "test/integration/bpdus-login-naver.test.sh"],
+      "target": "service_processes and discover_workers",
+      "depends_on": "none",
+      "change": "Match the expected script against the un-split command string, reject every unmatched installer candidate before mutation, and cover paths with spaces plus mixed managed and unmanaged PIDs.",
+      "effect": "Managed process discovery works under space-containing homes and installer preflight never unloads agents while an unmanaged candidate is present.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "Discovery governs persistent service shutdown and profile ownership; false negatives or false positives can interrupt services.",
+        "test_decision": "add",
+        "test_reason": "Existing coverage masked process discovery because the running process was not verified for paths with spaces and did not include mixed PIDs.",
+        "subject": "Space-containing paths and mixed process preflight",
+        "procedure": "Run bash syntax checks, all three requested shell integration scripts, and the specified three Vitest suites.",
+        "pass_criterion": "Paths with spaces are recognized, mixed candidates abort before any bootout, and all requested checks pass."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Restore the worker after completed lock checks",
+      "files": ["bin/bpdus/login-naver.sh", "test/integration/bpdus-login-naver.test.sh"],
+      "target": "login success and worker restoration",
+      "depends_on": "1",
+      "change": "Keep lock checks before bootstrap, remove the post-bootstrap absence requirement, and simulate a restored worker acquiring the profile lock.",
+      "effect": "A successful handoff exits successfully when the restored worker legitimately owns the profile lock.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "This coordinates the worker and Chrome over a shared browser profile lock.",
+        "test_decision": "add",
+        "test_reason": "The timing-dependent post-bootstrap lock reacquisition needs a deterministic regression test.",
+        "subject": "Successful login restoration with worker lock reacquisition",
+        "procedure": "Run the login shell integration script as part of the requested verification set.",
+        "pass_criterion": "The worker bootstrap is recorded, the worker lock exists afterward, and login exits zero."
+      }
+    }
+  ],
+  "verification": [
+    "bash -n bin/bpdus/install-launchagents.sh bin/bpdus/login-naver.sh bin/bpdus/logs-in-herdr.sh test/integration/bpdus-launchagents.test.sh test/integration/bpdus-login-naver.test.sh test/integration/bpdus-logs-in-herdr.test.sh",
+    "bash test/integration/bpdus-launchagents.test.sh",
+    "bash test/integration/bpdus-login-naver.test.sh",
+    "bash test/integration/bpdus-logs-in-herdr.test.sh",
+    "npx vitest run test/unit/agent-runtime.test.mjs test/unit/agent-worker.test.mjs test/unit/agent-gateway.test.mjs"
+  ],
+  "risks": ["Actual macOS GUI and keychain behavior is outside this Linux shell-fixture verification."]
+}

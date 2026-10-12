@@ -20,7 +20,7 @@ cat > "$TMP/bin/pgrep" <<'STUB'
 #!/bin/bash
 if [ "${MANAGED_RUNNING:-0}" = 1 ]; then
   case "$*" in
-    *agent-worker*) grep -Fq 'me.bpdus.agbrowse.worker' "$STATE" && { echo 424242; exit 0; } ;;
+    *agent-worker*) grep -Fq 'me.bpdus.agbrowse.worker' "$STATE" && { echo 424242; [ "${MIXED_RUNNING:-0}" = 1 ] && echo 424244; exit 0; } ;;
     *agent-gateway*) grep -Fq 'me.bpdus.agbrowse.gateway' "$STATE" && { echo 424243; exit 0; } ;;
   esac
 fi
@@ -31,6 +31,7 @@ cat > "$TMP/bin/ps" <<'STUB'
 case "$*" in
   *424242*) echo "  501 node $HOME/.agbrowse-bpdus/src/skills/browser/agent-worker.mjs" ;;
   *424243*) echo "  501 node $HOME/.agbrowse-bpdus/src/skills/browser/agent-gateway.mjs" ;;
+  *424244*) echo "  501 node /tmp/unmanaged-worker.mjs" ;;
   *) exit 1 ;;
 esac
 STUB
@@ -95,6 +96,13 @@ worker_boot=$(grep -nF 'bootout gui/501/me.bpdus.agbrowse.worker' "$TRACE" | tai
 gateway_boot=$(grep -nF 'bootout gui/501/me.bpdus.agbrowse.gateway' "$TRACE" | tail -1 | cut -d: -f1)
 worker_load=$(grep -nF 'bootstrap gui/501 ' "$TRACE" | tail -2 | head -1 | cut -d: -f1)
 [ "$worker_boot" -lt "$gateway_boot" ] && [ "$gateway_boot" -lt "$worker_load" ]
+# A managed PID cannot hide an additional unmanaged process during preflight.
+MIXED_RUNNING=1; export MIXED_RUNNING
+bootouts_before=$(grep -c '^bootout ' "$TRACE" || true)
+if "$SCRIPT" install --port 7444 --gateway-id rejected --audience https://example.test/mcp > "$TMP/mixed.out" 2> "$TMP/mixed.err"; then exit 1; fi
+grep -Fq 'Unmatched worker process PID 424244' "$TMP/mixed.err"
+[ "$(grep -c '^bootout ' "$TRACE" || true)" -eq "$bootouts_before" ]
+unset MIXED_RUNNING
 "$SCRIPT" restart gateway
 grep -Fq 'kickstart -k gui/501/me.bpdus.agbrowse.gateway' "$TRACE"
 grep -Fv 'me.bpdus.agbrowse.worker' "$STATE" > "$STATE.tmp" || true; mv "$STATE.tmp" "$STATE"

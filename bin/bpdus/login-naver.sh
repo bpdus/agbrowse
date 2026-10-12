@@ -59,12 +59,12 @@ discover_workers() {
 $details
 EOFDETAILS
     [ "$uid" = "$(id -u)" ] || continue
-    read -r executable script_arg _ <<EOFARGS
+    read -r executable _ <<EOFARGS
 $args
 EOFARGS
     executable=${executable##*/}
-    case "$script_arg" in skills/browser/agent-worker.mjs|*/skills/browser/agent-worker.mjs) ;; *) continue ;; esac
     [ "$executable" = node ] || continue
+    case "$args" in *skills/browser/agent-worker.mjs*) ;; *) continue ;; esac
     WORKER_PIDS="${WORKER_PIDS:+$WORKER_PIDS
 }$candidate"
   done
@@ -165,5 +165,5 @@ if [ "$remaining" -eq 0 ]; then echo 'Chrome has not released the dedicated prof
 if [ "$chrome_status" -ne 0 ]; then restore_worker || :; echo "Launch Services failed to open Chrome (status $chrome_status)." >&2; exit "$chrome_status"; fi
 if [ "$SUSPENDED" -eq 1 ]; then restore_worker || exit 1
 elif [ "$INSTALLED" -eq 1 ] && [ "$LOADED" -eq 0 ]; then echo "Worker was already unloaded and remains unloaded. Restart explicitly with: launchctl bootstrap $DOMAIN '$PLIST'"; fi
-check_profile_path && check_profile_locks || exit 1
+check_profile_path || exit 1
 echo 'Chrome exited and released the profile. The worker can safely start again.'
