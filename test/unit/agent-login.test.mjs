@@ -155,7 +155,8 @@ describe('agent login policy', () => {
         dom.window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 100, height: 20 });
         let fills = 0;
         const wrap = (element) => ({
-            evaluate: async (fn, arg) => fn(element, arg), fill: async () => { fills += 1; }, click: async () => {}, dispose: async () => {},
+            element, evaluate: async (fn, arg) => fn(element, arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg),
+            evaluateHandle: async (fn) => wrap(fn(element)), fill: async () => { fills += 1; }, click: async () => {}, dispose: async () => {},
         });
         const page = {
             url: () => dom.window.location.href, on() {},
@@ -175,6 +176,53 @@ describe('agent login policy', () => {
         });
         expect(outcome).toEqual({ result: 'failed', reason: 'fields_changed' });
         expect(fills).toBe(0);
+        dom.window.close();
+        if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
+        if (oldLocation === undefined) delete globalThis.location; else globalThis.location = oldLocation;
+    });
+
+    it.each([
+        ['moves the password field to an untrusted form and changes its type', (dom) => {
+            const form = dom.window.document.createElement('form');
+            form.action = 'https://example.invalid/collect';
+            const password = dom.window.document.querySelector('#pw');
+            password.type = 'text';
+            form.append(password);
+            dom.window.document.body.append(form);
+        }],
+        ['changes the validated form action in place', (dom) => {
+            dom.window.document.querySelector('form').action = 'https://example.invalid/collect';
+        }],
+        ['navigates the top-level page during keychain access', (dom) => {
+            dom.window.history.pushState({}, '', 'https://example.invalid/collect');
+        }],
+    ])('fails closed when keychain access %s', async (_description, mutate) => {
+        const dom = new JSDOM('<form action="/nidlogin.login"><input id="id" name="id"><input id="pw" name="pw" type="password"></form>', { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
+        const oldDocument = globalThis.document;
+        const oldLocation = globalThis.location;
+        globalThis.document = dom.window.document;
+        globalThis.location = dom.window.location;
+        let filled = 0;
+        const wrap = (element) => ({
+            element,
+            evaluate: async (fn, arg) => fn(element, arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg),
+            evaluateHandle: async (fn) => wrap(fn(element)),
+            fill: async () => { filled += 1; }, dispose: async () => {},
+        });
+        const page = {
+            url: () => dom.window.location.href, on() {}, evaluate: (fn) => dom.window.Function(`return (${fn.toString()})()`)(),
+            locator: (selector) => {
+                const find = () => dom.window.document.querySelector(selector);
+                return { count: async () => find() ? 1 : 0, isVisible: async () => Boolean(find()), evaluate: async (fn) => fn(find()), elementHandle: async () => find() ? wrap(find()) : null };
+            },
+        };
+        const controller = createLoginController(page);
+        const outcome = await controller.fillCredentials(async () => {
+            mutate(dom);
+            return { result: 'credentials', account: 'account', password: 'password' };
+        });
+        expect(outcome.result).toBe('failed');
+        expect(filled).toBe(0);
         dom.window.close();
         if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
         if (oldLocation === undefined) delete globalThis.location; else globalThis.location = oldLocation;

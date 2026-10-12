@@ -217,7 +217,7 @@ export function createLoginController(page) {
             return { pressed: true };
         },
         async fillCredentials(readCredentials) {
-            let idHandle = null; let passwordHandle = null;
+            let idHandle = null; let passwordHandle = null; let formHandle = null;
             try {
                 await ensureHumanMayContinue();
                 if (new URL(page.url()).origin !== 'https://nid.naver.com' || new URL(page.url()).pathname !== '/nidlogin.login') return { result: 'failed', reason: 'wrong_page' };
@@ -232,22 +232,31 @@ export function createLoginController(page) {
                 })));
                 if (!valid.every(Boolean)) return { result: 'failed', reason: 'fields_untrusted' };
                 if (!await idHandle.evaluate((el) => el.form === document.querySelector('input#pw[name="pw"]')?.form)) return { result: 'failed', reason: 'fields_untrusted' };
+                formHandle = await idHandle.evaluateHandle((el) => el.form);
+                if (!formHandle || await formHandle.evaluate((form) => !form)) return { result: 'failed', reason: 'fields_untrusted' };
                 const values = await readCredentials();
                 if (values?.result !== 'credentials') {
                     const reasons = new Set(['invalid_input','account_unavailable','keychain_read_failed','state_unsafe']);
                     return { result: 'failed', reason: reasons.has(values?.reason) ? values.reason : 'credentials_unavailable' };
                 }
                 await ensureHumanMayContinue();
-                const recheck = async (handle, selector) => handle.evaluate((el, expected) => el.isConnected && el === document.querySelector(expected), selector).catch(() => false);
-                if (!await recheck(idHandle, 'input#id[name="id"]') || !await recheck(passwordHandle, 'input#pw[name="pw"]')) return { result: 'failed', reason: 'fields_changed' };
+                const recheck = async (target, isPasswordTarget) => target.evaluate((el, args) => {
+                    const { idField, passwordField, form, passwordTarget } = args;
+                    if (!el.isConnected || !idField.isConnected || !passwordField.isConnected || !form.isConnected) return false;
+                    if (el !== (passwordTarget ? passwordField : idField) || idField.form !== form || passwordField.form !== form) return false;
+                    if (passwordField.type !== 'password') return false;
+                    try { return new URL(form.action, location.href).origin === 'https://nid.naver.com' && location.origin === 'https://nid.naver.com'; }
+                    catch { return false; }
+                }, { idField: idHandle, passwordField: passwordHandle, form: formHandle, passwordTarget: isPasswordTarget }).catch(() => false);
+                if (!await recheck(idHandle, false)) return { result: 'failed', reason: 'fields_changed' };
                 protectedIdentity.add('input|pw|pw|'); credentialsFilled = true;
                 await idHandle.fill(values.account);
-                if (!await recheck(passwordHandle, 'input#pw[name="pw"]')) return { result: 'failed', reason: 'fields_changed' };
+                if (!await recheck(passwordHandle, true)) return { result: 'failed', reason: 'fields_changed' };
                 await passwordHandle.fill(values.password);
                 invalidate();
                 return { result: 'filled', reason: 'none' };
             } catch { return { result: 'failed', reason: 'fill_failed' }; }
-            finally { await Promise.all([idHandle, passwordHandle].filter(Boolean).map((handle) => handle.dispose().catch(() => {}))); }
+            finally { await Promise.all([idHandle, passwordHandle, formHandle].filter(Boolean).map((handle) => handle.dispose().catch(() => {}))); }
         },
         async submit() {
             try {
