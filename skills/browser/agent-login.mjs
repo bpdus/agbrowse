@@ -235,7 +235,7 @@ export function createLoginController(page) {
                     const id = idField; const password = passwordField; const form = id.form;
                     const Input = id.ownerDocument.defaultView?.HTMLInputElement;
                     if (!Input || !(id instanceof Input) || !(password instanceof Input) || !form || password.form !== form) return null;
-                    const action = new URL(form.action, location.href);
+                    const action = new URL(form.getAttribute('action') ?? '', document.baseURI);
                     if (location.origin !== 'https://nid.naver.com' || action.protocol !== 'https:' || action.host !== 'nid.naver.com' || action.pathname !== '/nidlogin.login') return null;
                     if (!['text', 'email', 'tel'].includes(id.type) || password.type !== 'password') return null;
                     return { id: { id: id.id, name: id.name, type: id.type }, password: { id: password.id, name: password.name, type: password.type } };
@@ -253,7 +253,7 @@ export function createLoginController(page) {
                     const id = idField; const password = passwordField; const retainedForm = form;
                     if (!id.isConnected || !password.isConnected || !retainedForm.isConnected || id.form !== retainedForm || password.form !== retainedForm || !retainedForm.contains(id) || !retainedForm.contains(password)) return false;
                     if (location.origin !== 'https://nid.naver.com') return false;
-                    let action; try { action = new URL(retainedForm.action, location.href); } catch { return false; }
+                    let action; try { action = new URL(retainedForm.getAttribute('action') ?? '', document.baseURI); } catch { return false; }
                     if (action.protocol !== 'https:' || action.host !== 'nid.naver.com' || action.pathname !== '/nidlogin.login') return false;
                     if (id.id !== expected.id.id || id.name !== expected.id.name || !['text', 'email', 'tel'].includes(id.type) || id.type !== expected.id.type) return false;
                     if (password.id !== expected.password.id || password.name !== expected.password.name || password.type !== 'password' || password.type !== expected.password.type) return false;
@@ -283,8 +283,8 @@ export function createLoginController(page) {
                 const button = candidates;
                 const valid = await button.evaluate((el) => {
                     const form = el.closest('form');
-                    if (!form || form.id !== 'frmNIDLogin' || !form.isConnected || !form.contains(el) || location.origin !== 'https://nid.naver.com') return false;
-                    let action; try { action = new URL(form.action, location.href); } catch { return false; }
+                    if (!form || form.getAttribute('id') !== 'frmNIDLogin' || !form.isConnected || !form.contains(el) || location.origin !== 'https://nid.naver.com') return false;
+                    let action; try { action = new URL(form.getAttribute('action') ?? '', document.baseURI); } catch { return false; }
                     return action.protocol === 'https:' && action.host === 'nid.naver.com' && action.pathname === '/nidlogin.login'
                         && form.querySelector('input#id[name="id"]')?.form === form
                         && form.querySelector('input#pw[name="pw"]')?.form === form

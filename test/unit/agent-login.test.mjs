@@ -5,12 +5,13 @@ import { chromium } from 'playwright-core';
 import { assertLoginNavigation, classifyLoginRequest, createLoginController, isLogoutUrl, waitForProfileRelease } from '../../skills/browser/agent-login.mjs';
 
 const oldGetComputedStyle = globalThis.getComputedStyle;
+const naverLoginMarkup = await readFile(new URL('../fixtures/naver/nidlogin-2026-10.html', import.meta.url), 'utf8');
 afterEach(() => {
     if (oldGetComputedStyle === undefined) delete globalThis.getComputedStyle;
     else globalThis.getComputedStyle = oldGetComputedStyle;
 });
 
-async function submitWithMarkup(markup, beforeSubmit = () => {}) {
+async function submitWithMarkup(markup, beforeSubmit = () => {}, beforeFill = () => {}) {
     const dom = new JSDOM(markup, { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
     const oldDocument = globalThis.document;
     const oldLocation = globalThis.location;
@@ -44,12 +45,15 @@ async function submitWithMarkup(markup, beforeSubmit = () => {}) {
             try { return fn(arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg); }
             finally { if (previous === undefined) delete globalThis.document; else globalThis.document = previous; }
         },
-        locator: (selector) => locator(() => [...dom.window.document.querySelectorAll(selector)]),
+        locator: (selector) => locator(() => selector === 'form#frmNIDLogin'
+            ? [...dom.window.document.querySelectorAll('form')].filter((form) => form.getAttribute('id') === 'frmNIDLogin')
+            : [...dom.window.document.querySelectorAll(selector)]),
     };
     const controller = createLoginController(page);
+    beforeFill(dom);
     const filled = await controller.fillCredentials(async () => ({ result: 'credentials', account: 'operator', password: 'secret' }));
     expect(filled).toEqual({ result: 'filled', reason: 'none' });
-    beforeSubmit();
+    beforeSubmit(dom);
     const result = await controller.submit();
     dom.window.close();
     if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
@@ -65,6 +69,23 @@ describe('agent login policy', () => {
     });
     it('clicks the visible row login button', async () => {
         const outcome = await submitWithMarkup(realMarkup('row'));
+        expect(outcome).toEqual({ result: { result: 'submitted', reason: 'none' }, clicks: 1 });
+    });
+    it('uses the real Naver form safely when its id and action properties are clobbered', async () => {
+        const outcome = await submitWithMarkup(naverLoginMarkup, (dom) => {
+            dom.window.document.querySelector('.btn_form.column').style.display = 'block';
+            dom.window.document.querySelector('.btn_form.row').style.display = 'none';
+        }, (dom) => {
+            const form = dom.window.document.querySelector('#frmNIDLogin');
+            const actionInput = dom.window.document.createElement('input');
+            actionInput.name = 'action';
+            form.append(actionInput);
+            // jsdom does not expose these named-property collisions, so model them explicitly.
+            Object.defineProperty(form, 'id', { configurable: true, value: form.querySelector('input[name="id"]') });
+            Object.defineProperty(form, 'action', { configurable: true, value: actionInput });
+            expect(form.id).not.toBe('frmNIDLogin');
+            expect(form.action).toBe(actionInput);
+        });
         expect(outcome).toEqual({ result: { result: 'submitted', reason: 'none' }, clicks: 1 });
     });
     it('fails unavailable when both variants are visible', async () => {
