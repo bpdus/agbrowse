@@ -1,0 +1,33 @@
+{
+  "schema_version": 2,
+  "domain": "feature",
+  "summary": "Make login snapshot refs unique and reject refs from earlier snapshots.",
+  "status": "READY",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Version login snapshot refs",
+      "files": ["skills/browser/agent-login.mjs", "test/unit/agent-login.test.mjs"],
+      "target": "createLoginController snapshot and ref resolution",
+      "depends_on": "none",
+      "change": "Add a monotonic snapshot sequence to ref ids, keep only the latest ref map while disposing older handles, and reject malformed, unknown, and older-snapshot refs with REF_STALE.",
+      "effect": "Refs cannot alias controls in a later login snapshot.",
+      "estimated_loc": 45,
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "Stale refs can activate the wrong login control, so incorrect resolution can cause unintended account actions.",
+        "test_decision": "add",
+        "test_reason": "The focused suite lacked coverage for refs reused after controls change; the regression verifies the stale-ref failure and prevents Cancel from being clicked.",
+        "subject": "Snapshot-scoped login control references",
+        "procedure": "Run the requested focused Vitest unit files and launch-agent integration shell test.",
+        "pass_criterion": "The old Continue ref returns REF_STALE after a new snapshot, Cancel remains unclicked, and all requested tests pass."
+      }
+    }
+  ],
+  "verification": [
+    "npx vitest run test/unit/agent-runtime.test.mjs test/unit/agent-login.test.mjs test/unit/agent-mcp.test.mjs test/unit/agent-worker.test.mjs",
+    "bash test/integration/bpdus-launchagents.test.sh"
+  ],
+  "risks": ["Snapshot refs remain in-memory and are invalidated when the latest ref map is replaced."]
+}

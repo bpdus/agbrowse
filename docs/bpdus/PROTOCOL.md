@@ -118,6 +118,28 @@ challenge payload 순서: `protocol_version`, `purpose`, `gateway_id`, `aud`, `d
 
 최종 최상위 URL이 사용자 정보 경로이면 `{"status":"logged_in","evidence":"account_page"}`, 로그인 경로이면 `{"status":"logged_out","evidence":"redirect_login"}`을 반환한다. 그 외 URL에서는 현재 문서의 인증 링크 대상만 확인한다. `nid.naver.com/nidlogin.logout` 링크가 있으면 `logged_in/logout_link`, 없고 `nid.naver.com/nidlogin.login` 링크가 있으면 `logged_out/login_link`, 둘 다 없으면 `unknown/none`이다. `evidence` enum은 `account_page|redirect_login|logout_link|login_link|none`이다. MCP 결과에는 `status`와 `evidence` 두 필드만 포함하며 이름, 이메일, URL, DOM 텍스트, 쿠키는 포함하지 않는다.
 
+## 원격 로그인 모드
+
+로그인 도구와 worker lifecycle 도구는 `browser:read`와 전용 `login:operate`를 모두 요구한다. 페어링 기본 scope에는 `login:operate`를 넣지 않는다. 운영자는 iMac에서 `bin/bpdus/grant-login-scope.sh DEVICE_ID`를 실행해 기존 비폐기 기기에 scope를 추가한다. durable save 뒤 device epoch가 증가하므로 기존 토큰은 무효가 된다. 별도 원격 grant endpoint는 없다. 클라이언트는 명시적으로 `--scope browser:read,login:operate`를 선택한다.
+
+| MCP 도구 | 인자 | 동작 |
+|---|---|---|
+| `login.start` / `login.end` / `login.status` | `protocol_version`, `request_id` | 기존 worker에서 전용 프로필의 모드를 전환하거나 상태만 반환한다. |
+| `worker.restart` | `protocol_version`, `request_id` | 확인 응답을 보낸 뒤 worker를 정상 종료한다. worker LaunchAgent는 무조건 `KeepAlive`로 다시 시작해야 한다. |
+| `login.navigate` | 위 공통 인자와 `url` | `https://nid.naver.com/nidlogin.login`만 허용한다. |
+| `login.snapshot` / `login.screenshot` | 공통 인자 | 현재 worker 소유 로그인 페이지의 bounded text 또는 PNG를 반환한다. |
+| `login.click` | 공통 인자와 `ref` 또는 `x`,`y` | 마지막 snapshot의 ref 또는 viewport 내부 좌표를 클릭한다. |
+| `login.type` | 공통 인자와 `text`, 선택적 `ref` | focused 또는 ref로 지정한 non-password control에 입력한다. password/autocomplete identity는 거부한다. |
+| `login.press` | 공통 인자와 `key` | 제한된 비문자 키만 허용한다. 임의 텍스트, paste, Chrome 종료 단축키는 허용하지 않는다. |
+
+worker 상태는 `normal`, `transitioning`, `login`이다. 모드 전환은 같은 프로세스와 같은 `profile.lock`을 유지한다. Chrome 종료 뒤 profile 내부 `SingletonLock`, `SingletonSocket`, `SingletonCookie`가 모두 사라졌는지 `lstat`으로 확인한다. 시간 초과나 close 실패 때는 소유권을 유지하고 다른 Chrome을 시작하지 않는다. MCP client와 profile wait timeout은 60초와 30초다.
+
+로그인 network policy는 모든 frame과 popup 요청에 적용한다. HTTPS 기본 포트만 허용하며 `nid.naver.com`의 명시적인 login 경로와 POST, `*.pstatic.net`의 GET/HEAD, `ncpt.naver.com`의 GET/HEAD만 통과한다. 이 호스트 구성은 로그인 페이지가 `ssl.pstatic.net` asset과 `ncpt.naver.com/static/ncaptcha-api.js`를 요청하는 근거에 한정한다. 다른 host와 WebSocket은 차단한다. `https://nid.naver.com/nidlogin.logout`은 query와 method에 관계없이 모든 모드에서 차단한다. WebSocket, stealth, UA spoofing은 사용하지 않는다.
+
+snapshot은 화면에 보이는 control의 label과 제한된 role만 담는다. input 값, hidden field, cookie, storage, raw HTML은 담지 않는다. password control은 redacted로 표시한다. ref는 메모리에만 보관하고 navigation, document 전환, 모드 종료 뒤 무효화한다. screenshot은 경로 없이 PNG bytes를 만들어 MCP caller에게 image block 하나로 보낸다. 최대 IPC/MCP 응답은 4 MiB이며 초과 응답은 고정 오류로 종료한다. worker와 gateway audit에는 도구명, 결과 코드, 처리 시간만 남기며 typed text, snapshot, image, credentials, credential URL은 기록하지 않는다.
+
+비밀번호 입력을 의도적으로 금지하므로 unattended password login은 완료할 수 없다. 비밀번호 없는 흐름은 동작할 수 있다. password, 2FA, passkey 지원은 후속 결정으로 남으며 Naver 자격 증명은 저장하지 않는다.
+
 ## 네이버 장바구니 도구
 
 네이버 장바구니 읽기와 변경 준비는 서로 다른 scope를 요구한다. 상품·장바구니 조회는 `browser:read`만 요구한다. `naver.cart.prepare`와 `naver.cart.set`은 `browser:read`와 `cart:write`를 함께 요구한다. `cart:write`는 사람이 페어링 과정에서 명시적으로 승인해야 한다. 기존 기기에는 자동으로 추가하지 않는다. `cart:write`를 회수하려면 해당 기기를 폐기한 뒤 이 scope 없이 다시 페어링한다.
@@ -485,7 +507,7 @@ snapshot은 세션, 탭, 프레임, `document_epoch`, `snapshot_id`를 포함한
 
 ref는 그 snapshot에 종속된다. 새 snapshot, 탐색, 새로고침, 관련 DOM 변화 뒤에는 `STALE_REF` 또는 `STATE_CHANGED`로 거부한다. 비슷한 버튼으로 자동 대체하지 않는다. 실행 직전에 실제 요소와 의미를 다시 확인한다.
 
-로그인·결제 인증 화면의 스크린샷은 차단하거나 검증된 영역만 제공한다. 입력 칸을 가렸다고 모든 비밀이 제거된 것은 아니다.
+일반 read snapshot은 로그인 화면을 열지 않는다. 별도 승인된 login mode의 screenshot은 worker 소유 로그인 페이지에서만 만들고, 파일로 저장하지 않은 채 MCP caller에게 inline image로 돌려준다. typed text와 이미지 bytes는 audit log에 남지 않는다.
 
 ## 오류 코드
 
@@ -528,4 +550,4 @@ MCP 전송 버전 협상은 MCP 채택 버전이 정해진 뒤에 별도로 적�
 
 읽기 관찰은 새 `request_id`로 다시 호출할 수 있다. 장바구니 추가, 승인 소비, 결제는 `idempotency_key`가 같더라도 결과가 `OUTCOME_UNKNOWN`이면 자동 재시도하지 않는다. 재시작 직후 실행 중이던 결제를 다시 누르지 않는다.
 
-현재 MCP와 worker 로그에는 허용 목록의 도구/operation, 고정 코드, 처리 시간과 생성된 correlation ID만 남긴다. caller `request_id`, 기기·세션 정보, 사이트 주소, payload, DOM, headers, 토큰, raw exception은 기록하지 않는다.
+현재 MCP와 worker 로그에는 허용 목록의 도구/operation, 고정 코드, 처리 시간과 생성된 correlation ID만 남긴다. 로그인 상호작용도 tool 이름과 결과 코드만 기록하고 본문을 기록하지 않는다. caller `request_id`, 기기·세션 정보, 사이트 주소, payload, DOM, headers, 토큰, raw exception은 기록하지 않는다.

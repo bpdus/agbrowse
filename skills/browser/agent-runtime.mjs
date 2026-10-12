@@ -21,6 +21,7 @@ import {
 } from './agent-naver-search.mjs';
 import { classifyLoginStatusRequest, loginStatusPolicy, readLoginStatusFromPage } from './agent-naver-login-status.mjs';
 import { classifyCartRequest } from './agent-naver-cart.mjs';
+import { assertLoginNavigation, classifyLoginRequest, createLoginController, isLogoutUrl, waitForProfileRelease } from './agent-login.mjs';
 
 const WORKER_DIR_NAME = '.agbrowse-bpdus';
 const PROFILE_DIR_NAME = 'agent-profile';
@@ -379,13 +380,35 @@ async function abortRoute(route) {
  * A 3xx Location is classified before the next hop is requested.
  * @param {import('playwright-core').Route} route
  */
-async function guardRequest(route, pagePolicies) {
+async function guardRequest(route, pagePolicies, getMode = () => 'normal') {
     try {
         const request = route.request();
         const method = requestMethod(request);
         const url = requestUrl(request);
         let page = null;
         try { page = request.frame?.().page?.() ?? null; } catch { page = null; }
+        if (isLogoutUrl(url)) { await abortRoute(route); return; }
+        const mode = getMode();
+        if (mode === 'login' || mode === 'transitioning') {
+            if (mode !== 'login' || classifyLoginRequest(url, method) !== 'allow' || chainHasWebSocket(request)) { await abortRoute(route); return; }
+            let currentUrl = url;
+            let currentMethod = method.toUpperCase();
+            let response = await route.fetch({ maxRedirects: 0 });
+            for (let followed = 0; ; followed += 1) {
+                const status = response.status?.() ?? 0;
+                if (status < 300 || status >= 400) { await route.fulfill({ response }); return; }
+                if (followed >= MAX_REDIRECTS) { await abortRoute(route); return; }
+                const location = response.headers?.().location;
+                let next;
+                try { if (typeof location !== 'string' || !location) throw new Error(); next = new URL(location, currentUrl).href; }
+                catch { await abortRoute(route); return; }
+                const nextMethod = status === 307 || status === 308 ? currentMethod : 'GET';
+                if (currentMethod === 'POST' && (nextMethod !== 'GET' || new URL(next).hostname.toLowerCase() !== 'nid.naver.com')) { await abortRoute(route); return; }
+                if (classifyLoginRequest(next, nextMethod) !== 'allow') { await abortRoute(route); return; }
+                currentUrl = next; currentMethod = nextMethod;
+                response = await route.fetch({ url: currentUrl, method: currentMethod, maxRedirects: 0 });
+            }
+        }
         const pagePolicy = page && pagePolicies.get(page);
         const policy = pagePolicy?.requestPolicy ?? productionSearchPolicy();
         const loginStatusTopLevelNavigation = pagePolicy?.requestPolicy?.operation === 'naver.login_status'
@@ -483,7 +506,7 @@ async function guardRequest(route, pagePolicies) {
                 await abortRoute(route);
                 return;
             }
-            if (classifyPolicyRequest(resolved, followMethod, navigation ? 'navigation' : 'resource', policy, true) !== 'allow') {
+            if (isLogoutUrl(resolved) || classifyPolicyRequest(resolved, followMethod, navigation ? 'navigation' : 'resource', policy, true) !== 'allow') {
                 await abortRoute(route);
                 return;
             }
@@ -511,11 +534,11 @@ async function guardWebSocket(ws) {
 /**
  * @param {import('playwright-core').BrowserContext} ctx
  */
-async function installContextGuards(ctx, pagePolicies) {
+async function installContextGuards(ctx, pagePolicies, getMode = () => 'normal') {
     if (typeof ctx.route !== 'function' || typeof ctx.addInitScript !== 'function') {
         throw new AgentRuntimeError('STARTUP_FAILED', 'Browser launch failed.');
     }
-    await ctx.route('**/*', (route) => guardRequest(route, pagePolicies));
+    await ctx.route('**/*', (route) => guardRequest(route, pagePolicies, getMode));
     if (typeof ctx.routeWebSocket === 'function') {
         /** @type {(url: URL) => boolean} */
         const allWebSockets = () => true;
@@ -548,6 +571,11 @@ export function createAgentRuntime(config) {
     /** @type {Record<string, string | undefined> | null} */
     let savedDebug = null;
     let chain = Promise.resolve();
+    /** @type {'normal' | 'transitioning' | 'login'} */
+    let mode = 'normal';
+    /** @type {import('playwright-core').Page | null} */
+    let loginPage = null;
+    let loginController = null;
     /** @type {ReturnType<typeof createCartStore> | null} */
     let cartStore = null;
 
@@ -562,7 +590,8 @@ export function createAgentRuntime(config) {
     }
 
     function assertRunning() {
-        if (state === 'running' && context && !intentionalStop) return;
+        if (state === 'running' && context && !intentionalStop && mode === 'normal') return;
+        if (mode === 'login' || mode === 'transitioning') throw new AgentRuntimeError('LOGIN_MODE_REQUIRED', 'Login mode is active.');
         if (stopReason === 'disconnected') {
             throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
         }
@@ -610,13 +639,14 @@ export function createAgentRuntime(config) {
         savedDebug = null;
     }
 
-    function noteDisconnect() {
+    function noteDisconnect(source) {
         if (intentionalStop || disconnectNoted) return;
         disconnectNoted = true;
-        void enqueue(() => applyDisconnect());
+        void enqueue(() => applyDisconnect(source));
     }
 
-    async function applyDisconnect() {
+    async function applyDisconnect(source) {
+        if (source && context !== source) return;
         if (intentionalStop || state === 'idle') return;
         if (state === 'stopped' && !context && !lockToken) return;
         sessions.clear();
@@ -639,10 +669,10 @@ export function createAgentRuntime(config) {
     function watchContext(ctx) {
         const browser = typeof ctx.browser === 'function' ? ctx.browser() : null;
         if (browser && typeof browser.on === 'function') {
-            browser.on('disconnected', () => noteDisconnect());
+            browser.on('disconnected', () => { if (context === ctx && mode !== 'transitioning') noteDisconnect(ctx); });
         }
         if (typeof ctx.on === 'function') {
-            ctx.on('close', () => noteDisconnect());
+            ctx.on('close', () => { if (context === ctx && mode !== 'transitioning') noteDisconnect(ctx); });
         }
     }
 
@@ -698,11 +728,12 @@ export function createAgentRuntime(config) {
                 if (disconnectNoted) {
                     throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
                 }
-                await installContextGuards(context, pagePolicies);
+                await installContextGuards(context, pagePolicies, () => mode);
                 if (disconnectNoted) {
                     throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
                 }
                 state = 'running';
+                mode = 'normal';
             } catch (error) {
                 await discardLaunch();
                 if (error instanceof AgentRuntimeError) throw error;
@@ -1044,6 +1075,64 @@ export function createAgentRuntime(config) {
         });
     }
 
+    async function dispatchLogin(op, payload = {}) {
+        return enqueue(async () => {
+            if (op === 'login.status') return { mode, ready: mode !== 'transitioning' && state === 'running' && Boolean(context) };
+            if (op === 'worker.restart') {
+                setTimeout(() => { void stop().catch(() => {}); }, 0);
+                return { restarting: true };
+            }
+            if (op === 'login.start') {
+                if (mode === 'login') return { mode, ready: true };
+                if (mode === 'transitioning') return { mode, ready: false };
+                mode = 'transitioning'; sessions.clear();
+                if (context) { try { await context.close(); } catch { throw readError('SHUTDOWN_FAILED'); } }
+                context = null; loginPage = null; loginController = null;
+                const { profileDir } = ensureDedicatedProfile();
+                await waitForProfileRelease(profileDir);
+                const playwright = await import('playwright-core');
+                context = await playwright.chromium.launchPersistentContext(profileDir, launchOptions());
+                watchContext(context); await installContextGuards(context, pagePolicies, () => mode);
+                loginPage = await context.newPage();
+                loginController = createLoginController(loginPage);
+                // The guard must apply the login allowlist to the initial goto.
+                // Operations remain serialized until this navigation settles.
+                mode = 'login';
+                try {
+                    await loginPage.goto(assertLoginNavigation('https://nid.naver.com/nidlogin.login'), { waitUntil: 'domcontentloaded' });
+                } catch {
+                    mode = 'transitioning';
+                    throw readError('NAVIGATION_FAILED');
+                }
+                state = 'running'; return { mode, ready: true };
+            }
+            if (op === 'login.end') {
+                if (mode === 'normal' && state === 'running') return { mode, ready: true };
+                mode = 'transitioning'; sessions.clear();
+                if (context) { try { await context.close(); } catch { throw readError('SHUTDOWN_FAILED'); } }
+                context = null; loginPage = null; loginController = null;
+                const { profileDir } = ensureDedicatedProfile();
+                await waitForProfileRelease(profileDir);
+                const playwright = await import('playwright-core');
+                context = await playwright.chromium.launchPersistentContext(profileDir, launchOptions());
+                watchContext(context); await installContextGuards(context, pagePolicies, () => mode);
+                state = 'running'; mode = 'normal'; stopReason = null;
+                return { mode, ready: true };
+            }
+            if (mode !== 'login' || !loginPage) throw readError('LOGIN_MODE_REQUIRED');
+            if (op === 'login.navigate') {
+                const url = assertLoginNavigation(payload.url);
+                loginController?.clear(); await loginPage.goto(url, { waitUntil: 'domcontentloaded' }); return { navigated: true };
+            }
+            if (op === 'login.screenshot') return { image: (await loginPage.screenshot({ type: 'png' })).toString('base64') };
+            if (op === 'login.snapshot') return { snapshot: await loginController.snapshot() };
+            if (op === 'login.click') return loginController.click(payload);
+            if (op === 'login.type') return loginController.typeLoginText(payload);
+            if (op === 'login.press') return loginController.pressLoginKey(payload.key);
+            throw readError('ACTION_DENIED');
+        });
+    }
+
     async function stop() {
         return enqueue(async () => {
             if (!context && !lockToken && state !== 'running' && state !== 'closing') return;
@@ -1062,5 +1151,5 @@ export function createAgentRuntime(config) {
         });
     }
 
-    return { start, openSession, inspectSession, closeSession, stop, dispatchRead, dispatchCart };
+    return { start, openSession, inspectSession, closeSession, stop, dispatchRead, dispatchCart, dispatchLogin };
 }

@@ -56,6 +56,8 @@ function fakeWorker() {
                 return { session_id: sessionId, tab_id: 'tab-1', frame_id: 'frame_main', document_epoch: 1 };
             }
             if (op === 'browser.session.close') return { closed: true };
+            if (op === 'login.screenshot') return { image: Buffer.from('PNG').toString('base64') };
+            if (op.startsWith('login.') || op === 'worker.restart') return { mode: 'login', ready: true };
             if (op === 'naver.login_status') return loginStatus;
             const state = sessions.get(payload.session_id);
             if (!state) {
@@ -266,6 +268,24 @@ describe('agent mcp dispatcher', () => {
         expect(ctx.worker.calls.at(-1)).toMatchObject({ op: 'naver.cart.set', payload: { dry_run: true, device_id: 'dev_a', epoch: 1 } });
         expect(ctx.logs.join('')).not.toContain('req_cart_dry');
         expect(ctx.logs.join('')).toMatch(/correlation=[a-f0-9]{16}/);
+    });
+
+    it('hides login controls from read-only devices and gates lifecycle calls behind the dedicated scope', async () => {
+        const ctx = await startedSession();
+        const readList = await handle(ctx.mcp, { jsonrpc: '2.0', id: 100, method: 'tools/list' }, { headers: ctx.headers });
+        expect(readList.body.result.tools.some((tool) => tool.name === 'login.start')).toBe(false);
+        const denied = await handle(ctx.mcp, toolCall(101, 'login.start', { protocol_version: '0.1.0', request_id: 'login_denied' }), { headers: ctx.headers });
+        expect(denied.status).toBe(403);
+        expect(denied.body.error.code).toBe('SCOPE_DENIED');
+        const grantedAuth = async () => ({ device_id: 'dev_a', epoch: 1, scopes: ['browser:read', 'login:operate'] });
+        const list = await handle(ctx.mcp, { jsonrpc: '2.0', id: 102, method: 'tools/list' }, { headers: ctx.headers, auth: grantedAuth });
+        expect(list.body.result.tools.some((tool) => tool.name === 'login.start')).toBe(true);
+        const allowed = await handle(ctx.mcp, toolCall(103, 'login.start', { protocol_version: '0.1.0', request_id: 'login_allowed' }), { headers: ctx.headers, auth: grantedAuth });
+        expect(allowed.body.result.isError).toBe(false);
+        expect(ctx.worker.calls.at(-1)).toEqual({ op: 'login.start', payload: {} });
+        const screenshot = await handle(ctx.mcp, toolCall(104, 'login.screenshot', { protocol_version: '0.1.0', request_id: 'login_image' }), { headers: ctx.headers, auth: grantedAuth });
+        expect(screenshot.body.result.content).toEqual([{ type: 'image', mimeType: 'image/png', data: Buffer.from('PNG').toString('base64') }]);
+        expect(screenshot.body.result).not.toHaveProperty('structuredContent');
     });
 
     it('rechecks cart scopes after a session-queue wait and stops before worker dispatch', async () => {

@@ -103,12 +103,32 @@ describe('agent-worker', () => {
         const runtime = {
             async dispatchRead(op) { calls.push(['read', op]); return 'read'; },
             async dispatchCart(op) { calls.push(['cart', op]); return 'cart'; },
+            async dispatchLogin(op) { calls.push(['login', op]); return 'login'; },
         };
         expect(await dispatchWorkerOperation(runtime, 'naver.login_status', {})).toBe('read');
         expect(await dispatchWorkerOperation(runtime, 'naver.cart.prepare', {})).toBe('cart');
         expect(await dispatchWorkerOperation(runtime, 'naver.product.read', {})).toBe('cart');
-        expect(calls).toEqual([['read', 'naver.login_status'], ['cart', 'naver.cart.prepare'], ['cart', 'naver.product.read']]);
+        expect(await dispatchWorkerOperation(runtime, 'login.start', {})).toBe('login');
+        expect(calls).toEqual([['read', 'naver.login_status'], ['cart', 'naver.cart.prepare'], ['cart', 'naver.product.read'], ['login', 'login.start']]);
         await expect(dispatchWorkerOperation(runtime, 'naver.cart.checkout', {})).rejects.toMatchObject({ code: 'ACTION_DENIED' });
+    });
+
+    it('acknowledges worker.restart before graceful shutdown and exits successfully', async () => {
+        const dir = realpathSync(mkdtempSync(join(tmpdir(), 'agb-worker-restart-')));
+        chmodSync(dir, 0o700); const socketPath = join(dir, 'agent-worker.sock');
+        const stdout = capture(); const stderr = capture(); const signal = new EventEmitter();
+        let stops = 0; let exitCode;
+        harness.factory = () => ({ async start() {}, async stop() { stops += 1; }, async dispatchRead() { return {}; }, async dispatchLogin() { return { restarting: true }; } });
+        const pending = runAgentWorker({ stdout: stdout.stream, stderr: stderr.stream, signalSource: signal, socketPath, exit(code) { exitCode = code; } });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const client = connectReadEndpoint({ socketPath });
+        const acknowledged = await client.call('worker.restart', {});
+        expect(acknowledged).toEqual({ restarting: true });
+        client.close();
+        expect(await pending).toBe(0);
+        expect(exitCode).toBe(0); expect(stops).toBe(1);
+        expect(stdout.read()).toContain('agbrowse-agent: stopped'); expect(stderr.read()).toBe('');
+        rmSync(dir, { recursive: true, force: true });
     });
 
     it('does not import the legacy browser surfaces or start on import', () => {

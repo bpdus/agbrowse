@@ -111,7 +111,7 @@ export function createClientStore(options) {
 
 /**
  * Same-process pairing. The confirmation code is not returned or logged.
- * @param {{ auth: any, deviceKeys: { ensureKey: (id: string) => any }, directory: string, name?: string }} options
+ * @param {{ auth: any, deviceKeys: { ensureKey: (id: string) => any }, directory: string, name?: string, scopes?: string[] }} options
  */
 export async function bootstrapLocalClient(options) {
     await options.auth.openPairingWindow();
@@ -119,13 +119,13 @@ export async function bootstrapLocalClient(options) {
     const pending = await options.auth.submitPairing({
         publicKey,
         name: options.name ?? 'local',
-        requestedScopes: ['browser:read'],
+        requestedScopes: options.scopes ?? ['browser:read'],
     });
     const confirmed = await options.auth.confirmPairing({
         pendingId: pending.pending_id,
         code: pending.confirmation_code,
         fingerprint: pending.fingerprint,
-        grantedScopes: ['browser:read'],
+        grantedScopes: options.scopes ?? ['browser:read'],
     });
     createClientStore({ directory: options.directory }).save({
         version: 1,
@@ -135,7 +135,7 @@ export async function bootstrapLocalClient(options) {
         audience: confirmed.server.audience,
         resource: confirmed.server.resource,
         public_key: confirmed.server.public_key,
-        scopes: ['browser:read'],
+        scopes: options.scopes ?? ['browser:read'],
     });
     return { device_id: confirmed.device_id };
 }
@@ -189,7 +189,7 @@ function postRaw(target, payload, headers) {
             let total = 0;
             res.on('data', (chunk) => {
                 total += chunk.length;
-                if (total > 1024 * 1024) {
+                if (total > 4 * 1024 * 1024) {
                     req.destroy();
                     reject(readError('INTERNAL'));
                     return;
@@ -204,7 +204,7 @@ function postRaw(target, payload, headers) {
                 });
             });
         });
-        req.setTimeout(10000, () => {
+        req.setTimeout(60000, () => {
             req.destroy();
             reject(readError('INTERNAL'));
         });
@@ -334,7 +334,7 @@ function createMcpHttpClient(options) {
  * @param {string[]} argv
  */
 function parseArgs(argv) {
-    /** @type {{ help: boolean, clientDir?: string, keyDir?: string, gatewayUrl?: string }} */
+    /** @type {{ help: boolean, clientDir?: string, keyDir?: string, gatewayUrl?: string, scopes?: string[] }} */
     const args = { help: false };
     for (let index = 0; index < argv.length; index += 1) {
         const arg = argv[index];
@@ -348,6 +348,7 @@ function parseArgs(argv) {
         else if (arg === '--client-dir') args.clientDir = next();
         else if (arg === '--key-dir') args.keyDir = next();
         else if (arg === '--gateway-url') args.gatewayUrl = next();
+        else if (arg === '--scope') { args.scopes ??= []; args.scopes.push(...next().split(',')); }
         else throw readError('INVALID_ARGUMENTS');
     }
     return args;
@@ -400,6 +401,11 @@ export async function runMcpStdioClient(options = {}) {
         if (!args.clientDir || !args.keyDir || !args.gatewayUrl) throw readError('INVALID_ARGUMENTS');
         const record = createClientStore({ directory: args.clientDir }).load();
         keys = createDevFileKeyStore({ directory: args.keyDir });
+        if (args.scopes) {
+            const selected = [...new Set(args.scopes)].sort();
+            if (!selected.includes('browser:read') || selected.some((scope) => !/^[a-z0-9:._-]{1,64}$/.test(scope))) throw readError('SCOPE_DENIED');
+            record.scopes = selected;
+        }
         client = connectMcpHttp({ record, keyStore: keys, gatewayUrl: args.gatewayUrl });
         const input = options.stdin ?? process.stdin;
         lines = readline.createInterface({ input, crlfDelay: Infinity });

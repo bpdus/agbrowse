@@ -60,6 +60,7 @@ function harness(audience = AUDIENCE, gatewayId = 'gw_test') {
         root,
         dirs,
         auth,
+        stateStore,
         keyStore,
         deviceKeys,
         publicKey,
@@ -351,6 +352,15 @@ describe('paired-device auth', () => {
             deviceId: confirmed.device_id,
             proof: proofFor(box, expired.payload),
         })).rejects.toMatchObject({ code: 'AUTH_EXPIRED' });
+    });
+
+    it('grants only an explicit operator scope and increments the device epoch', async () => {
+        const box = harness();
+        const { confirmed } = await pair(box);
+        const grant = await box.auth.grantDeviceScope(confirmed.device_id, 'login:operate');
+        expect(grant).toMatchObject({ device_id: confirmed.device_id, epoch: 2, scopes: ['browser:read', 'login:operate'] });
+        expect(box.stateStore.load().devices[confirmed.device_id]).toMatchObject({ epoch: 2, scopes: ['browser:read', 'login:operate'], revoked: false });
+        expect(await box.auth.grantDeviceScope(confirmed.device_id, 'login:operate')).toMatchObject({ epoch: 2 });
     });
 
     it('rejects tampered, mistargeted, expired, unknown, revoked, and stale tokens', async () => {

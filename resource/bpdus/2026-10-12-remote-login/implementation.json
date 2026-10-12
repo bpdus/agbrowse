@@ -1,0 +1,71 @@
+{
+  "schema_version": 2,
+  "status": "DONE",
+  "summary": "Fixed initial login navigation interception and login snapshot ref targeting; added regressions for the real route invocation and hidden-field offsets.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-remote-login/plan.json",
+  "tasks": [
+    {
+      "task_id": "remote-login-review-blockers",
+      "status": "DONE",
+      "changed_files": [
+        "skills/browser/agent-login.mjs",
+        "skills/browser/agent-read-error.mjs",
+        "skills/browser/agent-runtime.mjs",
+        "test/unit/agent-login.test.mjs",
+        "test/unit/agent-runtime.test.mjs"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-remote-login/plan.json",
+      "sha256": "0781ab643c8e4636912a24c09246a837acd5682debc0f909b5d469882ce31585"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-login.mjs",
+      "sha256": "697b07713cf2b2860d9125fbc69f840c57525fcbb24cd553960a8dffce6813dd"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-read-error.mjs",
+      "sha256": "1483413e5284d0bbd14ed2d6326fa3b1f9a336112c2ee55969a652a00dd9f3da"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-runtime.mjs",
+      "sha256": "7fdf2e716901c944c898be9b0538e7e41f21d6a38a09df3b75761aa332008b87"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-login.test.mjs",
+      "sha256": "f9e8de168f62cb40c9bce1d9afa5a0dad954ab5c9109009972eb384ecd6e58f2"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-runtime.test.mjs",
+      "sha256": "c5c0d07e0d43dc51e0b784f87a326378aabf8afed26a62543b8556cf6120c99a"
+    }
+  ],
+  "checks": [
+    {
+      "name": "verification",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-remote-login/evidence/unit-tests.log",
+      "evidence_sha256": "eefd1040e461af70a93eab565d94c15cbafb3cfe5e178e52165c75c25bbb4777"
+    },
+    {
+      "name": "tests",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-remote-login/evidence/unit-tests.log",
+      "evidence_sha256": "eefd1040e461af70a93eab565d94c15cbafb3cfe5e178e52165c75c25bbb4777"
+    },
+    {
+      "name": "launchagents_integration",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-remote-login/evidence/launchagents-integration.log",
+      "evidence_sha256": "4fccea5f7c4f7c2f01c7e0f92f6f2b1ee33893e771f583691878957e0bbc1db3"
+    },
+    {
+      "name": "self_review",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-remote-login/evidence/diff-check.log",
+      "evidence_sha256": "75ebccfc18cc5b1a8b32589edccfa2e9f53d9f4dcde857010b3235519655e37f"
+    }
+  ]
+}

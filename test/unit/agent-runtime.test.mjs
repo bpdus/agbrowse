@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createContext, runInContext } from 'node:vm';
@@ -85,6 +85,9 @@ function makePage(targetId, url = 'about:blank') {
         isClosed() { return this.closed; },
         async close() { this.closed = true; },
         async bringToFront() { this.focused = true; },
+        async goto(url) { this.currentUrl = url; },
+        async screenshot() { return Buffer.from('PNG'); },
+        on() {},
     };
 }
 
@@ -209,7 +212,7 @@ describe('agent-runtime', () => {
 
     it('returns only the lifecycle methods', () => {
         const runtime = createAgentRuntime();
-        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchCart', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
+        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchCart', 'dispatchLogin', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
     });
 
     it('serializes cart inspection through the runtime queue and fails live layouts closed', async () => {
@@ -330,6 +333,125 @@ describe('agent-runtime', () => {
             session_id: orderSession.sessionId, mcp_session_id: `mcp_${'b'.repeat(16)}`,
             device_id: 'dev_test', epoch: 1, worker_id: `wrk_${'a'.repeat(16)}`,
         })).rejects.toMatchObject({ code: 'ORDER_CREATION_DETECTED' });
+    });
+
+    it('switches login mode in process while retaining the profile lock and ignores retired context disconnects', async () => {
+        const contexts = [];
+        trace.launchImpl = () => { const made = makeContext(events); contexts.push(made); return made.context; };
+        const runtime = createAgentRuntime(); active = runtime; await runtime.start();
+        await runtime.openSession();
+        const chromeLock = join(profileDir(), 'SingletonLock'); writeFileSync(chromeLock, 'owned by fake chrome');
+        const removeLater = setTimeout(() => { try { unlinkSync(chromeLock); } catch {} }, 30);
+        expect(await runtime.dispatchLogin('login.start', {})).toEqual({ mode: 'login', ready: true });
+        clearTimeout(removeLater);
+        expect(locks.acquire).toHaveBeenCalledTimes(1);
+        expect(locks.release).not.toHaveBeenCalled();
+        await expect(runtime.dispatchRead('browser.session.open', {})).rejects.toMatchObject({ code: 'LOGIN_MODE_REQUIRED' });
+        expect(await runtime.dispatchLogin('login.end', {})).toEqual({ mode: 'normal', ready: true });
+        contexts[0].browser.emitDisconnected();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(await runtime.dispatchLogin('login.status', {})).toEqual({ mode: 'normal', ready: true });
+        expect(locks.acquire).toHaveBeenCalledTimes(1);
+        expect(locks.release).not.toHaveBeenCalled();
+        await runtime.stop();
+        expect(locks.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects refs after login.end and login.start and after a runtime restart', async () => {
+        const previousStyle = globalThis.getComputedStyle;
+        globalThis.getComputedStyle = () => ({ visibility: 'visible', display: 'block' });
+        let clicks = 0;
+        const fakeElement = {
+            tagName: 'BUTTON', innerText: 'Continue', id: '',
+            getBoundingClientRect: () => ({ width: 100, height: 20 }),
+            getAttribute(name) { return ({ 'aria-label': 'Continue', type: null, name: null, autocomplete: null, placeholder: null, title: null })[name] ?? null; },
+        };
+        const installLoginPage = () => {
+            const made = makeContext(events);
+            made.context.newPage = async () => {
+                const page = makePage(`login-${trace.launches.length}`);
+                page.$$ = async () => [{
+                    evaluate: async (fn) => fn(fakeElement),
+                    click: async () => { clicks += 1; },
+                    dispose: async () => {},
+                }];
+                return page;
+            };
+            return made.context;
+        };
+        trace.launchImpl = installLoginPage;
+        try {
+            const firstRuntime = createAgentRuntime(); active = firstRuntime; await firstRuntime.start();
+            await firstRuntime.dispatchLogin('login.start', {});
+            const previousRef = (await firstRuntime.dispatchLogin('login.snapshot', {})).snapshot.controls[0].ref;
+            await firstRuntime.dispatchLogin('login.end', {});
+            await firstRuntime.dispatchLogin('login.start', {});
+            const nextRef = (await firstRuntime.dispatchLogin('login.snapshot', {})).snapshot.controls[0].ref;
+            expect(nextRef).not.toBe(previousRef);
+            await expect(firstRuntime.dispatchLogin('login.click', { ref: previousRef })).rejects.toMatchObject({ code: 'REF_STALE' });
+            await firstRuntime.stop();
+
+            const restartedRuntime = createAgentRuntime(); active = restartedRuntime; await restartedRuntime.start();
+            await restartedRuntime.dispatchLogin('login.start', {});
+            await restartedRuntime.dispatchLogin('login.snapshot', {});
+            await expect(restartedRuntime.dispatchLogin('login.click', { ref: nextRef })).rejects.toMatchObject({ code: 'REF_STALE' });
+            expect(clicks).toBe(0);
+            await restartedRuntime.stop();
+        } finally {
+            if (previousStyle === undefined) delete globalThis.getComputedStyle;
+            else globalThis.getComputedStyle = previousStyle;
+        }
+    });
+
+    it('applies the login route policy during the initial goto', async () => {
+        let loginContext;
+        let initialRequestFetches = 0;
+        let initialRequestAborts = 0;
+        trace.launchImpl = () => {
+            const made = makeContext(events);
+            loginContext = made.context;
+            loginContext.newPage = async () => {
+                const page = makePage('login-initial-navigation');
+                page.goto = async (url) => {
+                    page.currentUrl = url;
+                    const request = {
+                        url: () => url,
+                        method: () => 'GET',
+                        frame: () => ({ page: () => page }),
+                        isNavigationRequest: () => true,
+                        redirectedFrom: () => null,
+                        resourceType: () => 'document',
+                    };
+                    await loginContext.routes[0].handler({
+                        request: () => request,
+                        async abort() { initialRequestAborts += 1; },
+                        async fetch() { initialRequestFetches += 1; return { status: () => 200, headers: () => ({}) }; },
+                        async fulfill() {},
+                    });
+                    if (initialRequestAborts) throw new Error('initial login request was blocked');
+                };
+                made.order.push(page);
+                return page;
+            };
+            return made.context;
+        };
+        const runtime = createAgentRuntime(); active = runtime; await runtime.start();
+        expect(await runtime.dispatchLogin('login.start', {})).toEqual({ mode: 'login', ready: true });
+        expect(initialRequestFetches).toBe(1);
+        expect(initialRequestAborts).toBe(0);
+        await runtime.stop();
+    });
+
+    it('retains runtime ownership after a login context close failure', async () => {
+        let closeCalls = 0;
+        trace.launchImpl = () => { const made = makeContext(events); const close = made.context.close.bind(made.context); made.context.close = async () => { closeCalls += 1; if (closeCalls === 1) throw new Error('close failure'); await close(); }; return made.context; };
+        const runtime = createAgentRuntime(); active = runtime; await runtime.start();
+        await expect(runtime.dispatchLogin('login.start', {})).rejects.toMatchObject({ code: 'SHUTDOWN_FAILED' });
+        expect(locks.acquire).toHaveBeenCalledTimes(1);
+        expect(locks.release).not.toHaveBeenCalled();
+        expect(await runtime.dispatchLogin('login.status', {})).toEqual({ mode: 'transitioning', ready: false });
+        await runtime.stop();
+        expect(locks.release).toHaveBeenCalledTimes(1);
     });
 
     it('rejects a foreign profile or endpoint before launch', async () => {

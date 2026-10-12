@@ -136,6 +136,21 @@ describe('paired-device durability', () => {
         expect(existsSync(join(directory, 'gateway-signing.pem'))).toBe(true);
     });
 
+    it('invalidates old client tokens after an operator login scope grant', async () => {
+        const box = harness(); const paired = await pair(box); const token = await issueToken(box, paired.confirmed.device_id);
+        const grant = await box.auth.grantDeviceScope(paired.confirmed.device_id, 'login:operate');
+        expect(grant.epoch).toBe(2);
+        await expect(box.auth.authenticate(token)).rejects.toMatchObject({ code: 'AUTH_INVALID' });
+    });
+
+    it('does not report an operator grant as successful when durable save fails', async () => {
+        const fault = { directory: false };
+        const io = wrapFs({ fsyncSync(fd) { if (fault.directory && fs.fstatSync(fd).isDirectory()) { const error = new Error('injected directory fsync failure'); error.code = 'EIO'; throw error; } return fs.fsyncSync(fd); } });
+        const box = harness(io); const paired = await pair(box);
+        fault.directory = true;
+        await expect(box.auth.grantDeviceScope(paired.confirmed.device_id, 'login:operate')).rejects.toMatchObject({ code: 'STATE_UNSAFE' });
+    });
+
     it('rejects tokens when revocation cannot be synced, and a later save keeps the disk revocation', async () => {
         const fault = { directory: false, file: false };
         const io = wrapFs({

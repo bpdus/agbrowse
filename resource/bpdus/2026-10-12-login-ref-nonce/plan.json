@@ -1,0 +1,39 @@
+{
+  "schema_version": 2,
+  "domain": "feature",
+  "summary": "로그인 컨트롤러 세션별 nonce를 ref에 포함해 세션과 최신 스냅샷 밖의 ref를 거부한다.",
+  "status": "READY",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "로그인 ref에 세션 nonce 적용",
+      "files": [
+        "skills/browser/agent-login.mjs",
+        "test/unit/agent-login.test.mjs",
+        "test/unit/agent-runtime.test.mjs"
+      ],
+      "target": "createLoginController ref 발급 및 해석",
+      "depends_on": "none",
+      "change": "컨트롤러마다 crypto.randomBytes(8) 기반 hex nonce를 만들고 ref 형식을 <nonce>_s<n>_<i>로 바꾸며 malformed/foreign/stale refs를 REF_STALE로 거부한다.",
+      "effect": "세션을 넘나드는 ref가 새 컨트롤러에서 절대로 유효하지 않다.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "로그인 조작 대상 식별의 경계이므로 ref 충돌이나 잘못된 요소 조작 시 계정 입력/클릭에 영향을 준다.",
+        "test_decision": "add",
+        "test_reason": "세션 교체 후 ref 재사용과 malformed ref 차단은 기존 최신 스냅샷 테스트로 검증되지 않는다.",
+        "subject": "ref nonce 격리와 stale ref 조작 차단",
+        "procedure": "요청된 Vitest 대상과 launch-agent integration 스크립트를 실행한다.",
+        "pass_criterion": "세션/스냅샷이 다른 ref는 REF_STALE이고 클릭이 발생하지 않으며 요청된 검사가 모두 통과한다."
+      }
+    }
+  ],
+  "verification": [
+    "npx vitest run test/unit/agent-runtime.test.mjs test/unit/agent-login.test.mjs test/unit/agent-mcp.test.mjs test/unit/agent-worker.test.mjs",
+    "bash test/integration/bpdus-launchagents.test.sh"
+  ],
+  "risks": [
+    "로그인 컨트롤러 생성 위치가 달라지면 nonce 범위가 의도한 세션 범위와 달라질 수 있다."
+  ],
+  "questions": []
+}

@@ -27,6 +27,11 @@ export const READ_ERROR_MESSAGES = Object.freeze({
     INTERNAL: 'The request failed.',
     INVALID_ARGUMENTS: 'Arguments were rejected.',
     NOT_RUNNING: 'Agent runtime is not running.',
+    LOGIN_MODE_REQUIRED: 'Login mode is not active.',
+    NAVIGATION_FAILED: 'The login page could not be opened.',
+    PASSWORD_REFUSED: 'Password fields cannot be filled by this tool.',
+    PROFILE_RELEASE_TIMEOUT: 'Chrome has not released the dedicated profile.',
+    REF_STALE: 'The ref no longer points to its original element.',
     SCOPE_DENIED: 'Requested scope was denied.',
     SESSION_CLOSED: 'Session is closed.',
     SESSION_NOT_FOUND: 'Session was not found.',
@@ -35,6 +40,8 @@ export const READ_ERROR_MESSAGES = Object.freeze({
     STATE_CHANGED: 'The document changed.',
     STATE_LOCK_STALE: 'The writer lock is stale; remove the exact lock file path shown in the error message manually.',
     STATE_UNSAFE: 'Stored state is not safe to use.',
+    SHUTDOWN_FAILED: 'Browser shutdown failed.',
+    STARTUP_FAILED: 'Browser launch failed.',
     VERSION_UNSUPPORTED: 'Protocol version is not supported.',
 });
 

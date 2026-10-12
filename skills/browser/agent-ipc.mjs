@@ -14,6 +14,7 @@ import { READ_ERROR_MESSAGES, readError } from './agent-read-error.mjs';
 
 export const SOCKET_NAME = 'agent-worker.sock';
 const MAX_MESSAGE = 64 * 1024;
+const MAX_RESPONSE = 4 * 1024 * 1024;
 const ALLOWED_OPS = new Set([
     'browser.observe',
     'browser.session.close',
@@ -26,6 +27,7 @@ const ALLOWED_OPS = new Set([
     'naver.cart.prepare',
     'naver.cart.set',
     'worker.hello',
+    'login.start', 'login.end', 'login.status', 'login.navigate', 'login.screenshot', 'login.snapshot', 'login.click', 'login.type', 'login.press', 'worker.restart',
 ]);
 
 export function isAllowedWorkerOperation(op) {
@@ -137,8 +139,9 @@ export async function startReadEndpoint(options) {
         let chain = Promise.resolve();
         const reply = (/** @type {Record<string, unknown>} */ message) => {
             const line = `${JSON.stringify(message)}\n`;
-            if (Buffer.byteLength(line) > MAX_MESSAGE) {
-                socket.write(`${JSON.stringify({ id: '0'.repeat(16), ok: false, error: { code: 'INTERNAL', message: 'The request failed.' } })}\n`);
+            if (Buffer.byteLength(line) > MAX_RESPONSE) {
+                const id = typeof message.id === 'string' && /^[a-f0-9]{16}$/.test(message.id) ? message.id : '0'.repeat(16);
+                socket.write(`${JSON.stringify({ id, ok: false, error: { code: 'INVALID_ARGUMENTS', message: READ_ERROR_MESSAGES.INVALID_ARGUMENTS } })}\n`);
                 return;
             }
             socket.write(line);
@@ -260,7 +263,7 @@ export function connectReadEndpoint(options = {}) {
         socket.setEncoding('utf8');
         socket.on('data', (chunk) => {
             buffer += chunk;
-            if (Buffer.byteLength(buffer) > MAX_MESSAGE * 4) {
+            if (Buffer.byteLength(buffer) > MAX_RESPONSE * 2) {
                 socket?.destroy();
                 failAll();
                 return;
