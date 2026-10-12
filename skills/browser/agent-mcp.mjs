@@ -42,10 +42,10 @@ const TOOL_NAMES = [
     'naver.cart.read',
     'naver.cart.prepare',
     'naver.cart.set',
-    'login.start', 'login.end', 'login.status', 'login.navigate', 'login.screenshot', 'login.snapshot', 'login.click', 'login.type', 'login.press', 'worker.restart',
+    'login.start', 'login.end', 'login.status', 'login.navigate', 'login.screenshot', 'login.snapshot', 'login.click', 'login.type', 'login.press', 'login.fill_credentials', 'login.submit', 'login.check_progress', 'worker.restart',
 ];
 
-const LOGIN_TOOL_NAMES = new Set(['login.start','login.end','login.status','login.navigate','login.screenshot','login.snapshot','login.click','login.type','login.press','worker.restart']);
+const LOGIN_TOOL_NAMES = new Set(['login.start','login.end','login.status','login.navigate','login.screenshot','login.snapshot','login.click','login.type','login.press','login.fill_credentials','login.submit','login.check_progress','worker.restart']);
 const CART_TOOL_NAMES = new Set(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set']);
 const CART_WRITE_TOOL_NAMES = new Set(['naver.cart.prepare', 'naver.cart.set']);
 
@@ -122,6 +122,9 @@ const TOOLS = [
     { name: 'login.click', description: 'Click a fresh login snapshot ref or viewport coordinate.', inputSchema: schema(['protocol_version','request_id'], { ref: { type:'string', pattern:'^lr_[1-9][0-9]*$' }, x: { type:'number', minimum:0 }, y: { type:'number', minimum:0 }, anyOf:[{required:['ref']},{required:['x','y']}] }) },
     { name: 'login.type', description: 'Type text into a focused or referenced non-password control.', inputSchema: schema(['protocol_version','request_id','text'], { text: { type:'string', maxLength:1000 }, ref: { type:'string', pattern:'^lr_[1-9][0-9]*$' } }) },
     { name: 'login.press', description: 'Press an enumerated non-text key.', inputSchema: schema(['protocol_version','request_id','key'], { key: { type:'string', enum:['Enter','Tab','Escape','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','Backspace','Delete','Space'] } }) }
+    ,{ name: 'login.fill_credentials', description: 'Fill the verified Naver ID and password fields from the worker Keychain. Does not submit.', inputSchema: schema(['protocol_version','request_id'], {}) }
+    ,{ name: 'login.submit', description: 'Explicitly submit the validated Naver login form after credentials have been filled.', inputSchema: schema(['protocol_version','request_id'], {}) }
+    ,{ name: 'login.check_progress', description: 'Return the current Naver login progress state.', inputSchema: schema(['protocol_version','request_id'], {}) }
 
 
 ];
@@ -428,6 +431,7 @@ export function createMcpDispatcher(options) {
                 if (tool === 'login.navigate' && (typeof record.url !== 'string' || record.url.length > 2048)) throw readError('INVALID_ARGUMENTS');
                 if (tool === 'login.type' && (typeof record.text !== 'string' || record.text.length > 1000)) throw readError('INVALID_ARGUMENTS');
                 if (tool === 'login.press' && typeof record.key !== 'string') throw readError('INVALID_ARGUMENTS');
+                if (['login.fill_credentials','login.submit','login.check_progress'].includes(tool) && unknownField(record, ['protocol_version','request_id'])) throw readError('INVALID_ARGUMENTS');
                 await assertLoginPrincipal(refreshPrincipal, principal);
                 const payload = Object.fromEntries(Object.entries(record).filter(([key]) => !['protocol_version','request_id'].includes(key)));
                 const output = await mutex.runExclusive('login-mode', async () => {
@@ -438,6 +442,15 @@ export function createMcpDispatcher(options) {
                     const encoded = typeof output?.image === 'string' ? output.image : '';
                     if (!encoded || encoded.length > 4 * 1024 * 1024 - 2048) throw readError('INVALID_ARGUMENTS');
                     return { status: 200, tool, requestId, headers: sessionHeaders(mcpSession.id), body: { jsonrpc:'2.0', id:message.id, result:{ content:[{type:'image',mimeType:'image/png',data:encoded}], isError:false } } };
+                }
+                if (tool === 'login.fill_credentials') {
+                    const reasons = new Set(['none','wrong_page','fields_unavailable','fields_untrusted','credentials_unavailable','invalid_input','account_unavailable','keychain_read_failed','state_unsafe','fill_failed']);
+                    return toolOutcome(message.id, { protocol_version: DOMAIN_PROTOCOL_VERSION, request_id: requestId, result: output?.result === 'filled' ? 'filled' : 'failed', reason: reasons.has(output?.reason) ? output.reason : 'fill_failed' }, false, mcpSession.id, requestId, tool);
+                }
+                if (tool === 'login.submit') return toolOutcome(message.id, { protocol_version: DOMAIN_PROTOCOL_VERSION, request_id: requestId, result: output?.result === 'submitted' ? 'submitted' : 'failed', reason: typeof output?.reason === 'string' && /^[a-z_]{1,40}$/.test(output.reason) ? output.reason : 'submit_failed' }, false, mcpSession.id, requestId, tool);
+                if (tool === 'login.check_progress') {
+                    const states = new Set(['logged_in','needs_phone_approval','needs_human','login_page','unknown']);
+                    return toolOutcome(message.id, { protocol_version: DOMAIN_PROTOCOL_VERSION, request_id: requestId, status: states.has(output?.status) ? output.status : 'unknown' }, false, mcpSession.id, requestId, tool);
                 }
                 return toolOutcome(message.id, { protocol_version: DOMAIN_PROTOCOL_VERSION, request_id: requestId, ...output }, false, mcpSession.id, requestId, tool);
             }

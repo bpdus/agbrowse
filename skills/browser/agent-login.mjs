@@ -66,6 +66,27 @@ export function isPasswordTarget(info = {}) {
         || info.passwordIdentity === true;
 }
 
+export function classifyLoginProgress(doc) {
+    const root = doc ?? globalThis.document;
+    if (!root?.querySelectorAll) return 'unknown';
+    const visible = (element) => {
+        const style = element.ownerDocument?.defaultView?.getComputedStyle?.(element);
+        const rect = element.getBoundingClientRect?.();
+        return (!style || style.visibility !== 'hidden' && style.display !== 'none') && (!rect || rect.width > 0 && rect.height > 0);
+    };
+    if ([...root.querySelectorAll('img[src], iframe[src], input, [role="img"]')].some((el) => visible(el) && /captcha|ncpt/i.test(`${el.id || ''} ${typeof el.className === 'string' ? el.className : ''} ${el.getAttribute?.('src') || ''}`))
+        || [...root.querySelectorAll('form, h1, h2, p, div, span, strong')].some((el) => visible(el) && /보안문자|자동입력 방지|captcha/i.test(el.textContent || ''))) return 'needs_human';
+    if ([...root.querySelectorAll('form, h1, h2, p, div, span, strong, button')].some((el) => visible(el) && /새 기기|새로운 기기|2단계 인증|휴대폰 승인|로그인 승인|본인 확인/i.test(el.textContent || '') && /승인|확인|인증/.test(el.textContent || ''))) return 'needs_phone_approval';
+    if ([...root.querySelectorAll('a[href], [data-href], [formaction]')].some((el) => {
+        for (const attr of ['href', 'data-href', 'formaction']) { const val = el.getAttribute(attr); if (!val) continue; try { const url = new URL(val, 'https://nid.naver.com'); if (url.host === 'nid.naver.com' && url.pathname === '/nidlogin.logout') return true; } catch {} }
+        return false;
+    })) return 'logged_in';
+    const id = [...root.querySelectorAll('input#id[name="id"]')].filter(visible);
+    const pw = [...root.querySelectorAll('input#pw[name="pw"]')].filter(visible);
+    if (id.length === 1 && pw.length === 1) return 'login_page';
+    return 'unknown';
+}
+
 /** One page controller. Ref identities live only as long as this document. */
 export function createLoginController(page) {
     const nonce = randomBytes(8).toString('hex');
@@ -73,6 +94,7 @@ export function createLoginController(page) {
     const protectedIdentity = new Set();
     let revision = 0;
     let snapshotSeq = 0;
+    let credentialsFilled = false;
     const disposeRefs = (items) => {
         for (const item of items.values()) void item.handle.dispose().catch(() => {});
     };
@@ -112,7 +134,7 @@ export function createLoginController(page) {
             const isPassword = node.type === 'password' || /(?:current-password|new-password)/i.test(node.autocomplete) || protectedIdentity.has(identity);
             if (isPassword) protectedIdentity.add(identity);
             refs.set(ref, { handle, identity, passwordIdentity: isPassword, revision });
-            return { ref, role: node.tag === 'input' ? 'input' : node.tag, label: node.label, type: isPassword ? 'password' : node.type, redacted: isPassword };
+            return { ref, role: node.tag === 'input' ? 'input' : node.tag, label: isPassword ? '' : node.label, type: isPassword ? 'password' : node.type, redacted: isPassword };
         });
         return { url: new URL(page.url()).origin, controls };
     }
@@ -139,11 +161,14 @@ export function createLoginController(page) {
         async click(input) {
             if (input && Object.hasOwn(input, 'ref')) {
                 if (typeof input.ref !== 'string') throw readError('REF_STALE');
-                await (await handleFor(resolveLoginRef(input.ref))).click();
+                const item = resolveLoginRef(input.ref);
+                if (credentialsFilled && await item.handle.evaluate((el) => Boolean(el.closest('form')?.querySelector('#id[name="id"],#pw[name="pw"]')))) throw readError('ACTION_DENIED');
+                await (await handleFor(item)).click();
             }
             else if (Number.isFinite(input?.x) && Number.isFinite(input?.y)) {
                 const size = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
                 if (input.x < 0 || input.y < 0 || input.x >= size.width || input.y >= size.height) throw readError('INVALID_ARGUMENTS');
+                if (credentialsFilled && await page.evaluate(({x,y}) => { const el = document.elementFromPoint(x,y); return Boolean(el?.closest('form')?.querySelector('#id[name="id"],#pw[name="pw"]')); }, input)) throw readError('ACTION_DENIED');
                 await page.mouse.click(input.x, input.y);
             }
             else throw readError('INVALID_ARGUMENTS');
@@ -169,6 +194,7 @@ export function createLoginController(page) {
         },
         async pressLoginKey(key) {
             if (typeof key !== 'string' || !SAFE_KEYS.has(key) || /^[A-Za-z0-9]$/.test(key) || key === 'Enter' && false) throw readError('ACTION_DENIED');
+            if (credentialsFilled && key === 'Enter') throw readError('ACTION_DENIED');
             const focused = page.locator(':focus');
             const info = await focused.evaluate((el) => ({ type: el.getAttribute('type') || '', autocomplete: el.getAttribute('autocomplete') || '', name: el.getAttribute('name') || '', id: el.id || '' })).catch(() => null);
             if (info) {
@@ -178,6 +204,46 @@ export function createLoginController(page) {
             await page.keyboard.press(key);
             invalidate();
             return { pressed: true };
+        },
+        async fillCredentials(readCredentials) {
+            try {
+                if (new URL(page.url()).origin !== 'https://nid.naver.com' || new URL(page.url()).pathname !== '/nidlogin.login') return { result: 'failed', reason: 'wrong_page' };
+                const ids = page.locator('input#id[name="id"]'); const passwords = page.locator('input#pw[name="pw"]');
+                if (await ids.count() !== 1 || await passwords.count() !== 1 || !await ids.isVisible() || !await passwords.isVisible()) return { result: 'failed', reason: 'fields_unavailable' };
+                const valid = await Promise.all([ids, passwords].map((locator) => locator.evaluate((el) => {
+                    const form = el.form; const action = form?.getAttribute('action') || '/nidlogin.login';
+                    let url; try { url = new URL(action, location.href); } catch { return false; }
+                    return el instanceof el.ownerDocument.defaultView.HTMLInputElement && url.origin === 'https://nid.naver.com' && url.pathname === '/nidlogin.login';
+                })));
+                if (!valid.every(Boolean)) return { result: 'failed', reason: 'fields_untrusted' };
+                if (!await ids.evaluate((el) => el.form === document.querySelector('input#pw[name="pw"]')?.form)) return { result: 'failed', reason: 'fields_untrusted' };
+                const values = await readCredentials();
+                if (values?.result !== 'credentials') {
+                    const reasons = new Set(['invalid_input','account_unavailable','keychain_read_failed','state_unsafe']);
+                    return { result: 'failed', reason: reasons.has(values?.reason) ? values.reason : 'credentials_unavailable' };
+                }
+                protectedIdentity.add('input|pw|pw|'); credentialsFilled = true;
+                await ids.fill(values.account); await passwords.fill(values.password);
+                invalidate();
+                return { result: 'filled', reason: 'none' };
+            } catch { return { result: 'failed', reason: 'fill_failed' }; }
+        },
+        async submit() {
+            try {
+                if (!credentialsFilled || new URL(page.url()).origin !== 'https://nid.naver.com' || new URL(page.url()).pathname !== '/nidlogin.login') return { result: 'failed', reason: 'not_filled' };
+                const button = page.locator('#log.login');
+                if (await button.count() !== 1 || !await button.isVisible()) return { result: 'failed', reason: 'button_unavailable' };
+                const valid = await button.evaluate((el) => el instanceof el.ownerDocument.defaultView.HTMLButtonElement || el instanceof el.ownerDocument.defaultView.HTMLInputElement ? el.form?.querySelector('input#id[name="id"]') && el.form?.querySelector('input#pw[name="pw"]') : Boolean(el.closest('form')?.querySelector('input#id[name="id"]') && el.closest('form')?.querySelector('input#pw[name="pw"]')));
+                if (!valid) return { result: 'failed', reason: 'button_untrusted' };
+                await button.click(); credentialsFilled = false; invalidate(); return { result: 'submitted', reason: 'none' };
+            } catch { return { result: 'failed', reason: 'submit_failed' }; }
+        },
+        async checkProgress() {
+            try { return { status: await page.evaluate(classifyLoginProgress) }; } catch { return { status: 'unknown' }; }
+        },
+        async screenshot() {
+            try { return await page.screenshot({ type: 'png', mask: [page.locator('input#pw[name="pw"]')] }); }
+            catch { if (credentialsFilled) throw readError('ACTION_DENIED'); return await page.screenshot({ type: 'png' }); }
         },
         clear: invalidate,
     };

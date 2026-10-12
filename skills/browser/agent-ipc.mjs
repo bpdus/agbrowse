@@ -27,7 +27,7 @@ const ALLOWED_OPS = new Set([
     'naver.cart.prepare',
     'naver.cart.set',
     'worker.hello',
-    'login.start', 'login.end', 'login.status', 'login.navigate', 'login.screenshot', 'login.snapshot', 'login.click', 'login.type', 'login.press', 'worker.restart', 'credentials.naver.save',
+    'login.start', 'login.end', 'login.status', 'login.navigate', 'login.screenshot', 'login.snapshot', 'login.click', 'login.type', 'login.press', 'login.fill_credentials', 'login.submit', 'login.check_progress', 'worker.restart', 'credentials.naver.save',
 ]);
 
 export function isAllowedWorkerOperation(op) {

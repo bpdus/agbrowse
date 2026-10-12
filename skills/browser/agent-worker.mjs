@@ -26,7 +26,7 @@ const ALLOWED_ERROR_CODES = new Set([
     'STATE_UNSAFE', 'LOGIN_MODE_REQUIRED', 'PASSWORD_REFUSED', 'PROFILE_RELEASE_TIMEOUT',
 ]);
 const CART_OPERATIONS = new Set(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set']);
-const LOGIN_OPERATIONS = new Set(['login.start','login.end','login.status','login.navigate','login.screenshot','login.snapshot','login.click','login.type','login.press','worker.restart']);
+const LOGIN_OPERATIONS = new Set(['login.start','login.end','login.status','login.navigate','login.screenshot','login.snapshot','login.click','login.type','login.press','login.fill_credentials','login.submit','login.check_progress','worker.restart']);
 const READ_OPERATIONS = new Set([
     'browser.observe',
     'browser.session.close',

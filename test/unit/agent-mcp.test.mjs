@@ -57,6 +57,9 @@ function fakeWorker() {
             }
             if (op === 'browser.session.close') return { closed: true };
             if (op === 'login.screenshot') return { image: Buffer.from('PNG').toString('base64') };
+            if (op === 'login.fill_credentials') return { result: 'filled', reason: 'none', password: 'worker-secret-sentinel' };
+            if (op === 'login.submit') return { result: 'submitted', reason: 'none', password: 'worker-secret-sentinel' };
+            if (op === 'login.check_progress') return { status: 'needs_human', password: 'worker-secret-sentinel' };
             if (op.startsWith('login.') || op === 'worker.restart') return { mode: 'login', ready: true };
             if (op === 'naver.login_status') return loginStatus;
             const state = sessions.get(payload.session_id);
@@ -134,6 +137,18 @@ async function startedSession() {
 }
 
 describe('agent mcp dispatcher', () => {
+    it('exposes explicit credential actions behind login scope and projects closed outputs', async () => {
+        const { mcp, worker, headers } = await startedSession();
+        const namesResponse = await handle(mcp, { jsonrpc: '2.0', id: 3, method: 'tools/list' }, { headers, auth: async () => ({ device_id: 'dev_a', epoch: 1, scopes: ['browser:read', 'login:operate'] }) });
+        const names = namesResponse.body.result.tools.map((tool) => tool.name);
+        expect(names).toContain('login.fill_credentials'); expect(names).toContain('login.submit'); expect(names).toContain('login.check_progress');
+        for (const [id, name, expected] of [[4,'login.fill_credentials',{result:'filled',reason:'none'}],[5,'login.submit',{result:'submitted',reason:'none'}],[6,'login.check_progress',{status:'needs_human'}]]) {
+            const response = await handle(mcp, toolCall(id, name, { protocol_version: '0.1.0', request_id: `req_${id}` }), { headers, auth: async () => ({ device_id: 'dev_a', epoch: 1, scopes: ['browser:read', 'login:operate'] }) });
+            expect(response.body.result.structuredContent).toMatchObject(expected);
+            expect(JSON.stringify(response.body)).not.toContain('worker-secret-sentinel');
+        }
+        expect(worker.calls.map(({ op }) => op).filter((op) => op.startsWith('login.'))).toEqual(['login.fill_credentials','login.submit','login.check_progress']);
+    });
     it('rejects auth, scope, version, and schema failures before the worker tool', async () => {
         const worker = fakeWorker();
         const logs = [];
