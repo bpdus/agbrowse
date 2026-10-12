@@ -31,7 +31,7 @@ esac
 STUB
 cat > "$BIN/ps" <<'STUB'
 #!/bin/bash
-case "$*" in *424242*) echo "$(/usr/bin/id -u) node /Users/jjbyun/.agbrowse-bpdus/src/skills/browser/agent-worker.mjs" ;; *434343*) echo "$(/usr/bin/id -u) /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=$PROFILE" ;; *) exit 1 ;; esac
+case "$*" in *424242*) echo "501 node /Users/jjbyun/.agbrowse-bpdus/src/skills/browser/agent-worker.mjs" ;; *434343*) echo "501 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=$PROFILE" ;; *) exit 1 ;; esac
 STUB
 cat > "$BIN/launchctl" <<'STUB'
 #!/bin/bash
@@ -99,10 +99,26 @@ OPEN_STATUS=7; HOLD_OPEN=0; export OPEN_STATUS HOLD_OPEN
 if "$SCRIPT" --stop-worker > "$TMP/fail.out" 2> "$TMP/fail.err"; then exit 1; fi
 grep -Fq 'Launch Services failed' "$TMP/fail.err"
 
+# Interruption keeps the worker unloaded while Chrome owns the profile and restores after release.
+echo "gui/501/$LABEL" > "$STATE"
+rm -f "$OPEN_RELEASE" "$TMP_CHROME_PROCESS"
+OPEN_STATUS=0; HOLD_OPEN=1; export OPEN_STATUS HOLD_OPEN
+"$SCRIPT" --stop-worker > "$TMP/interrupted.out" 2> "$TMP/interrupted.err" & LOGIN_PID=$!
+tries=0
+while [ ! -e "$TMP_CHROME_PROCESS" ] && [ "$tries" -lt 100 ]; do /bin/sleep .02; tries=$((tries + 1)); done
+[ -e "$TMP_CHROME_PROCESS" ]
+kill -TERM "$LOGIN_PID"
+/bin/sleep .05
+! grep -Fq "bootstrap gui/501 $PLIST" "$TRACE"
+touch "$OPEN_RELEASE"
+wait "$LOGIN_PID" || true
+grep -Fq 'Login interrupted' "$TMP/interrupted.err"
+grep -Fq "bootstrap gui/501 $PLIST" "$TRACE"
+
 # Absolute worker script paths are recognized and still require the explicit stop flag.
 WORKER_RUNNING=1 FAST_SLEEP=1
 export WORKER_RUNNING FAST_SLEEP
 if "$SCRIPT" --stop-worker > "$TMP/worker-timeout.out" 2> "$TMP/worker-timeout.err"; then exit 1; fi
-grep -Fq 'Timed out waiting' "$TMP/worker-timeout.err"
+grep -Fq 'Timed out waiting' "$TMP/worker-timeout.err" || { cat "$TMP/worker-timeout.err"; exit 1; }
 
 echo 'bpdus-login-naver: PASS'

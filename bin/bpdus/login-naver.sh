@@ -89,7 +89,12 @@ INSTALLED=0; LOADED=0; SUSPENDED=0; CHROME_DONE=0
 if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then LOADED=1; fi
 restore_worker() {
   [ "$SUSPENDED" -eq 1 ] || return 0
-  [ "$CHROME_DONE" -eq 1 ] || { echo "Worker remains unloaded. After Chrome exits and profile locks clear, run: launchctl bootstrap $DOMAIN '$PLIST'" >&2; return 1; }
+  local active_chrome active_worker result
+  active_chrome=$(chrome_pids); result=$?
+  [ "$result" -ne 2 ] || { echo 'Could not verify whether Chrome still owns the profile.' >&2; return 1; }
+  [ -z "$active_chrome" ] || { echo "Worker remains unloaded. After Chrome exits, run: launchctl bootstrap $DOMAIN '$PLIST'" >&2; return 1; }
+  discover_workers; active_worker=$?
+  [ "$active_worker" -eq 1 ] || { echo 'Could not verify worker shutdown; leaving the LaunchAgent unloaded.' >&2; return 1; }
   check_profile_locks || { echo "Worker remains unloaded. Clear the profile through normal Chrome shutdown, then run: launchctl bootstrap $DOMAIN '$PLIST'" >&2; return 1; }
   [ "$INSTALLED" -eq 1 ] || { echo "Worker plist is missing; install LaunchAgents to restore the worker." >&2; return 1; }
   launchctl bootstrap "$DOMAIN" "$PLIST" || { echo "Could not restore worker. Run: launchctl bootstrap $DOMAIN '$PLIST'" >&2; return 1; }
@@ -101,7 +106,23 @@ cleanup_signal() {
   if [ "$CHROME_DONE" -eq 1 ]; then restore_worker || :; else echo "Worker remains unloaded until Chrome exits and profile locks clear. Recovery: launchctl bootstrap $DOMAIN '$PLIST'" >&2; fi
   exit 130
 }
+cleanup_exit() {
+  local status=$? active_chrome active_worker chrome_status worker_status
+  trap - EXIT
+  if [ "$SUSPENDED" -eq 1 ]; then
+    active_chrome=$(chrome_pids); chrome_status=$?
+    discover_workers; worker_status=$?
+    if [ "$chrome_status" -eq 1 ] && [ "$worker_status" -eq 1 ] && check_profile_locks; then
+      CHROME_DONE=1
+      restore_worker || :
+    else
+      echo "Worker remains unloaded until Chrome, worker processes, and profile locks are clear. Recovery: launchctl bootstrap $DOMAIN '$PLIST'" >&2
+    fi
+  fi
+  exit "$status"
+}
 trap cleanup_signal INT TERM HUP
+trap cleanup_exit EXIT
 
 if [ "$LOADED" -eq 1 ] && [ "$STOP_WORKER" -ne 1 ]; then echo "Worker LaunchAgent is loaded and may start during login. Re-run with --stop-worker to suspend it." >&2; exit 1; fi
 if [ "$LOADED" -eq 1 ]; then

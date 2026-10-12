@@ -14,7 +14,7 @@ cat > "$TMP/bin/herdr" <<'STUB'
 #!/bin/bash
 echo "$*" >> "$TRACE"
 case "$1 $2" in
-  'tab list') [ "$EXISTING" = 1 ] && echo 'agbrowse running' ;;
+  'tab list') if [ "$EXISTING" = 1 ]; then echo 'agbrowse running'; fi; exit 0 ;;
   'tab create') printf '{"result":{"pane_id":"pane-left"}}\n' ;;
   'pane split') printf '{"pane_id":"pane-right"}\n' ;;
   'pane run') : ;;

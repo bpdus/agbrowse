@@ -10,6 +10,8 @@ AUDIENCE=${AGBROWSE_AUDIENCE:-}
 NODE_BIN=${AGBROWSE_NODE_BIN:-}
 ALLOWED_HOSTS=()
 ALLOWED_ORIGINS=()
+ALLOWED_HOSTS_FLAG=0
+ALLOWED_ORIGINS_FLAG=0
 DRY_RUN=0
 ROOT=${AGBROWSE_ROOT:-"${HOME:-}/.agbrowse-bpdus"}
 SRC="$ROOT/src"
@@ -50,7 +52,12 @@ parse_config() {
         case "$key" in
           --host) HOST=$value ;; --port) PORT=$value ;; --gateway-id) GATEWAY_ID=$value ;;
           --audience) AUDIENCE=$value ;; --node-bin) NODE_BIN=$value ;;
-          --allowed-host) ALLOWED_HOSTS+=("$value") ;; --allowed-origin) ALLOWED_ORIGINS+=("$value") ;;
+          --allowed-host)
+            if [ "$ALLOWED_HOSTS_FLAG" -eq 0 ]; then ALLOWED_HOSTS=(); ALLOWED_HOSTS_FLAG=1; fi
+            ALLOWED_HOSTS+=("$value") ;;
+          --allowed-origin)
+            if [ "$ALLOWED_ORIGINS_FLAG" -eq 0 ]; then ALLOWED_ORIGINS=(); ALLOWED_ORIGINS_FLAG=1; fi
+            ALLOWED_ORIGINS+=("$value") ;;
         esac
         ;;
       *) die "Unknown option: $1" ;;
@@ -119,6 +126,27 @@ EOF
 
 label_for() { [ "$1" = worker ] && printf '%s' "$WORKER_LABEL" || printf '%s' "$GATEWAY_LABEL"; }
 plist_for() { [ "$1" = worker ] && printf '%s' "$WORKER_PLIST" || printf '%s' "$GATEWAY_PLIST"; }
+service_processes() {
+  local service=$1 output status candidate details uid args executable script_arg expected matched=0
+  expected="skills/browser/agent-$service.mjs"
+  status=0
+  output=$(pgrep -f "skills/browser/agent-${service}[.]mjs" 2>/dev/null) || status=$?
+  [ "$status" -eq 1 ] && return 1
+  [ "$status" -eq 0 ] && [ -n "$output" ] || { echo "Could not discover $service processes (pgrep status $status)." >&2; return 2; }
+  for candidate in $output; do
+    case "$candidate" in ''|*[!0-9]*) echo "Invalid $service PID from process discovery." >&2; return 2 ;; esac
+    details=$(ps -o uid=,args= -p "$candidate" 2>/dev/null) || { echo "Could not verify $service PID $candidate." >&2; return 2; }
+    uid=${details%%[[:space:]]*}; args=${details#*[[:space:]]}
+    [ "$uid" = "$(id -u)" ] || continue
+    read -r executable script_arg _ <<EOFARGS
+$args
+EOFARGS
+    executable=${executable##*/}
+    [ "$executable" = node ] || continue
+    case "$script_arg" in "$expected"|*/"$expected") printf '%s\n' "$candidate"; matched=1 ;; esac
+  done
+  [ "$matched" -eq 1 ]
+}
 select_services() {
   case "${1:-all}" in worker|gateway) SERVICES=("$1") ;; all) SERVICES=(worker gateway) ;; *) die "Expected worker, gateway, or all." ;; esac
 }
@@ -127,7 +155,18 @@ bootout_if_loaded() { if loaded "$1"; then launchctl bootout "$DOMAIN/$(label_fo
 wait_unloaded() {
   local service=$1 tries=15
   while loaded "$service" && [ "$tries" -gt 0 ]; do sleep 1; tries=$((tries - 1)); done
-  loaded "$service" && die "Timed out waiting for $(label_for "$service") to unload."
+  if loaded "$service"; then die "Timed out waiting for $(label_for "$service") to unload."; fi
+}
+wait_processes_stopped() {
+  local service=$1 tries=15 output status
+  while [ "$tries" -gt 0 ]; do
+    status=0
+    output=$(service_processes "$service") || status=$?
+    [ "$status" -eq 1 ] && return 0
+    [ "$status" -eq 0 ] || die "Could not verify ${service} shutdown (pgrep status $status)."
+    sleep 1; tries=$((tries - 1))
+  done
+  die "Timed out waiting for ${service} process shutdown."
 }
 
 install_agents() {
@@ -135,9 +174,13 @@ install_agents() {
   select_services "$selection"
   validate_install
   [ "$selection" = all ] || :
-  if pgrep -f 'skills/browser/agent-(worker|gateway)[.]mjs' >/dev/null 2>&1; then
-    die "Unmanaged agent process found. Stop the old herdr worker and gateway gracefully, verify Chrome/profile shutdown, then retry."
-  fi
+  for service in worker gateway; do
+    local service_pids service_status
+    service_status=0
+    service_pids=$(service_processes "$service") || service_status=$?
+    [ "$service_status" -ne 2 ] || die "Could not verify existing $service processes."
+    [ "$service_status" -ne 0 ] || die "Unmanaged $service process found (PID(s): ${service_pids//$'\n'/, }). Stop the old herdr service gracefully, verify Chrome/profile shutdown, then retry."
+  done
   if [ "$DRY_RUN" -eq 1 ]; then
     for service in "${SERVICES[@]}"; do
       printf '\n===== %s =====\n' "$service"; render_plist "$service"
@@ -152,6 +195,8 @@ install_agents() {
   # Both files are staged and valid before either installed plist is replaced.
   bootout_if_loaded worker; wait_unloaded worker
   bootout_if_loaded gateway; wait_unloaded gateway
+  wait_processes_stopped worker
+  wait_processes_stopped gateway
   mv -f "$tmpw" "$WORKER_PLIST"; mv -f "$tmpg" "$GATEWAY_PLIST"
   for service in "${SERVICES[@]}"; do
     launchctl bootstrap "$DOMAIN" "$(plist_for "$service")" || die "launchctl bootstrap failed for $(label_for "$service")."
@@ -163,6 +208,8 @@ uninstall_agents() {
   launchctl print "$DOMAIN" >/dev/null 2>&1 || die "GUI launchd domain $DOMAIN is unavailable."
   local service file
   for service in worker gateway; do bootout_if_loaded "$service"; wait_unloaded "$service"; done
+  wait_processes_stopped worker
+  wait_processes_stopped gateway
   for service in worker gateway; do file=$(plist_for "$service"); [ ! -e "$file" ] || rm -f "$file" || die "Could not remove $file."; done
 }
 
@@ -179,7 +226,7 @@ restart_agents() {
 }
 
 status_agents() {
-  local service label output pid exit_status state
+  local service label output pid exit_status state health_port parsed_port
   for service in worker gateway; do
     label=$(label_for "$service"); file=$(plist_for "$service")
     if [ -f "$file" ]; then echo "$service installed=yes"; else echo "$service installed=no"; fi
@@ -191,7 +238,14 @@ status_agents() {
       state=$(printf '%s\n' "$output" | sed -n 's/^[[:space:]]*state = //p' | head -1)
       [ -n "$pid" ] && echo "$service running=yes pid=$pid" || echo "$service running=no pid=none"
       echo "$service last_exit_status=${exit_status:-unknown} state=${state:-unknown}"
-      if [ "$service" = gateway ] && [ -n "$pid" ]; then curl --fail --silent "http://127.0.0.1:$PORT/healthz" || echo "gateway healthz=failed"; fi
+      if [ "$service" = gateway ] && [ -n "$pid" ]; then
+        health_port=$PORT
+        if [ -f "$file" ]; then
+          parsed_port=$(awk '/<string>--port<\/string>/{getline; gsub(/^[[:space:]]*<string>|<\/string>[[:space:]]*$/, ""); print; exit}' "$file")
+          case "$parsed_port" in ''|*[!0-9]*) ;; *) health_port=$parsed_port ;; esac
+        fi
+        curl --fail --silent "http://127.0.0.1:$health_port/healthz" || echo "gateway healthz=failed"
+      fi
     else echo "$service loaded=no"; echo "$service running=no pid=none"; echo "$service last_exit_status=unknown"; fi
   done
 }

@@ -1,0 +1,140 @@
+{
+  "schema_version": 2,
+  "status": "DONE_WITH_CONCERNS",
+  "summary": "Implemented GUI LaunchAgents, keychain-compatible Chrome defaults, safe manual login handoff, herdr log viewing, regression coverage, and operator documentation. Local verification passes; iMac rollout checks remain pending.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagents/plan.json",
+  "tasks": [
+    {
+      "task_id": 1,
+      "status": "DONE",
+      "changed_files": [
+        "/home/box/src/agbrowse/skills/browser/agent-runtime.mjs",
+        "/home/box/src/agbrowse/test/unit/agent-runtime.test.mjs"
+      ]
+    },
+    {
+      "task_id": 2,
+      "status": "DONE",
+      "changed_files": [
+        "/home/box/src/agbrowse/bin/bpdus/install-launchagents.sh",
+        "/home/box/src/agbrowse/test/integration/bpdus-launchagents.test.sh"
+      ]
+    },
+    {
+      "task_id": 3,
+      "status": "DONE",
+      "changed_files": [
+        "/home/box/src/agbrowse/bin/bpdus/login-naver.sh",
+        "/home/box/src/agbrowse/test/integration/bpdus-login-naver.test.sh"
+      ]
+    },
+    {
+      "task_id": 4,
+      "status": "DONE",
+      "changed_files": [
+        "/home/box/src/agbrowse/bin/bpdus/logs-in-herdr.sh",
+        "/home/box/src/agbrowse/test/integration/bpdus-logs-in-herdr.test.sh"
+      ]
+    },
+    {
+      "task_id": 5,
+      "status": "DONE",
+      "changed_files": [
+        "/home/box/src/agbrowse/test/integration/bpdus-launchagents.test.sh",
+        "/home/box/src/agbrowse/test/integration/bpdus-login-naver.test.sh",
+        "/home/box/src/agbrowse/test/integration/bpdus-logs-in-herdr.test.sh"
+      ]
+    },
+    {
+      "task_id": 6,
+      "status": "DONE",
+      "changed_files": [
+        "/home/box/src/agbrowse/docs/bpdus/LAUNCHAGENTS.md",
+        "/home/box/src/agbrowse/docs/bpdus/SERVE.md",
+        "/home/box/src/agbrowse/docs/bpdus/WORKER.md"
+      ]
+    },
+    {
+      "task_id": 7,
+      "status": "DONE_WITH_CONCERNS",
+      "changed_files": [
+        "/home/box/src/agbrowse/bin/bpdus/install-launchagents.sh",
+        "/home/box/src/agbrowse/bin/bpdus/login-naver.sh",
+        "/home/box/src/agbrowse/bin/bpdus/logs-in-herdr.sh"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagents/plan.json",
+      "sha256": "021da81034b92899231824c2a9b3482c7b0c600edfeacd9c58ad566abaec66c7"
+    },
+    {
+      "path": "/home/box/src/agbrowse/bin/bpdus/install-launchagents.sh",
+      "sha256": "45d9a14adcb6816d238e82a6a60fee02defcfe8667fdf5c2aabdeccbc7f9c01b"
+    },
+    {
+      "path": "/home/box/src/agbrowse/bin/bpdus/login-naver.sh",
+      "sha256": "9916830a0e5ffc4482130785bc9899cde03c3dd365635212b96cc7d3c30209cd"
+    },
+    {
+      "path": "/home/box/src/agbrowse/bin/bpdus/logs-in-herdr.sh",
+      "sha256": "d7046e526d829a905c3991a000f6c98bab5ba777004bb54fae93dcc7686e1ac9"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-runtime.mjs",
+      "sha256": "ca506d63fd458c31cb24f6a9af561ffb7072a5edcda2b04f3cc1c59aad0ee993"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-runtime.test.mjs",
+      "sha256": "eece5f09822125d58a08c6a8905b067817d4c4ba4c3460beb2733687cfdf2fb3"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/integration/bpdus-launchagents.test.sh",
+      "sha256": "ea31c83f907e80ca5be520964477619abb0b918fc9c8c3ba7ed1250ba70a13a4"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/integration/bpdus-login-naver.test.sh",
+      "sha256": "34dfd58dded9bc4f6f8d797c1daf8a666f26469477a9b4be4d9ab4383c0903ec"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/integration/bpdus-logs-in-herdr.test.sh",
+      "sha256": "d0e7af601a62c8e3ca19ea05d898475d325733d4013fe21454bc29d1484233a2"
+    },
+    {
+      "path": "/home/box/src/agbrowse/docs/bpdus/LAUNCHAGENTS.md",
+      "sha256": "4de115f6494cf3ac053b1ce88699c0132ef423a5821aeb85c1039d75ee9f95ee"
+    },
+    {
+      "path": "/home/box/src/agbrowse/docs/bpdus/SERVE.md",
+      "sha256": "28912f25fde2be2bbcc2add269f87561589539c8567531e552d55815f5592ba2"
+    },
+    {
+      "path": "/home/box/src/agbrowse/docs/bpdus/WORKER.md",
+      "sha256": "035d619649964f4689736c78c263cc1c232435dd3503ced314e9c0997f6a7fd5"
+    }
+  ],
+  "checks": [
+    {
+      "name": "verification",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagents/evidence/final-verification.log",
+      "evidence_sha256": "1b14a0672e195697be7391fda4747935bf032c5fe3fe986c3af9d7fa56ce0580"
+    },
+    {
+      "name": "tests",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagents/evidence/final-verification.log",
+      "evidence_sha256": "1b14a0672e195697be7391fda4747935bf032c5fe3fe986c3af9d7fa56ce0580"
+    },
+    {
+      "name": "self_review",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-launchagents/evidence/self-review.log",
+      "evidence_sha256": "cf868aead6f208e5abd18a7de8ec1cbb0a03776d9a14f0e9d53288460243b36c"
+    }
+  ],
+  "concerns": [
+    "Native macOS plutil validation and the requested GUI/keychain, crash-recovery, persistence, reboot, and Tailscale checks must be completed on the deployment iMac."
+  ]
+}

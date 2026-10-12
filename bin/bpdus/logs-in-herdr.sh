@@ -15,7 +15,7 @@ command -v "$HERDR" >/dev/null 2>&1 || fail "herdr executable was not found."
 command -v "$NODE" >/dev/null 2>&1 || fail "Node executable was not found."
 
 existing=$($HERDR tab list 2>&1) || fail "Could not inspect existing herdr tabs: $existing"
-if printf '%s\n' "$existing" | grep -E '(^|[[:space:]])agbrowse([[:space:]]|$)' >/dev/null; then
+if printf '%s\n' "$existing" | grep -E '(^|[^[:alnum:]_-])agbrowse([^[:alnum:]_-]|$)' >/dev/null; then
   fail "herdr tab 'agbrowse' already exists; close or rename it before creating the log view."
 fi
 
