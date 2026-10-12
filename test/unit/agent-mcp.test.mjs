@@ -56,6 +56,7 @@ function fakeWorker() {
                 return { session_id: sessionId, tab_id: 'tab-1', frame_id: 'frame_main', document_epoch: 1 };
             }
             if (op === 'browser.session.close') return { closed: true };
+            if (op === 'login.screenshot') return { image: Buffer.from('PNG').toString('base64') };
             if (op.startsWith('login.') || op === 'worker.restart') return { mode: 'login', ready: true };
             if (op === 'naver.login_status') return loginStatus;
             const state = sessions.get(payload.session_id);
@@ -282,6 +283,9 @@ describe('agent mcp dispatcher', () => {
         const allowed = await handle(ctx.mcp, toolCall(103, 'login.start', { protocol_version: '0.1.0', request_id: 'login_allowed' }), { headers: ctx.headers, auth: grantedAuth });
         expect(allowed.body.result.isError).toBe(false);
         expect(ctx.worker.calls.at(-1)).toEqual({ op: 'login.start', payload: {} });
+        const screenshot = await handle(ctx.mcp, toolCall(104, 'login.screenshot', { protocol_version: '0.1.0', request_id: 'login_image' }), { headers: ctx.headers, auth: grantedAuth });
+        expect(screenshot.body.result.content).toEqual([{ type: 'image', mimeType: 'image/png', data: Buffer.from('PNG').toString('base64') }]);
+        expect(screenshot.body.result).not.toHaveProperty('structuredContent');
     });
 
     it('rechecks cart scopes after a session-queue wait and stops before worker dispatch', async () => {

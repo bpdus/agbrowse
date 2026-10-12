@@ -84,6 +84,13 @@ describe('agent ipc', () => {
         loose.close();
     });
 
+    it('returns a bounded oversized-result error with the original request correlation', async () => {
+        const dir = socketDir(); const socketPath = join(dir, 'agent-worker.sock');
+        const endpoint = await startReadEndpoint({ socketPath, dispatch: async () => ({ image: 'x'.repeat(4 * 1024 * 1024) }) });
+        const client = connectReadEndpoint({ socketPath }); sockets.push({ endpoint, client, dir });
+        await expect(client.call('login.screenshot', {})).rejects.toMatchObject({ code: 'INVALID_ARGUMENTS' });
+    });
+
     it('rejects a symlink, a missing socket, and a second worker', async () => {
         const dir = socketDir();
         const socketPath = join(dir, 'agent-worker.sock');

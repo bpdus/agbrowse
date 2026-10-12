@@ -189,7 +189,7 @@ function postRaw(target, payload, headers) {
             let total = 0;
             res.on('data', (chunk) => {
                 total += chunk.length;
-                if (total > 1024 * 1024) {
+                if (total > 4 * 1024 * 1024) {
                     req.destroy();
                     reject(readError('INTERNAL'));
                     return;
@@ -204,7 +204,7 @@ function postRaw(target, payload, headers) {
                 });
             });
         });
-        req.setTimeout(10000, () => {
+        req.setTimeout(60000, () => {
             req.destroy();
             reject(readError('INTERNAL'));
         });

@@ -21,7 +21,7 @@ import {
 } from './agent-naver-search.mjs';
 import { classifyLoginStatusRequest, loginStatusPolicy, readLoginStatusFromPage } from './agent-naver-login-status.mjs';
 import { classifyCartRequest } from './agent-naver-cart.mjs';
-import { assertLoginNavigation, classifyLoginRequest, isLogoutUrl, waitForProfileRelease } from './agent-login.mjs';
+import { assertLoginNavigation, classifyLoginRequest, createLoginController, isLogoutUrl, waitForProfileRelease } from './agent-login.mjs';
 
 const WORKER_DIR_NAME = '.agbrowse-bpdus';
 const PROFILE_DIR_NAME = 'agent-profile';
@@ -391,18 +391,23 @@ async function guardRequest(route, pagePolicies, getMode = () => 'normal') {
         const mode = getMode();
         if (mode === 'login' || mode === 'transitioning') {
             if (mode !== 'login' || classifyLoginRequest(url, method) !== 'allow' || chainHasWebSocket(request)) { await abortRoute(route); return; }
-            const response = await route.fetch({ maxRedirects: 0 });
-            const status = response.status?.() ?? 0;
-            if (status >= 300 && status < 400) {
-                if (!['GET', 'HEAD'].includes(method.toUpperCase())) { await abortRoute(route); return; }
-                const loc = response.headers?.().location; let next;
-                try { next = new URL(loc, url).href; } catch { await abortRoute(route); return; }
-                if (classifyLoginRequest(next, 'GET') !== 'allow') { await abortRoute(route); return; }
-                const redirected = await route.fetch({ url: next, method: 'GET', maxRedirects: 0 });
-                if ((redirected.status?.() ?? 0) >= 300 && (redirected.status?.() ?? 0) < 400) { await abortRoute(route); return; }
-                await route.fulfill({ response: redirected }); return;
+            let currentUrl = url;
+            let currentMethod = method.toUpperCase();
+            let response = await route.fetch({ maxRedirects: 0 });
+            for (let followed = 0; ; followed += 1) {
+                const status = response.status?.() ?? 0;
+                if (status < 300 || status >= 400) { await route.fulfill({ response }); return; }
+                if (followed >= MAX_REDIRECTS) { await abortRoute(route); return; }
+                const location = response.headers?.().location;
+                let next;
+                try { if (typeof location !== 'string' || !location) throw new Error(); next = new URL(location, currentUrl).href; }
+                catch { await abortRoute(route); return; }
+                const nextMethod = status === 307 || status === 308 ? currentMethod : 'GET';
+                if (currentMethod === 'POST' && (nextMethod !== 'GET' || new URL(next).hostname.toLowerCase() !== 'nid.naver.com')) { await abortRoute(route); return; }
+                if (classifyLoginRequest(next, nextMethod) !== 'allow') { await abortRoute(route); return; }
+                currentUrl = next; currentMethod = nextMethod;
+                response = await route.fetch({ url: currentUrl, method: currentMethod, maxRedirects: 0 });
             }
-            await route.fulfill({ response }); return;
         }
         const pagePolicy = page && pagePolicies.get(page);
         const policy = pagePolicy?.requestPolicy ?? productionSearchPolicy();
@@ -570,6 +575,7 @@ export function createAgentRuntime(config) {
     let mode = 'normal';
     /** @type {import('playwright-core').Page | null} */
     let loginPage = null;
+    let loginController = null;
     /** @type {ReturnType<typeof createCartStore> | null} */
     let cartStore = null;
 
@@ -584,7 +590,8 @@ export function createAgentRuntime(config) {
     }
 
     function assertRunning() {
-        if (state === 'running' && context && !intentionalStop) return;
+        if (state === 'running' && context && !intentionalStop && mode === 'normal') return;
+        if (mode === 'login' || mode === 'transitioning') throw new AgentRuntimeError('LOGIN_MODE_REQUIRED', 'Login mode is active.');
         if (stopReason === 'disconnected') {
             throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
         }
@@ -1079,13 +1086,14 @@ export function createAgentRuntime(config) {
                 if (mode === 'transitioning') return { mode, ready: false };
                 mode = 'transitioning'; sessions.clear();
                 if (context) await context.close();
-                context = null; loginPage = null;
+                context = null; loginPage = null; loginController = null;
                 const { profileDir } = ensureDedicatedProfile();
                 await waitForProfileRelease(profileDir);
                 const playwright = await import('playwright-core');
                 context = await playwright.chromium.launchPersistentContext(profileDir, launchOptions());
                 watchContext(context); await installContextGuards(context, pagePolicies, () => mode);
-                loginPage = context.pages()[0] ?? await context.newPage();
+                loginPage = await context.newPage();
+                loginController = createLoginController(loginPage);
                 await loginPage.goto(assertLoginNavigation('https://nid.naver.com/nidlogin.login'), { waitUntil: 'domcontentloaded' });
                 state = 'running'; mode = 'login'; return { mode, ready: true };
             }
@@ -1093,7 +1101,7 @@ export function createAgentRuntime(config) {
                 if (mode === 'normal' && state === 'running') return { mode, ready: true };
                 mode = 'transitioning'; sessions.clear();
                 if (context) await context.close();
-                context = null; loginPage = null;
+                context = null; loginPage = null; loginController = null;
                 const { profileDir } = ensureDedicatedProfile();
                 await waitForProfileRelease(profileDir);
                 const playwright = await import('playwright-core');
@@ -1105,10 +1113,13 @@ export function createAgentRuntime(config) {
             if (mode !== 'login' || !loginPage) throw readError('LOGIN_MODE_REQUIRED');
             if (op === 'login.navigate') {
                 const url = assertLoginNavigation(payload.url);
-                await loginPage.goto(url, { waitUntil: 'domcontentloaded' }); return { navigated: true };
+                loginController?.clear(); await loginPage.goto(url, { waitUntil: 'domcontentloaded' }); return { navigated: true };
             }
             if (op === 'login.screenshot') return { image: (await loginPage.screenshot({ type: 'png' })).toString('base64') };
-            if (op === 'login.snapshot') return { snapshot: (await loginPage.locator('body').innerText({ timeout: 3000 })).slice(0, 12000) };
+            if (op === 'login.snapshot') return { snapshot: await loginController.snapshot() };
+            if (op === 'login.click') return loginController.click(payload);
+            if (op === 'login.type') return loginController.typeLoginText(payload);
+            if (op === 'login.press') return loginController.pressLoginKey(payload.key);
             throw readError('ACTION_DENIED');
         });
     }

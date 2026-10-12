@@ -140,7 +140,8 @@ export async function startReadEndpoint(options) {
         const reply = (/** @type {Record<string, unknown>} */ message) => {
             const line = `${JSON.stringify(message)}\n`;
             if (Buffer.byteLength(line) > MAX_RESPONSE) {
-                socket.write(`${JSON.stringify({ id: '0'.repeat(16), ok: false, error: { code: 'INTERNAL', message: 'The request failed.' } })}\n`);
+                const id = typeof message.id === 'string' && /^[a-f0-9]{16}$/.test(message.id) ? message.id : '0'.repeat(16);
+                socket.write(`${JSON.stringify({ id, ok: false, error: { code: 'INVALID_ARGUMENTS', message: READ_ERROR_MESSAGES.INVALID_ARGUMENTS } })}\n`);
                 return;
             }
             socket.write(line);

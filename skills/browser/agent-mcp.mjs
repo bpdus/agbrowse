@@ -117,12 +117,12 @@ const TOOLS = [
             dry_run: { type: 'boolean', default: true },
         }),
     },
-    ...['login.start','login.end','login.status','login.screenshot','login.snapshot','login.click','login.type','login.press','worker.restart'].map((name) => ({
-        name,
-        description: 'Operate the worker-owned login window. Requires browser:read and login:operate.',
-        inputSchema: schema(['protocol_version','request_id'], {}),
-    })),
-    { name: 'login.navigate', description: 'Navigate to an enumerated Naver login URL.', inputSchema: schema(['protocol_version','request_id','url'], { url: { type: 'string', maxLength: 2048 } }) }
+    ...['login.start','login.end','login.status','login.screenshot','login.snapshot','worker.restart'].map((name) => ({ name, description: 'Operate the worker-owned login window. Requires browser:read and login:operate.', inputSchema: schema(['protocol_version','request_id'], {}) })),
+    { name: 'login.navigate', description: 'Navigate to an enumerated Naver login URL.', inputSchema: schema(['protocol_version','request_id','url'], { url: { type: 'string', maxLength: 2048 } }) },
+    { name: 'login.click', description: 'Click a fresh login snapshot ref or viewport coordinate.', inputSchema: schema(['protocol_version','request_id'], { ref: { type:'string', pattern:'^lr_[1-9][0-9]*$' }, x: { type:'number', minimum:0 }, y: { type:'number', minimum:0 }, anyOf:[{required:['ref']},{required:['x','y']}] }) },
+    { name: 'login.type', description: 'Type text into a focused or referenced non-password control.', inputSchema: schema(['protocol_version','request_id','text'], { text: { type:'string', maxLength:1000 }, ref: { type:'string', pattern:'^lr_[1-9][0-9]*$' } }) },
+    { name: 'login.press', description: 'Press an enumerated non-text key.', inputSchema: schema(['protocol_version','request_id','key'], { key: { type:'string', enum:['Enter','Tab','Escape','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','Backspace','Delete','Space'] } }) }
+
 
 ];
 
@@ -141,8 +141,9 @@ function schema(required, extra) {
             session_id: { type: 'string', pattern: '^ses_[a-f0-9]{16}$' },
             query: { type: 'string' },
             ref: { type: 'string' },
-            ...extra,
+            ...Object.fromEntries(Object.entries(extra).filter(([key]) => key !== 'anyOf')),
         },
+        ...(Array.isArray(extra.anyOf) ? { anyOf: extra.anyOf } : {}),
     };
 }
 
@@ -418,17 +419,24 @@ export function createMcpDispatcher(options) {
         }
         try {
             if (LOGIN_TOOL_NAMES.has(tool)) {
-                const allowed = tool === 'login.navigate' ? ['protocol_version','request_id','url'] : ['protocol_version','request_id'];
+                const allowedByTool = {
+                    'login.navigate':['protocol_version','request_id','url'], 'login.click':['protocol_version','request_id','ref','x','y'],
+                    'login.type':['protocol_version','request_id','ref','text'], 'login.press':['protocol_version','request_id','key'],
+                };
+                const allowed = allowedByTool[tool] ?? ['protocol_version','request_id'];
                 if (unknownField(record, allowed)) throw readError('INVALID_ARGUMENTS');
                 if (tool === 'login.navigate' && (typeof record.url !== 'string' || record.url.length > 2048)) throw readError('INVALID_ARGUMENTS');
+                if (tool === 'login.type' && (typeof record.text !== 'string' || record.text.length > 1000)) throw readError('INVALID_ARGUMENTS');
+                if (tool === 'login.press' && typeof record.key !== 'string') throw readError('INVALID_ARGUMENTS');
                 await assertLoginPrincipal(refreshPrincipal, principal);
+                const payload = Object.fromEntries(Object.entries(record).filter(([key]) => !['protocol_version','request_id'].includes(key)));
                 const output = await mutex.runExclusive('login-mode', async () => {
                     await assertLoginPrincipal(refreshPrincipal, principal);
-                    return invoke(tool, tool === 'login.navigate' ? { url: record.url } : {});
+                    return invoke(tool, payload);
                 });
                 if (tool === 'login.screenshot') {
                     const encoded = typeof output?.image === 'string' ? output.image : '';
-                    if (!encoded || encoded.length > 4 * 1024 * 1024) throw readError('INVALID_ARGUMENTS');
+                    if (!encoded || encoded.length > 4 * 1024 * 1024 - 2048) throw readError('INVALID_ARGUMENTS');
                     return { status: 200, tool, requestId, headers: sessionHeaders(mcpSession.id), body: { jsonrpc:'2.0', id:message.id, result:{ content:[{type:'image',mimeType:'image/png',data:encoded}], isError:false } } };
                 }
                 return toolOutcome(message.id, { protocol_version: DOMAIN_PROTOCOL_VERSION, request_id: requestId, ...output }, false, mcpSession.id, requestId, tool);
