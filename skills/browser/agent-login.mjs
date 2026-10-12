@@ -1,6 +1,7 @@
 // @ts-check
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readError } from './agent-read-error.mjs';
 
@@ -67,6 +68,7 @@ export function isPasswordTarget(info = {}) {
 
 /** One page controller. Ref identities live only as long as this document. */
 export function createLoginController(page) {
+    const nonce = randomBytes(8).toString('hex');
     let refs = new Map();
     const protectedIdentity = new Set();
     let revision = 0;
@@ -105,7 +107,7 @@ export function createLoginController(page) {
         disposeRefs(oldRefs);
         snapshotSeq += 1;
         const controls = nodes.map(({ handle, node }, index) => {
-            const ref = `s${snapshotSeq}_${index + 1}`;
+            const ref = `${nonce}_s${snapshotSeq}_${index + 1}`;
             const identity = `${node.tag}|${node.name}|${node.id}|${node.autocomplete}`;
             const isPassword = node.type === 'password' || /(?:current-password|new-password)/i.test(node.autocomplete) || protectedIdentity.has(identity);
             if (isPassword) protectedIdentity.add(identity);
@@ -116,8 +118,8 @@ export function createLoginController(page) {
     }
 
     function resolveLoginRef(ref) {
-        const match = /^s(\d+)_\d+$/.exec(ref);
-        if (!match || Number(match[1]) !== snapshotSeq) throw readError('REF_STALE');
+        const match = /^([a-f0-9]{16})_s(\d+)_(\d+)$/.exec(ref);
+        if (!match || match[1] !== nonce || Number(match[2]) !== snapshotSeq) throw readError('REF_STALE');
         const item = refs.get(ref);
         if (!item || item.revision !== revision) throw readError('REF_STALE');
         return item;
@@ -135,7 +137,10 @@ export function createLoginController(page) {
     return {
         snapshot: snapshotLoginPage,
         async click(input) {
-            if (typeof input?.ref === 'string') await (await handleFor(resolveLoginRef(input.ref))).click();
+            if (input && Object.hasOwn(input, 'ref')) {
+                if (typeof input.ref !== 'string') throw readError('REF_STALE');
+                await (await handleFor(resolveLoginRef(input.ref))).click();
+            }
             else if (Number.isFinite(input?.x) && Number.isFinite(input?.y)) {
                 const size = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
                 if (input.x < 0 || input.y < 0 || input.x >= size.width || input.y >= size.height) throw readError('INVALID_ARGUMENTS');
@@ -147,7 +152,10 @@ export function createLoginController(page) {
         },
         async typeLoginText(input) {
             if (typeof input.text !== 'string' || input.text.length > 1000) throw readError('INVALID_ARGUMENTS');
-            if (typeof input.ref === 'string') await (await handleFor(resolveLoginRef(input.ref))).fill(input.text);
+            if (Object.hasOwn(input, 'ref')) {
+                if (typeof input.ref !== 'string') throw readError('REF_STALE');
+                await (await handleFor(resolveLoginRef(input.ref))).fill(input.text);
+            }
             else {
                 const focused = page.locator(':focus');
                 const info = await focused.evaluate((el) => ({ type: el.getAttribute('type') || '', autocomplete: el.getAttribute('autocomplete') || '', name: el.getAttribute('name') || '', id: el.id || '' })).catch(() => null);

@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "status": "DONE",
+  "summary": "Added login-session nonce binding to control refs and covered login transitions and runtime restart.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-ref-nonce/plan.json",
+  "tasks": [
+    {
+      "task_id": "login-ref-session-nonce",
+      "status": "DONE",
+      "changed_files": [
+        "skills/browser/agent-login.mjs",
+        "test/unit/agent-login.test.mjs",
+        "test/unit/agent-runtime.test.mjs"
+      ]
+    }
+  ],
+  "inputs": [
+    {"path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-ref-nonce/plan.json", "sha256": "b67086b296eef835f5b2caec3707ff1687598adb5425686e68c30c35d98b3913"},
+    {"path": "/home/box/src/agbrowse/skills/browser/agent-login.mjs", "sha256": "f52084d9dd0e050d380c724c21672bbccbf6520a111d359ac95a99044ebe5258"},
+    {"path": "/home/box/src/agbrowse/test/unit/agent-login.test.mjs", "sha256": "11c37e5198cf041b91c82934afd90ed3dec6164f1e90116243197862b215ee87"},
+    {"path": "/home/box/src/agbrowse/test/unit/agent-runtime.test.mjs", "sha256": "9462010eb9b30cdbbb3d2a83c8a0f7caa1ec5fa4476f9fe02c0f8fe0bc486c83"}
+  ],
+  "checks": [
+    {"name": "verification", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-ref-nonce/evidence/diff-check.log", "evidence_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"name": "tests", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-ref-nonce/evidence/unit-tests.log", "evidence_sha256": "476ba6a9015fdbe46cd79bee9a64440b3e5dcd66355675ce18f39e9992ef3f41"},
+    {"name": "launchagents_integration", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-ref-nonce/evidence/launchagents-integration.log", "evidence_sha256": "4fccea5f7c4f7c2f01c7e0f92f6f2b1ee33893e771f583691878957e0bbc1db3"},
+    {"name": "self_review", "status": "PASS", "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-ref-nonce/evidence/self-review.log", "evidence_sha256": "e0d67b158e3e6559d6fd651b042c750137b113898dedc02a2aafd64215516c95"}
+  ]
+}

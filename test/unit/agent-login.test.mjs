@@ -84,14 +84,41 @@ describe('agent login policy', () => {
         const controller = createLoginController(page);
         const first = await controller.snapshot();
         const continueRef = first.controls.find((control) => control.label === 'Continue').ref;
-        expect(continueRef).toMatch(/^s1_\d+$/);
+        expect(continueRef).toMatch(/^[a-f0-9]{16}_s1_\d+$/);
 
         dom.window.document.querySelector('button').remove();
         const second = await controller.snapshot();
         expect(second.controls.map((control) => control.label)).toEqual(['Cancel']);
-        expect(second.controls[0].ref).toMatch(/^s2_\d+$/);
+        expect(second.controls[0].ref).toMatch(/^[a-f0-9]{16}_s2_\d+$/);
         await expect(controller.click({ ref: continueRef })).rejects.toMatchObject({ code: 'REF_STALE' });
         expect(cancelClicked).toBe(false);
+        dom.window.close();
+    });
+
+    it('rejects refs from a previous controller generation and malformed refs without clicking', async () => {
+        const dom = new JSDOM('<button aria-label="Continue">Continue</button>', { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
+        globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
+        dom.window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 100, height: 20 });
+        const selector = 'a,button,input,select,textarea,[role="button"],[role="link"],[tabindex]';
+        let clicks = 0;
+        const page = {
+            url: () => dom.window.location.href,
+            on() {},
+            $$: async () => [...dom.window.document.querySelectorAll(selector)].map((element) => ({
+                evaluate: async (fn) => fn(element),
+                click: async () => { clicks += 1; },
+                dispose: async () => {},
+            })),
+        };
+        const firstSession = createLoginController(page);
+        const oldRef = (await firstSession.snapshot()).controls[0].ref;
+        const restartedSession = createLoginController(page);
+        const freshRef = (await restartedSession.snapshot()).controls[0].ref;
+        expect(freshRef).not.toBe(oldRef);
+        await expect(restartedSession.click({ ref: oldRef })).rejects.toMatchObject({ code: 'REF_STALE' });
+        await expect(restartedSession.click({ ref: 's1_1' })).rejects.toMatchObject({ code: 'REF_STALE' });
+        await expect(restartedSession.click({ ref: 1 })).rejects.toMatchObject({ code: 'REF_STALE' });
+        expect(clicks).toBe(0);
         dom.window.close();
     });
 });

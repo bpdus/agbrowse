@@ -357,6 +357,52 @@ describe('agent-runtime', () => {
         expect(locks.release).toHaveBeenCalledTimes(1);
     });
 
+    it('rejects refs after login.end and login.start and after a runtime restart', async () => {
+        const previousStyle = globalThis.getComputedStyle;
+        globalThis.getComputedStyle = () => ({ visibility: 'visible', display: 'block' });
+        let clicks = 0;
+        const fakeElement = {
+            tagName: 'BUTTON', innerText: 'Continue', id: '',
+            getBoundingClientRect: () => ({ width: 100, height: 20 }),
+            getAttribute(name) { return ({ 'aria-label': 'Continue', type: null, name: null, autocomplete: null, placeholder: null, title: null })[name] ?? null; },
+        };
+        const installLoginPage = () => {
+            const made = makeContext(events);
+            made.context.newPage = async () => {
+                const page = makePage(`login-${trace.launches.length}`);
+                page.$$ = async () => [{
+                    evaluate: async (fn) => fn(fakeElement),
+                    click: async () => { clicks += 1; },
+                    dispose: async () => {},
+                }];
+                return page;
+            };
+            return made.context;
+        };
+        trace.launchImpl = installLoginPage;
+        try {
+            const firstRuntime = createAgentRuntime(); active = firstRuntime; await firstRuntime.start();
+            await firstRuntime.dispatchLogin('login.start', {});
+            const previousRef = (await firstRuntime.dispatchLogin('login.snapshot', {})).snapshot.controls[0].ref;
+            await firstRuntime.dispatchLogin('login.end', {});
+            await firstRuntime.dispatchLogin('login.start', {});
+            const nextRef = (await firstRuntime.dispatchLogin('login.snapshot', {})).snapshot.controls[0].ref;
+            expect(nextRef).not.toBe(previousRef);
+            await expect(firstRuntime.dispatchLogin('login.click', { ref: previousRef })).rejects.toMatchObject({ code: 'REF_STALE' });
+            await firstRuntime.stop();
+
+            const restartedRuntime = createAgentRuntime(); active = restartedRuntime; await restartedRuntime.start();
+            await restartedRuntime.dispatchLogin('login.start', {});
+            await restartedRuntime.dispatchLogin('login.snapshot', {});
+            await expect(restartedRuntime.dispatchLogin('login.click', { ref: nextRef })).rejects.toMatchObject({ code: 'REF_STALE' });
+            expect(clicks).toBe(0);
+            await restartedRuntime.stop();
+        } finally {
+            if (previousStyle === undefined) delete globalThis.getComputedStyle;
+            else globalThis.getComputedStyle = previousStyle;
+        }
+    });
+
     it('applies the login route policy during the initial goto', async () => {
         let loginContext;
         let initialRequestFetches = 0;
