@@ -10,7 +10,7 @@ afterEach(() => {
     else globalThis.getComputedStyle = oldGetComputedStyle;
 });
 
-async function submitWithMarkup(markup) {
+async function submitWithMarkup(markup, beforeSubmit = () => {}) {
     const dom = new JSDOM(markup, { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
     const oldDocument = globalThis.document;
     const oldLocation = globalThis.location;
@@ -26,13 +26,14 @@ async function submitWithMarkup(markup) {
     });
     const locator = (find) => ({
         count: async () => find().length,
-        isVisible: async () => find()[0]?.isConnected ?? false,
+        isVisible: async () => { const el = find()[0]; for (let node = el; node; node = node.parentElement) if (dom.window.getComputedStyle(node).display === 'none' || dom.window.getComputedStyle(node).visibility === 'hidden') return false; return Boolean(el?.isConnected); },
         elementHandle: async () => find()[0] ? wrap(find()[0]) : null,
         evaluate: async (fn) => fn(find()[0]),
         click: async () => { if (find()[0]) clicks += 1; },
         locator: (selector) => selector === 'xpath=ancestor::form[1]'
             ? locator(() => { const el = find()[0]; return el?.closest('form') ? [el.closest('form')] : []; })
             : locator(() => find().flatMap((el) => [...el.querySelectorAll(selector)])),
+        filter: (options) => locator(() => find().filter((el) => { if (!options.visible) return true; for (let node = el; node; node = node.parentElement) if (dom.window.getComputedStyle(node).display === 'none' || dom.window.getComputedStyle(node).visibility === 'hidden') return false; return true; })),
     });
     const page = {
         url: () => dom.window.location.href,
@@ -48,6 +49,7 @@ async function submitWithMarkup(markup) {
     const controller = createLoginController(page);
     const filled = await controller.fillCredentials(async () => ({ result: 'credentials', account: 'operator', password: 'secret' }));
     expect(filled).toEqual({ result: 'filled', reason: 'none' });
+    beforeSubmit();
     const result = await controller.submit();
     dom.window.close();
     if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
@@ -56,19 +58,26 @@ async function submitWithMarkup(markup) {
 }
 
 describe('agent login policy', () => {
-    it('submits Naver real login button markup', async () => {
-        const outcome = await submitWithMarkup('<form action="/nidlogin.login"><input id="id" name="id"><input id="pw" name="pw" type="password"><button type="submit" class="btn_login" id="log.login"><span class="btn_text">로그인</span></button></form>');
+    const realMarkup = (visible = 'column', action = 'https://nid.naver.com/nidlogin.login', outside = false) => `<form class="form" id="frmNIDLogin" name="frmNIDLogin" action="${action}" method="POST"><input id="id" name="id"><input id="pw" name="pw" type="password"><div class="btn_form column pc" style="display:${visible === 'column' || visible === 'both' ? 'block' : 'none'}"><ul class="btn_login_dual"><li class="dual_item passkey"><button type="button" id="passkeyBtn_column">패스키</button></li><li class="dual_item login"><button type="button" id="loginBtn_column">로그인</button></li></ul></div><div class="btn_form row" style="display:${visible === 'row' || visible === 'both' ? 'block' : 'none'}"><ul class="btn_login_dual"><li class="dual_item passkey"><button type="button" id="passkeyBtn_row">패스키</button></li><li class="dual_item login"><button type="button" id="loginBtn_row">로그인</button></li></ul></div></form>${outside ? '<button type="button" id="loginBtn_row">로그인</button>' : ''}`;
+    it('clicks the visible column login button and never clicks passkey', async () => {
+        const outcome = await submitWithMarkup(realMarkup('column'));
         expect(outcome).toEqual({ result: { result: 'submitted', reason: 'none' }, clicks: 1 });
     });
-
-    it('does not submit a Naver login button outside the credential form', async () => {
-        const outcome = await submitWithMarkup('<form action="/nidlogin.login"><input id="id" name="id"><input id="pw" name="pw" type="password"></form><button type="submit" class="btn_login" id="log.login"><span class="btn_text">로그인</span></button>');
+    it('clicks the visible row login button', async () => {
+        const outcome = await submitWithMarkup(realMarkup('row'));
+        expect(outcome).toEqual({ result: { result: 'submitted', reason: 'none' }, clicks: 1 });
+    });
+    it('fails unavailable when both variants are visible', async () => {
+        const outcome = await submitWithMarkup(realMarkup('both'));
         expect(outcome).toEqual({ result: { result: 'failed', reason: 'button_unavailable' }, clicks: 0 });
     });
-
-    it('does not submit when the credential form has two Naver login buttons', async () => {
-        const outcome = await submitWithMarkup('<form action="/nidlogin.login"><input id="id" name="id"><input id="pw" name="pw" type="password"><button type="submit" id="log.login">로그인</button><button type="submit" id="log.login">로그인</button></form>');
+    it('fails unavailable when the login button is outside the form', async () => {
+        const outcome = await submitWithMarkup(realMarkup('none', 'https://nid.naver.com/nidlogin.login', true));
         expect(outcome).toEqual({ result: { result: 'failed', reason: 'button_unavailable' }, clicks: 0 });
+    });
+    it('fails untrusted when the form action changes', async () => {
+        const outcome = await submitWithMarkup(realMarkup('column'), () => { globalThis.document.querySelector('form').action = 'https://evil.example/login'; });
+        expect(outcome).toEqual({ result: { result: 'failed', reason: 'button_untrusted' }, clicks: 0 });
     });
     it('blocks logout and non-allowlisted destinations before request handling', () => {
         expect(isLogoutUrl('https://nid.naver.com/nidlogin.logout?foo=1')).toBe(true);
