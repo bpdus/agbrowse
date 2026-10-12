@@ -442,6 +442,40 @@ describe('agent-runtime', () => {
         await runtime.stop();
     });
 
+    it('logs blocked login requests with only host, method, and type', async () => {
+        const made = makeContext(events);
+        trace.launchImpl = () => made.context;
+        const runtime = createAgentRuntime();
+        active = runtime;
+        await runtime.start();
+        await runtime.dispatchLogin('login.start', {});
+        const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        try {
+            const page = makePage('login-block-log');
+            await made.context.routes.at(-1).handler({
+                request: () => makeRoutedRequest('https://www.naver.com/private/path?secret=value', {
+                    page, method: 'POST', navigation: false, resourceType: 'fetch',
+                }),
+                async abort() {}, async fetch() { throw new Error('blocked request must not fetch'); },
+                async fulfill() {}, async continue() {},
+            });
+            expect(write).toHaveBeenCalledTimes(1);
+            const line = write.mock.calls[0][0];
+            expect(line).toBe('agbrowse-login-blocked host=www.naver.com method=POST type=fetch\n');
+            expect(line).not.toContain('/private');
+            expect(line).not.toContain('?secret');
+            await made.context.routes.at(-1).handler({
+                request: () => makeRoutedRequest('https://nid.naver.com/nidlogin.logout?secret=value', {
+                    page, navigation: false, resourceType: 'document',
+                }),
+                async abort() {}, async fetch() { throw new Error('logout must be blocked'); },
+                async fulfill() {}, async continue() {},
+            });
+            expect(write).toHaveBeenCalledTimes(2);
+            expect(write.mock.calls[1][0]).toBe('agbrowse-login-blocked host=nid.naver.com method=GET type=document\n');
+        } finally { write.mockRestore(); }
+    });
+
     it('retains runtime ownership after a login context close failure', async () => {
         let closeCalls = 0;
         trace.launchImpl = () => { const made = makeContext(events); const close = made.context.close.bind(made.context); made.context.close = async () => { closeCalls += 1; if (closeCalls === 1) throw new Error('close failure'); await close(); }; return made.context; };

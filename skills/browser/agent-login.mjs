@@ -27,7 +27,7 @@ export function classifyLoginRequest(value, method = 'GET') {
         return 'deny';
     }
     if ((host.endsWith('.pstatic.net') && host.length > '.pstatic.net'.length
-        || host === 'ncpt.naver.com') && ['GET', 'HEAD'].includes(verb)) return 'allow';
+        || host === 'ncpt.naver.com' || host === 'nca.naver.com') && ['GET', 'HEAD'].includes(verb)) return 'allow';
     return 'deny';
 }
 
