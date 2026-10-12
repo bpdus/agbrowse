@@ -276,16 +276,19 @@ export function createLoginController(page) {
             try {
                 await ensureHumanMayContinue();
                 if (!credentialsFilled || new URL(page.url()).origin !== 'https://nid.naver.com' || new URL(page.url()).pathname !== '/nidlogin.login') return { result: 'failed', reason: 'not_filled' };
-                const loginForm = page.locator('input#id[name="id"]').locator('xpath=ancestor::form[1]');
-                const button = loginForm.locator('[id="log.login"]');
-                if (await button.count() !== 1 || !await button.isVisible()) return { result: 'failed', reason: 'button_unavailable' };
+                const loginForm = page.locator('form#frmNIDLogin');
+                if (await loginForm.count() !== 1) return { result: 'failed', reason: 'button_unavailable' };
+                const candidates = loginForm.locator('button#loginBtn_column, button#loginBtn_row').filter({ visible: true });
+                if (await candidates.count() !== 1) return { result: 'failed', reason: 'button_unavailable' };
+                const button = candidates;
                 const valid = await button.evaluate((el) => {
-                    const form = el.form ?? el.closest('form');
-                    if (!form || !form.isConnected || !form.contains(el) || location.origin !== 'https://nid.naver.com') return false;
+                    const form = el.closest('form');
+                    if (!form || form.id !== 'frmNIDLogin' || !form.isConnected || !form.contains(el) || location.origin !== 'https://nid.naver.com') return false;
                     let action; try { action = new URL(form.action, location.href); } catch { return false; }
                     return action.protocol === 'https:' && action.host === 'nid.naver.com' && action.pathname === '/nidlogin.login'
                         && form.querySelector('input#id[name="id"]')?.form === form
-                        && form.querySelector('input#pw[name="pw"]')?.form === form;
+                        && form.querySelector('input#pw[name="pw"]')?.form === form
+                        && ['button', 'submit'].includes(el.type);
                 });
                 if (!valid) return { result: 'failed', reason: 'button_untrusted' };
                 await button.click(); credentialsFilled = false; invalidate(); return { result: 'submitted', reason: 'none' };
