@@ -33,7 +33,7 @@ export function classifyLoginRequest(value, method = 'GET') {
 export function assertLoginNavigation(value) {
     let url;
     try { url = new URL(value); } catch { throw readError('DOMAIN_DENIED'); }
-    if (url.origin !== 'https://nid.naver.com' || !LOGIN_PATHS.has(url.pathname) || isLogoutUrl(value)) {
+    if (url.origin !== 'https://nid.naver.com' || url.username || url.password || url.search || url.hash || !LOGIN_PATHS.has(url.pathname) || isLogoutUrl(value)) {
         throw readError('DOMAIN_DENIED');
     }
     return url.href;

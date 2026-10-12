@@ -393,6 +393,30 @@ describe('agent mcp client', () => {
         reopenedKeys.close();
     });
 
+    it('requests an explicitly selected operator scope while retaining the paired identity', async () => {
+        const { port, box } = await liveGateway(); const clientDir = join(box.root, 'client');
+        await bootstrapLocalClient({ auth: box.auth, deviceKeys: box.deviceKeys, directory: clientDir });
+        const record = createClientStore({ directory: clientDir }).load();
+        await box.auth.grantDeviceScope(record.device_id, 'login:operate');
+        box.deviceKeys.close();
+        const stdout = capture(); const stderr = capture();
+        const input = [
+            { jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:MCP_PROTOCOL_VERSION, capabilities:{}, clientInfo:{name:'scope-test',version:'0'} } },
+            { jsonrpc:'2.0', method:'notifications/initialized' },
+            { jsonrpc:'2.0', id:2, method:'tools/list' },
+        ].map((line) => JSON.stringify(line)).join('\n') + '\n';
+        const status = await runMcpStdioClient({
+            argv:['--client-dir',clientDir,'--key-dir',box.dirs.device,'--gateway-url',`http://127.0.0.1:${port}`,'--scope','browser:read,login:operate'],
+            stdin:Readable.from([input]), stdout:stdout.stream, stderr:stderr.stream, exit() {},
+        });
+        expect(status).toBe(0); expect(stderr.read()).toBe('');
+        const list = JSON.parse(stdout.read().trim().split('\n')[1]).result.tools;
+        expect(list.some((tool) => tool.name === 'login.start')).toBe(true);
+        const after = createClientStore({ directory: clientDir }).load();
+        expect(after.device_id).toBe(record.device_id);
+        expect(after.gateway_id).toBe(record.gateway_id);
+    });
+
     it('releases the key-store lock when stdio client setup fails', async () => {
         const box = harness('http://127.0.0.1:7420/mcp');
         const clientDir = join(box.root, 'client');

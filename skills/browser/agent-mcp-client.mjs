@@ -111,7 +111,7 @@ export function createClientStore(options) {
 
 /**
  * Same-process pairing. The confirmation code is not returned or logged.
- * @param {{ auth: any, deviceKeys: { ensureKey: (id: string) => any }, directory: string, name?: string }} options
+ * @param {{ auth: any, deviceKeys: { ensureKey: (id: string) => any }, directory: string, name?: string, scopes?: string[] }} options
  */
 export async function bootstrapLocalClient(options) {
     await options.auth.openPairingWindow();
@@ -334,7 +334,7 @@ function createMcpHttpClient(options) {
  * @param {string[]} argv
  */
 function parseArgs(argv) {
-    /** @type {{ help: boolean, clientDir?: string, keyDir?: string, gatewayUrl?: string }} */
+    /** @type {{ help: boolean, clientDir?: string, keyDir?: string, gatewayUrl?: string, scopes?: string[] }} */
     const args = { help: false };
     for (let index = 0; index < argv.length; index += 1) {
         const arg = argv[index];

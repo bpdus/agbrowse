@@ -1,4 +1,5 @@
 // @ts-check
+import { pathToFileURL } from 'node:url';
 import { createAuthService } from './agent-auth.mjs';
 import { createDevFileKeyStore, createJsonStateStore } from './agent-auth-store.mjs';
 import { readError } from './agent-read-error.mjs';
@@ -34,4 +35,4 @@ export async function runAuthAdminCli(options = {}) {
     }
 }
 
-if (import.meta.url === new URL(`file://${process.argv[1]}`).href) process.exitCode = await runAuthAdminCli();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = await runAuthAdminCli();

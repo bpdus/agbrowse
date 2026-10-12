@@ -14,7 +14,10 @@ NODE=${AGBROWSE_NODE_BIN:-node}
 was_loaded=0
 if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then was_loaded=1; fi
 restore() {
-  if [ "$was_loaded" -eq 1 ] && [ -f "$PLIST" ]; then launchctl bootstrap "$DOMAIN" "$PLIST" >/dev/null 2>&1 || echo 'grant-login-scope: gateway restoration failed' >&2; fi
+  trap - EXIT
+  if [ "$was_loaded" -eq 1 ] && [ -f "$PLIST" ]; then
+    launchctl bootstrap "$DOMAIN" "$PLIST" >/dev/null 2>&1 || { echo 'grant-login-scope: gateway restoration failed' >&2; exit 1; }
+  fi
 }
 trap restore EXIT
 if [ "$was_loaded" -eq 1 ]; then launchctl bootout "$DOMAIN/$LABEL"; fi

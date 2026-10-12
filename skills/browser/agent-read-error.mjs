@@ -38,6 +38,8 @@ export const READ_ERROR_MESSAGES = Object.freeze({
     STATE_CHANGED: 'The document changed.',
     STATE_LOCK_STALE: 'The writer lock is stale; remove the exact lock file path shown in the error message manually.',
     STATE_UNSAFE: 'Stored state is not safe to use.',
+    SHUTDOWN_FAILED: 'Browser shutdown failed.',
+    STARTUP_FAILED: 'Browser launch failed.',
     VERSION_UNSUPPORTED: 'Protocol version is not supported.',
 });
 

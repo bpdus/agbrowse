@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createContext, runInContext } from 'node:vm';
@@ -85,6 +85,9 @@ function makePage(targetId, url = 'about:blank') {
         isClosed() { return this.closed; },
         async close() { this.closed = true; },
         async bringToFront() { this.focused = true; },
+        async goto(url) { this.currentUrl = url; },
+        async screenshot() { return Buffer.from('PNG'); },
+        on() {},
     };
 }
 
@@ -330,6 +333,40 @@ describe('agent-runtime', () => {
             session_id: orderSession.sessionId, mcp_session_id: `mcp_${'b'.repeat(16)}`,
             device_id: 'dev_test', epoch: 1, worker_id: `wrk_${'a'.repeat(16)}`,
         })).rejects.toMatchObject({ code: 'ORDER_CREATION_DETECTED' });
+    });
+
+    it('switches login mode in process while retaining the profile lock and ignores retired context disconnects', async () => {
+        const contexts = [];
+        trace.launchImpl = () => { const made = makeContext(events); contexts.push(made); return made.context; };
+        const runtime = createAgentRuntime(); active = runtime; await runtime.start();
+        await runtime.openSession();
+        const chromeLock = join(profileDir(), 'SingletonLock'); writeFileSync(chromeLock, 'owned by fake chrome');
+        const removeLater = setTimeout(() => { try { unlinkSync(chromeLock); } catch {} }, 30);
+        expect(await runtime.dispatchLogin('login.start', {})).toEqual({ mode: 'login', ready: true });
+        clearTimeout(removeLater);
+        expect(locks.acquire).toHaveBeenCalledTimes(1);
+        expect(locks.release).not.toHaveBeenCalled();
+        await expect(runtime.dispatchRead('browser.session.open', {})).rejects.toMatchObject({ code: 'LOGIN_MODE_REQUIRED' });
+        expect(await runtime.dispatchLogin('login.end', {})).toEqual({ mode: 'normal', ready: true });
+        contexts[0].browser.emitDisconnected();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(await runtime.dispatchLogin('login.status', {})).toEqual({ mode: 'normal', ready: true });
+        expect(locks.acquire).toHaveBeenCalledTimes(1);
+        expect(locks.release).not.toHaveBeenCalled();
+        await runtime.stop();
+        expect(locks.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('retains runtime ownership after a login context close failure', async () => {
+        let closeCalls = 0;
+        trace.launchImpl = () => { const made = makeContext(events); const close = made.context.close.bind(made.context); made.context.close = async () => { closeCalls += 1; if (closeCalls === 1) throw new Error('close failure'); await close(); }; return made.context; };
+        const runtime = createAgentRuntime(); active = runtime; await runtime.start();
+        await expect(runtime.dispatchLogin('login.start', {})).rejects.toMatchObject({ code: 'SHUTDOWN_FAILED' });
+        expect(locks.acquire).toHaveBeenCalledTimes(1);
+        expect(locks.release).not.toHaveBeenCalled();
+        expect(await runtime.dispatchLogin('login.status', {})).toEqual({ mode: 'transitioning', ready: false });
+        await runtime.stop();
+        expect(locks.release).toHaveBeenCalledTimes(1);
     });
 
     it('rejects a foreign profile or endpoint before launch', async () => {

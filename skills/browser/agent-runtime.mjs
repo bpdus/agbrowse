@@ -506,7 +506,7 @@ async function guardRequest(route, pagePolicies, getMode = () => 'normal') {
                 await abortRoute(route);
                 return;
             }
-            if (classifyPolicyRequest(resolved, followMethod, navigation ? 'navigation' : 'resource', policy, true) !== 'allow') {
+            if (isLogoutUrl(resolved) || classifyPolicyRequest(resolved, followMethod, navigation ? 'navigation' : 'resource', policy, true) !== 'allow') {
                 await abortRoute(route);
                 return;
             }
@@ -639,13 +639,14 @@ export function createAgentRuntime(config) {
         savedDebug = null;
     }
 
-    function noteDisconnect() {
+    function noteDisconnect(source) {
         if (intentionalStop || disconnectNoted) return;
         disconnectNoted = true;
-        void enqueue(() => applyDisconnect());
+        void enqueue(() => applyDisconnect(source));
     }
 
-    async function applyDisconnect() {
+    async function applyDisconnect(source) {
+        if (source && context !== source) return;
         if (intentionalStop || state === 'idle') return;
         if (state === 'stopped' && !context && !lockToken) return;
         sessions.clear();
@@ -668,10 +669,10 @@ export function createAgentRuntime(config) {
     function watchContext(ctx) {
         const browser = typeof ctx.browser === 'function' ? ctx.browser() : null;
         if (browser && typeof browser.on === 'function') {
-            browser.on('disconnected', () => { if (context === ctx && mode !== 'transitioning') noteDisconnect(); });
+            browser.on('disconnected', () => { if (context === ctx && mode !== 'transitioning') noteDisconnect(ctx); });
         }
         if (typeof ctx.on === 'function') {
-            ctx.on('close', () => { if (context === ctx && mode !== 'transitioning') noteDisconnect(); });
+            ctx.on('close', () => { if (context === ctx && mode !== 'transitioning') noteDisconnect(ctx); });
         }
     }
 
@@ -1076,7 +1077,7 @@ export function createAgentRuntime(config) {
 
     async function dispatchLogin(op, payload = {}) {
         return enqueue(async () => {
-            if (op === 'login.status') return { mode, ready: state === 'running' && Boolean(context) };
+            if (op === 'login.status') return { mode, ready: mode !== 'transitioning' && state === 'running' && Boolean(context) };
             if (op === 'worker.restart') {
                 setTimeout(() => { void stop().catch(() => {}); }, 0);
                 return { restarting: true };
@@ -1085,7 +1086,7 @@ export function createAgentRuntime(config) {
                 if (mode === 'login') return { mode, ready: true };
                 if (mode === 'transitioning') return { mode, ready: false };
                 mode = 'transitioning'; sessions.clear();
-                if (context) await context.close();
+                if (context) { try { await context.close(); } catch { throw readError('SHUTDOWN_FAILED'); } }
                 context = null; loginPage = null; loginController = null;
                 const { profileDir } = ensureDedicatedProfile();
                 await waitForProfileRelease(profileDir);
@@ -1100,7 +1101,7 @@ export function createAgentRuntime(config) {
             if (op === 'login.end') {
                 if (mode === 'normal' && state === 'running') return { mode, ready: true };
                 mode = 'transitioning'; sessions.clear();
-                if (context) await context.close();
+                if (context) { try { await context.close(); } catch { throw readError('SHUTDOWN_FAILED'); } }
                 context = null; loginPage = null; loginController = null;
                 const { profileDir } = ensureDedicatedProfile();
                 await waitForProfileRelease(profileDir);
