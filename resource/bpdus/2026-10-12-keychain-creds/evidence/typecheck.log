@@ -1,0 +1,147 @@
+
+> agbrowse@0.2.1 typecheck:checkjs
+> tsc --noEmit -p tsconfig.checkjs.json
+
+web-ai/browser-primitives.mjs(195,40): error TS2304: Cannot find name 'Element'.
+web-ai/browser-primitives.mjs(196,33): error TS2304: Cannot find name 'Element'.
+web-ai/browser-primitives.mjs(198,34): error TS7017: Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.
+web-ai/browser-primitives.mjs(198,64): error TS2304: Cannot find name 'Element'.
+web-ai/browser-primitives.mjs(211,38): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/browser-primitives.mjs(212,48): error TS2304: Cannot find name 'HTMLElement'.
+web-ai/chatgpt-composer.mjs(234,42): error TS2304: Cannot find name 'HTMLElement'.
+web-ai/chatgpt-composer.mjs(237,69): error TS2304: Cannot find name 'window'.
+web-ai/chatgpt-composer.mjs(238,75): error TS2304: Cannot find name 'window'.
+web-ai/chatgpt-composer.mjs(239,23): error TS2304: Cannot find name 'PointerEvent'.
+web-ai/chatgpt-composer.mjs(240,23): error TS2304: Cannot find name 'MouseEvent'.
+web-ai/chatgpt-composer.mjs(285,39): error TS2304: Cannot find name 'Element'.
+web-ai/chatgpt-composer.mjs(288,32): error TS2304: Cannot find name 'HTMLInputElement'.
+web-ai/chatgpt-composer.mjs(288,51): error TS2304: Cannot find name 'HTMLTextAreaElement'.
+web-ai/chatgpt-composer.mjs(289,44): error TS2304: Cannot find name 'InputEvent'.
+web-ai/chatgpt-composer.mjs(294,40): error TS2304: Cannot find name 'InputEvent'.
+web-ai/chatgpt-composer.mjs(298,30): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(299,30): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(301,30): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(308,40): error TS2304: Cannot find name 'Element'.
+web-ai/chatgpt-composer.mjs(310,24): error TS2304: Cannot find name 'HTMLInputElement'.
+web-ai/chatgpt-composer.mjs(310,43): error TS2304: Cannot find name 'HTMLTextAreaElement'.
+web-ai/chatgpt-composer.mjs(311,36): error TS2304: Cannot find name 'InputEvent'.
+web-ai/chatgpt-composer.mjs(316,32): error TS2304: Cannot find name 'InputEvent'.
+web-ai/chatgpt-composer.mjs(328,38): error TS2304: Cannot find name 'Element'.
+web-ai/chatgpt-composer.mjs(330,37): error TS2304: Cannot find name 'HTMLTextAreaElement'.
+web-ai/chatgpt-composer.mjs(330,76): error TS2304: Cannot find name 'HTMLInputElement'.
+web-ai/chatgpt-composer.mjs(331,35): error TS2304: Cannot find name 'HTMLElement'.
+web-ai/chatgpt-composer.mjs(333,43): error TS2304: Cannot find name 'Element'.
+web-ai/chatgpt-composer.mjs(338,53): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(341,34): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(342,37): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(367,77): error TS2304: Cannot find name 'window'.
+web-ai/chatgpt-composer.mjs(368,83): error TS2304: Cannot find name 'window'.
+web-ai/chatgpt-composer.mjs(369,31): error TS2304: Cannot find name 'PointerEvent'.
+web-ai/chatgpt-composer.mjs(370,31): error TS2304: Cannot find name 'MouseEvent'.
+web-ai/chatgpt-composer.mjs(375,43): error TS2304: Cannot find name 'Element'.
+web-ai/chatgpt-composer.mjs(379,31): error TS2304: Cannot find name 'window'.
+web-ai/chatgpt-composer.mjs(383,73): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(384,92): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(388,17): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(391,89): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-composer.mjs(397,31): error TS2304: Cannot find name 'window'.
+web-ai/chatgpt-model.mjs(392,57): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'ModelChoice | null | undefined'.
+  Type 'string' is not assignable to type 'ModelChoice | null | undefined'.
+web-ai/chatgpt-model.mjs(397,57): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'ModelChoice | null | undefined'.
+  Type 'string' is not assignable to type 'ModelChoice | null | undefined'.
+web-ai/chatgpt-model.mjs(402,42): error TS7006: Parameter 'page' implicitly has an 'any' type.
+web-ai/chatgpt-model.mjs(402,48): error TS7006: Parameter 'model' implicitly has an 'any' type.
+web-ai/chatgpt-model.mjs(403,66): error TS2339: Property 'family' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(404,17): error TS2339: Property 'family' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(405,197): error TS2339: Property 'family' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(405,235): error TS2339: Property 'family' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(408,66): error TS2339: Property 'effort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(408,84): error TS2339: Property 'reasoningEffort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(413,18): error TS2339: Property 'effort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(413,36): error TS2339: Property 'reasoningEffort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(414,207): error TS2339: Property 'effort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(414,225): error TS2339: Property 'reasoningEffort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(414,272): error TS2339: Property 'effort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(414,290): error TS2339: Property 'reasoningEffort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(516,42): error TS2339: Property 'effort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(516,60): error TS2339: Property 'reasoningEffort' does not exist on type '{}'.
+web-ai/chatgpt-model.mjs(526,106): error TS2345: Argument of type 'EffortChoice' is not assignable to parameter of type 'null | undefined'.
+  Type '"medium"' is not assignable to type 'null | undefined'.
+web-ai/chatgpt-model.mjs(537,84): error TS2345: Argument of type 'EffortChoice' is not assignable to parameter of type 'null | undefined'.
+  Type '"medium"' is not assignable to type 'null | undefined'.
+web-ai/chatgpt-model.mjs(538,93): error TS2345: Argument of type 'EffortChoice' is not assignable to parameter of type 'null | undefined'.
+  Type '"medium"' is not assignable to type 'null | undefined'.
+web-ai/chatgpt-model.mjs(1235,32): error TS7006: Parameter 'page' implicitly has an 'any' type.
+web-ai/chatgpt-model.mjs(1235,38): error TS7006: Parameter 'choice' implicitly has an 'any' type.
+web-ai/chatgpt-model.mjs(1236,20): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type 'Readonly<Record<ModelChoice, ModelOptionConfig>>'.
+web-ai/chatgpt-model.mjs(1306,9): error TS2322: Type 'Locator | null' is not assignable to type 'Locator'.
+  Type 'null' is not assignable to type 'Locator'.
+web-ai/chatgpt-model.mjs(1515,57): error TS2345: Argument of type 'string' is not assignable to parameter of type 'null | undefined'.
+web-ai/chatgpt-model.mjs(1525,56): error TS2345: Argument of type 'string' is not assignable to parameter of type 'null | undefined'.
+web-ai/chatgpt-model.mjs(1661,33): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-model.mjs(1663,38): error TS2304: Cannot find name 'HTMLElement'.
+web-ai/chatgpt-model.mjs(1668,44): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-model.mjs(1669,40): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-model.mjs(1670,82): error TS2304: Cannot find name 'HTMLElement'.
+web-ai/chatgpt-model.mjs(1752,37): error TS2304: Cannot find name 'HTMLElement'.
+web-ai/chatgpt-model.mjs(1958,42): error TS2304: Cannot find name 'HTMLElement'.
+web-ai/chatgpt-model.mjs(2024,5): error TS2322: Type 'Locator | null' is not assignable to type 'Locator'.
+  Type 'null' is not assignable to type 'Locator'.
+web-ai/chatgpt-model.mjs(2025,16): error TS2740: Type 'Page' is missing the following properties from type 'Locator': evaluateAll, elementHandle, all, allInnerTexts, and 23 more.
+web-ai/chatgpt-model.mjs(2130,93): error TS2352: Conversion of type 'null' to type 'EffortChoice' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+web-ai/chatgpt-model.mjs(2332,40): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+web-ai/chatgpt-model.mjs(2333,57): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+web-ai/chatgpt-response-dom.mjs(36,30): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-response-dom.mjs(37,32): error TS2304: Cannot find name 'Element'.
+web-ai/chatgpt-response-dom.mjs(39,37): error TS2550: Property 'findLast' does not exist on type 'any[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+web-ai/chatgpt-response-dom.mjs(39,47): error TS7006: Parameter 'turn' implicitly has an 'any' type.
+web-ai/chatgpt-response-dom.mjs(40,32): error TS2550: Property 'findLast' does not exist on type 'any[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2023' or later.
+web-ai/chatgpt-response-dom.mjs(40,42): error TS7006: Parameter 'turn' implicitly has an 'any' type.
+web-ai/chatgpt-response-dom.mjs(46,70): error TS2304: Cannot find name 'Node'.
+web-ai/chatgpt-response-dom.mjs(172,14): error TS2304: Cannot find name 'Element'.
+web-ai/chatgpt-response-dom.mjs(186,11): error TS7034: Variable 'roleNodes' implicitly has type 'any[]' in some locations where its type cannot be determined.
+web-ai/chatgpt-response-dom.mjs(188,39): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-response-dom.mjs(189,18): error TS7005: Variable 'roleNodes' implicitly has an 'any[]' type.
+web-ai/chatgpt-response-dom.mjs(192,11): error TS7034: Variable 'turns' implicitly has type 'any[]' in some locations where its type cannot be determined.
+web-ai/chatgpt-response-dom.mjs(198,13): error TS7005: Variable 'turns' implicitly has an 'any[]' type.
+web-ai/chatgpt-response-dom.mjs(232,35): error TS2304: Cannot find name 'Element'.
+web-ai/chatgpt-response-dom.mjs(233,31): error TS2304: Cannot find name 'HTMLElement'.
+web-ai/chatgpt-response-dom.mjs(239,41): error TS2304: Cannot find name 'ParentNode'.
+web-ai/chatgpt-response-dom.mjs(248,33): error TS2304: Cannot find name 'HTMLProgressElement'.
+web-ai/chatgpt-response-dom.mjs(268,21): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-response-dom.mjs(289,18): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-response-dom.mjs(309,40): error TS2304: Cannot find name 'window'.
+web-ai/chatgpt-response-dom.mjs(397,23): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-response-dom.mjs(428,34): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-response-dom.mjs(432,34): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-response-dom.mjs(464,37): error TS7006: Parameter 'node' implicitly has an 'any' type.
+web-ai/chatgpt-response-dom.mjs(464,43): error TS7006: Parameter 'turnIndex' implicitly has an 'any' type.
+web-ai/chatgpt-response-dom.mjs(477,15): error TS7006: Parameter 'snapshot' implicitly has an 'any' type.
+web-ai/chatgpt-response-dom.mjs(523,48): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/chatgpt-work-picker.mjs(804,19): error TS7034: Variable 'warnings' implicitly has type 'any[]' in some locations where its type cannot be determined.
+web-ai/chatgpt-work-picker.mjs(825,48): error TS7005: Variable 'warnings' implicitly has an 'any[]' type.
+web-ai/chatgpt-work-picker.mjs(910,34): error TS2322: Type 'Promise<Record<string, unknown>>' is not assignable to type 'Promise<{ ok: boolean; status: string; vendor: string; sessionId: string | null; answerText: null; conversationUrl: any; surface: string; responseContract: string; warnings: string[]; }>'.
+  Type 'Record<string, unknown>' is missing the following properties from type '{ ok: boolean; status: string; vendor: string; sessionId: string | null; answerText: null; conversationUrl: any; surface: string; responseContract: string; warnings: string[]; }': ok, status, vendor, sessionId, and 5 more.
+web-ai/chatgpt-work-picker.mjs(910,71): error TS2345: Argument of type 'PollDeadlineToken' is not assignable to parameter of type 'null | undefined'.
+web-ai/chatgpt-work-picker.mjs(930,60): error TS2339: Property 'session' does not exist on type '{ page: any; }'.
+web-ai/chatgpt-work-picker.mjs(950,73): error TS2353: Object literal may only specify known properties, and 'session' does not exist in type '{ page: any; }'.
+web-ai/chatgpt-work-picker.mjs(963,9): error TS2339: Property 'session' does not exist on type '{ page: any; }'.
+web-ai/chatgpt-work-picker.mjs(978,15): error TS2339: Property 'tighten' does not exist on type 'never'.
+web-ai/chatgpt-work-picker.mjs(1098,45): error TS18048: 'token.hardDeadline' is possibly 'undefined'.
+web-ai/poll-deadline.mjs(93,9): error TS2322: Type '() => void' is not assignable to type '() => undefined'.
+  Type 'void' is not assignable to type 'undefined'.
+web-ai/post-action-assert.mjs(99,81): error TS2304: Cannot find name 'HTMLInputElement'.
+web-ai/post-action-assert.mjs(99,133): error TS2304: Cannot find name 'HTMLInputElement'.
+web-ai/post-action-assert.mjs(179,42): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/post-action-assert.mjs(181,28): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/post-action-assert.mjs(181,81): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/product-surfaces.mjs(122,47): error TS2304: Cannot find name 'Element'.
+web-ai/product-surfaces.mjs(123,25): error TS2304: Cannot find name 'HTMLElement'.
+web-ai/product-surfaces.mjs(131,39): error TS2304: Cannot find name 'location'.
+web-ai/product-surfaces.mjs(137,30): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+web-ai/product-surfaces.mjs(139,66): error TS2304: Cannot find name 'location'.
+web-ai/product-surfaces.mjs(140,35): error TS2304: Cannot find name 'location'.
+web-ai/session-artifacts.mjs(263,29): error TS7006: Parameter 'stagedPath' implicitly has an 'any' type.
+web-ai/tab-recovery.mjs(359,34): error TS2339: Property 'taskUrl' does not exist on type '{}'.
