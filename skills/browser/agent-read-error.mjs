@@ -28,6 +28,7 @@ export const READ_ERROR_MESSAGES = Object.freeze({
     INVALID_ARGUMENTS: 'Arguments were rejected.',
     NOT_RUNNING: 'Agent runtime is not running.',
     LOGIN_MODE_REQUIRED: 'Login mode is not active.',
+    NAVIGATION_FAILED: 'The login page could not be opened.',
     PASSWORD_REFUSED: 'Password fields cannot be filled by this tool.',
     PROFILE_RELEASE_TIMEOUT: 'Chrome has not released the dedicated profile.',
     SCOPE_DENIED: 'Requested scope was denied.',

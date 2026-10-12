@@ -1095,8 +1095,16 @@ export function createAgentRuntime(config) {
                 watchContext(context); await installContextGuards(context, pagePolicies, () => mode);
                 loginPage = await context.newPage();
                 loginController = createLoginController(loginPage);
-                await loginPage.goto(assertLoginNavigation('https://nid.naver.com/nidlogin.login'), { waitUntil: 'domcontentloaded' });
-                state = 'running'; mode = 'login'; return { mode, ready: true };
+                // The guard must apply the login allowlist to the initial goto.
+                // Operations remain serialized until this navigation settles.
+                mode = 'login';
+                try {
+                    await loginPage.goto(assertLoginNavigation('https://nid.naver.com/nidlogin.login'), { waitUntil: 'domcontentloaded' });
+                } catch {
+                    mode = 'transitioning';
+                    throw readError('NAVIGATION_FAILED');
+                }
+                state = 'running'; return { mode, ready: true };
             }
             if (op === 'login.end') {
                 if (mode === 'normal' && state === 'running') return { mode, ready: true };

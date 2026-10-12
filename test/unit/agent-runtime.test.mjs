@@ -357,6 +357,45 @@ describe('agent-runtime', () => {
         expect(locks.release).toHaveBeenCalledTimes(1);
     });
 
+    it('applies the login route policy during the initial goto', async () => {
+        let loginContext;
+        let initialRequestFetches = 0;
+        let initialRequestAborts = 0;
+        trace.launchImpl = () => {
+            const made = makeContext(events);
+            loginContext = made.context;
+            loginContext.newPage = async () => {
+                const page = makePage('login-initial-navigation');
+                page.goto = async (url) => {
+                    page.currentUrl = url;
+                    const request = {
+                        url: () => url,
+                        method: () => 'GET',
+                        frame: () => ({ page: () => page }),
+                        isNavigationRequest: () => true,
+                        redirectedFrom: () => null,
+                        resourceType: () => 'document',
+                    };
+                    await loginContext.routes[0].handler({
+                        request: () => request,
+                        async abort() { initialRequestAborts += 1; },
+                        async fetch() { initialRequestFetches += 1; return { status: () => 200, headers: () => ({}) }; },
+                        async fulfill() {},
+                    });
+                    if (initialRequestAborts) throw new Error('initial login request was blocked');
+                };
+                made.order.push(page);
+                return page;
+            };
+            return made.context;
+        };
+        const runtime = createAgentRuntime(); active = runtime; await runtime.start();
+        expect(await runtime.dispatchLogin('login.start', {})).toEqual({ mode: 'login', ready: true });
+        expect(initialRequestFetches).toBe(1);
+        expect(initialRequestAborts).toBe(0);
+        await runtime.stop();
+    });
+
     it('retains runtime ownership after a login context close failure', async () => {
         let closeCalls = 0;
         trace.launchImpl = () => { const made = makeContext(events); const close = made.context.close.bind(made.context); made.context.close = async () => { closeCalls += 1; if (closeCalls === 1) throw new Error('close failure'); await close(); }; return made.context; };

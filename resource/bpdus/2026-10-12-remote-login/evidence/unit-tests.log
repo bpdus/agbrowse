@@ -1,0 +1,57 @@
+
+ RUN  v3.2.6 /home/box/src/agbrowse
+
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > routes login status to read dispatch and the fixed cart tools to cart dispatch 5ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > acknowledges worker.restart before graceful shutdown and exits successfully 20ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > does not import the legacy browser surfaces or start on import 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > starts and stops once when the signal is repeated 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > cleans up and exits nonzero when startup fails 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > exits on disconnect without relaunching 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > omits injected secrets from startup failure output 2ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > rejects profile, endpoint, and port arguments before launch 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > prints help without starting the runtime 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > keeps signal handlers through a pending startup 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > keeps signal handlers through a pending stop 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > answers --help from a direct process without launching Chrome 207ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > does not open a socket unless the runtime can dispatch reads 1ms
+ ✓ test/unit/agent-worker.test.mjs > agent-worker > answers hello on the owner socket and keeps the payload out of logs 3ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > does nothing on import 3ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > returns only the lifecycle methods 2ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > serializes cart inspection through the runtime queue and fails live layouts closed 9ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > returns LOGIN_REQUIRED for a recognized login form without reading its value 4ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > blocks Naver login redirects before fetching them and records blocked order attempts 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > switches login mode in process while retaining the profile lock and ignores retired context disconnects 111ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > applies the login route policy during the initial goto 8ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > retains runtime ownership after a login context close failure 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > rejects a foreign profile or endpoint before launch 2ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > refuses a symlinked dedicated profile and does not fall back 2ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > refuses an unwritable dedicated profile and does not fall back 1ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > launches installed Chrome over the debugging pipe 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > keeps two sessions on their own targets when tabs move 4ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > fails a closed target without substituting another tab 4ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > clears bindings on disconnect and does not relaunch or replay 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > closes Chrome before releasing the lock and rejects old ids after restart 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > leaves an existing lock owner untouched and cleans up a failed launch 4ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > does not enroll a page that is not about:blank 4ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > turns a secret-bearing page creation failure into a stable code 11ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > keeps the profile lock when close fails and retries shutdown before restart 12ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > installs context interception before any page and blocks service workers 11ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > allows only exact account and login redirects during login status on that page 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > reinstalls the document watcher on each main-frame navigation 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > retries the watcher when the document element is missing and counts a restored mutation 4ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > blocks logout and non-allowlisted destinations before request handling 1ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > allows only secure login and static resource requests 0ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > waits for all Chrome profile locks and times out without removing them 7ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > restricts top-level navigation to the login page 1ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > binds visible refs to their real selector elements when hidden inputs precede them 84ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > rejects auth, scope, version, and schema failures before the worker tool 7ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > lists login status and keeps cart read and write scopes separate 5ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > hides login controls from read-only devices and gates lifecycle calls behind the dedicated scope 2ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > rechecks cart scopes after a session-queue wait and stops before worker dispatch 2ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > redacts listing output and rejects stale, cross-session, and restarted reads 3ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > serves authenticated /mcp through the gateway and stops bad calls at the door 17ms
+
+ Test Files  4 passed (4)
+      Tests  49 passed (49)
+   Start at  12:25:13
+   Duration  2.14s (transform 237ms, setup 0ms, collect 646ms, tests 619ms, environment 1ms, prepare 208ms)

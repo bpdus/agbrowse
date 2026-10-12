@@ -82,10 +82,11 @@ export function createLoginController(page) {
                 return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
             };
             const selector = 'a,button,input,select,textarea,[role="button"],[role="link"],[tabindex]';
-            return Array.from(document.querySelectorAll(selector)).filter(visible).slice(0, 120).map((el) => {
+            return Array.from(document.querySelectorAll(selector)).map((el, index) => ({ el, index }))
+                .filter(({ el }) => visible(el)).slice(0, 120).map(({ el, index }) => {
                 const e = /** @type {HTMLElement & HTMLInputElement} */ (el);
                 const label = e.getAttribute('aria-label') || e.getAttribute('placeholder') || e.innerText || e.getAttribute('title') || '';
-                return { tag: e.tagName.toLowerCase(), type: e.getAttribute('type') || '', label: label.trim().slice(0, 200), name: e.getAttribute('name') || '', id: e.id || '', autocomplete: e.getAttribute('autocomplete') || '' };
+                return { index, tag: e.tagName.toLowerCase(), type: e.getAttribute('type') || '', label: label.trim().slice(0, 200), name: e.getAttribute('name') || '', id: e.id || '', autocomplete: e.getAttribute('autocomplete') || '' };
             });
         });
         if (revision !== revisionAtStart) throw readError('STATE_CHANGED');
@@ -95,7 +96,7 @@ export function createLoginController(page) {
             const identity = `${node.tag}|${node.name}|${node.id}|${node.autocomplete}`;
             const isPassword = node.type === 'password' || /(?:current-password|new-password)/i.test(node.autocomplete) || protectedIdentity.has(identity);
             if (isPassword) protectedIdentity.add(identity);
-            refs.set(ref, { index, identity, passwordIdentity: isPassword, revision });
+            refs.set(ref, { index: node.index, identity, passwordIdentity: isPassword, revision });
             return { ref, role: node.tag === 'input' ? 'input' : node.tag, label: node.label, type: isPassword ? 'password' : node.type, redacted: isPassword };
         });
         return { url: new URL(page.url()).origin, controls };
@@ -111,6 +112,7 @@ export function createLoginController(page) {
         const locator = page.locator('a,button,input,select,textarea,[role="button"],[role="link"],[tabindex]').nth(item.index);
         const info = await locator.evaluate((el) => ({ type: el.getAttribute('type') || '', autocomplete: el.getAttribute('autocomplete') || '', name: el.getAttribute('name') || '', id: el.id || '' }));
         const identity = `${String((await locator.evaluate((el) => el.tagName)).toLowerCase())}|${info.name}|${info.id}|${info.autocomplete}`;
+        if (identity !== item.identity) throw readError('STALE_REF');
         if (isPasswordTarget({ ...info, passwordIdentity: item.passwordIdentity || protectedIdentity.has(identity) })) throw readError('PASSWORD_REFUSED');
         return locator;
     }

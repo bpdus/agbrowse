@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assertLoginNavigation, classifyLoginRequest, isLogoutUrl, waitForProfileRelease } from '../../skills/browser/agent-login.mjs';
+import { JSDOM } from 'jsdom';
+import { assertLoginNavigation, classifyLoginRequest, createLoginController, isLogoutUrl, waitForProfileRelease } from '../../skills/browser/agent-login.mjs';
 
 describe('agent login policy', () => {
     it('blocks logout and non-allowlisted destinations before request handling', () => {
@@ -29,5 +30,36 @@ describe('agent login policy', () => {
         expect(() => assertLoginNavigation('https://nid.naver.com/nidlogin.logout')).toThrow();
         expect(() => assertLoginNavigation('https://naver.com/')).toThrow();
         expect(() => assertLoginNavigation('https://user:pass@nid.naver.com/nidlogin.login')).toThrow();
+    });
+
+    it('binds visible refs to their real selector elements when hidden inputs precede them', async () => {
+        const dom = new JSDOM('<input type="hidden" name="csrf"><input name="username" placeholder="Username">', { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
+        dom.window.HTMLElement.prototype.getBoundingClientRect = function () { return this.type === 'hidden' ? { width: 0, height: 0 } : { width: 100, height: 20 }; };
+        const selector = 'a,button,input,select,textarea,[role="button"],[role="link"],[tabindex]';
+        const all = [...dom.window.document.querySelectorAll(selector)];
+        let filled = null;
+        const page = {
+            url: () => dom.window.location.href,
+            on() {},
+            evaluate: (fn) => dom.window.Function(`return (${fn.toString()})()`)(),
+            locator: () => ({
+                nth: (index) => {
+                    const element = all[index];
+                    return {
+                        evaluate: (fn) => fn(element),
+                        fill: async (value) => { filled = { element, value }; },
+                    };
+                },
+            }),
+        };
+        const controller = createLoginController(page);
+        const { controls } = await controller.snapshot();
+        expect(controls).toHaveLength(1);
+        await controller.typeLoginText({ ref: controls[0].ref, text: 'operator' });
+        expect(filled).toEqual({ element: all[1], value: 'operator' });
+        const refreshed = await controller.snapshot();
+        all[1].setAttribute('name', 'changed');
+        await expect(controller.typeLoginText({ ref: refreshed.controls[0].ref, text: 'operator' })).rejects.toMatchObject({ code: 'STALE_REF' });
+        dom.window.close();
     });
 });
