@@ -100,6 +100,36 @@ function runEntry(args) {
 }
 
 describe('loopback auth gateway', () => {
+    it('serves the credential form and enforces exact origin without reflecting submitted secrets', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'agent-gateway-creds-'));
+        const auth = createAuthService({ stateStore: createJsonStateStore({ directory: join(root, 'state') }), keyStore: createDevFileKeyStore({ directory: join(root, 'keys') }), gatewayId: 'gw_creds', audience: AUDIENCE });
+        const saves = [];
+        const gateway = createGateway({ auth, port: 0, allowedHosts: ['127.0.0.1:0'], allowedOrigins: ['https://jjbyuns-imac.tail8f1886.ts.net:8443'], credentials: { consume: async (token) => token === 'token-sentinel' }, credentialsWorker: { call: async (_op, payload) => { saves.push(payload); return { result: 'saved' }; } } });
+        track(root, gateway, auth); await gateway.start(); const port = gateway.address().port; const host = `127.0.0.1:${port}`;
+        const page = await request(port, { path: '/admin/naver-credentials', headers: { host } });
+        expect(page.status).toBe(200); expect(page.headers['cache-control']).toBe('no-store'); expect(page.headers['referrer-policy']).toBe('no-referrer');
+        expect(page.body).toContain('name="token"'); expect(page.body).not.toContain('name="account"'); expect(page.body).not.toContain('name="password"');
+        const tokenPayload = new URLSearchParams({ token: 'token-sentinel' }).toString();
+        const tokenSubmit = (origin) => request(port, { path: '/admin/naver-credentials', method: 'POST', headers: { host, ...(origin ? { origin } : {}), 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(tokenPayload) }, body: tokenPayload });
+        const denied = await tokenSubmit('https://evil.example'); expect(denied.status).toBe(403);
+        const missingOrigin = await tokenSubmit(undefined); expect(missingOrigin.status).toBe(403);
+        const tokenAccepted = await tokenSubmit('https://jjbyuns-imac.tail8f1886.ts.net:8443');
+        expect(tokenAccepted.status).toBe(200); expect(tokenAccepted.body).toContain('name="account"'); expect(tokenAccepted.body).toContain('name="password"');
+        const cookie = tokenAccepted.headers['set-cookie'][0].split(';')[0];
+        const csrf = /name="csrf" value="([a-f0-9]+)"/.exec(tokenAccepted.body)[1];
+        const payload = new URLSearchParams({ csrf, account: 'id-sentinel', password: 'pw-sentinel' }).toString();
+        const submit = (origin) => request(port, { path: '/admin/naver-credentials', method: 'POST', headers: { host, ...(origin ? { origin } : {}), 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(payload) }, body: payload });
+        expect((await request(port, { path: '/admin/naver-credentials', method: 'POST', headers: { host, origin: 'https://jjbyuns-imac.tail8f1886.ts.net:8443', cookie, 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(payload) }, body: payload })).status).toBe(200);
+        expect(saves).toEqual([{ account: 'id-sentinel', password: 'pw-sentinel' }]);
+        const oversizedBody = 'x'.repeat(16 * 1024 + 1);
+        const oversized = await request(port, { path: '/admin/naver-credentials', method: 'POST', headers: { host, origin: 'https://jjbyuns-imac.tail8f1886.ts.net:8443', 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(oversizedBody) }, body: oversizedBody });
+        expect(oversized.status).toBe(413); expect(oversized.headers['content-security-policy']).toContain("default-src 'none'");
+        const accepted = await submit('https://jjbyuns-imac.tail8f1886.ts.net:8443');
+        expect(accepted.status).toBe(403); expect(accepted.body).not.toContain('sentinel');
+        for (let index = 0; index < 4; index += 1) await submit('https://jjbyuns-imac.tail8f1886.ts.net:8443');
+        expect((await submit('https://jjbyuns-imac.tail8f1886.ts.net:8443')).status).toBe(429);
+    });
+
     it('listens only after start and only on 127.0.0.1', async () => {
         expect(() => createGateway({
             auth: { submitPairing() {}, issueChallenge() {}, exchangeProof() {} },

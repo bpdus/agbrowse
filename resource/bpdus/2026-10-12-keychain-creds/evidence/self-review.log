@@ -1,0 +1,5 @@
+Branch checked: keychain-creds
+Diff hygiene: git diff --check passed; worktree was clean after the four implementation commits.
+Security review: Keychain writes use /usr/bin/security argv ['-i','-q'] with shell:false, stdin pipe, stdout/stderr ignored; account state is owner-checked and mode 0600. Registration is exact-Origin protected, token is single-use and atomically claimed before IPC, body-bounded, rate-limited, and responses do not echo fields. MCP only exposes login tools and rechecks login scopes inside its serialized operation.
+Browser review: credential fill validates the exact Naver origin/path and unique visible ID/password fields in one Naver login form. Fill does not submit; submit is separately gated. Password identity is retained for snapshot redaction and screenshot masking. Captcha challenge detection has precedence; captcha scripts alone are ignored. Account status probe uses a separate page under the narrow login-status request policy.
+Operational limitation: this workspace is Linux. The requested iMac GUI LaunchAgent / real macOS Keychain disposable-item round trip and process/log inspection could not be performed here.

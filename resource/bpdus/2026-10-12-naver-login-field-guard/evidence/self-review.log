@@ -1,0 +1,9 @@
+Post-coding check
+- Scope: only login controller and its two focused unit test files changed; no pre-existing worktree changes were present.
+- Requirements: PASS; every pre-fill validation checks retained connected fields, captured id/name/type, same retained form containment, exact HTTPS host/path, and top-level origin. Screenshot masks retained handles and falls back to all text/email/tel/password inputs.
+- Project rules: no root or applicable nested AGENTS.md/RULES.md governs these paths.
+- Verification: PASS; Vitest command and git diff --check.
+- Slop cleanup: N/A; no cleanup signals requiring behavior changes.
+- Security/data safety: PASS; validation runs before each fill and failures remain fail-closed.
+- Docs/handoff: implementation plan/result artifacts stored under resource/bpdus.
+- Residual risk: unit mocks model Playwright handle locator behavior; no live browser session was requested or run.

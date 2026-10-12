@@ -57,6 +57,9 @@ function fakeWorker() {
             }
             if (op === 'browser.session.close') return { closed: true };
             if (op === 'login.screenshot') return { image: Buffer.from('PNG').toString('base64') };
+            if (op === 'login.fill_credentials') return { result: 'filled', reason: 'none', password: 'worker-secret-sentinel' };
+            if (op === 'login.submit') return { result: 'submitted', reason: 'none', password: 'worker-secret-sentinel' };
+            if (op === 'login.check_progress') return { status: 'needs_human', password: 'worker-secret-sentinel' };
             if (op.startsWith('login.') || op === 'worker.restart') return { mode: 'login', ready: true };
             if (op === 'naver.login_status') return loginStatus;
             const state = sessions.get(payload.session_id);
@@ -134,6 +137,18 @@ async function startedSession() {
 }
 
 describe('agent mcp dispatcher', () => {
+    it('exposes explicit credential actions behind login scope and projects closed outputs', async () => {
+        const { mcp, worker, headers } = await startedSession();
+        const namesResponse = await handle(mcp, { jsonrpc: '2.0', id: 3, method: 'tools/list' }, { headers, auth: async () => ({ device_id: 'dev_a', epoch: 1, scopes: ['browser:read', 'login:operate'] }) });
+        const names = namesResponse.body.result.tools.map((tool) => tool.name);
+        expect(names).toContain('login.fill_credentials'); expect(names).toContain('login.submit'); expect(names).toContain('login.check_progress');
+        for (const [id, name, expected] of [[4,'login.fill_credentials',{result:'filled',reason:'none'}],[5,'login.submit',{result:'submitted',reason:'none'}],[6,'login.check_progress',{status:'needs_human'}]]) {
+            const response = await handle(mcp, toolCall(id, name, { protocol_version: '0.1.0', request_id: `req_${id}` }), { headers, auth: async () => ({ device_id: 'dev_a', epoch: 1, scopes: ['browser:read', 'login:operate'] }) });
+            expect(response.body.result.structuredContent).toMatchObject(expected);
+            expect(JSON.stringify(response.body)).not.toContain('worker-secret-sentinel');
+        }
+        expect(worker.calls.map(({ op }) => op).filter((op) => op.startsWith('login.'))).toEqual(['login.fill_credentials','login.submit','login.check_progress']);
+    });
     it('rejects auth, scope, version, and schema failures before the worker tool', async () => {
         const worker = fakeWorker();
         const logs = [];
@@ -277,6 +292,9 @@ describe('agent mcp dispatcher', () => {
         const denied = await handle(ctx.mcp, toolCall(101, 'login.start', { protocol_version: '0.1.0', request_id: 'login_denied' }), { headers: ctx.headers });
         expect(denied.status).toBe(403);
         expect(denied.body.error.code).toBe('SCOPE_DENIED');
+        const deniedFill = await handle(ctx.mcp, toolCall(105, 'login.fill_credentials', { protocol_version: '0.1.0', request_id: 'fill_denied' }), { headers: ctx.headers });
+        expect(deniedFill.body.error.code).toBe('SCOPE_DENIED');
+        expect(ctx.worker.calls.some((call) => call.op === 'login.fill_credentials')).toBe(false);
         const grantedAuth = async () => ({ device_id: 'dev_a', epoch: 1, scopes: ['browser:read', 'login:operate'] });
         const list = await handle(ctx.mcp, { jsonrpc: '2.0', id: 102, method: 'tools/list' }, { headers: ctx.headers, auth: grantedAuth });
         expect(list.body.result.tools.some((tool) => tool.name === 'login.start')).toBe(true);
@@ -314,6 +332,22 @@ describe('agent mcp dispatcher', () => {
         expect(denied.status).toBe(403);
         expect(denied.body.error.code).toBe('SCOPE_DENIED');
         expect(ctx.worker.calls.slice(cartCallStart).some((call) => call.op === 'naver.cart.prepare')).toBe(false);
+    });
+
+    it('rechecks login scope after queueing and stops credential fill after revocation', async () => {
+        const ctx = await startedSession();
+        const blocker = ctx.worker.blockNext('login.start');
+        let scopesGranted = true; let authCalls = 0;
+        const auth = async () => { authCalls += 1; return { device_id: 'dev_a', epoch: 1, scopes: scopesGranted ? ['browser:read','login:operate'] : ['browser:read'] }; };
+        const starting = handle(ctx.mcp, toolCall(106, 'login.start', { protocol_version:'0.1.0', request_id:'start_queue' }), { headers:ctx.headers, auth });
+        await blocker.entered;
+        const callStart = ctx.worker.calls.length;
+        const pending = handle(ctx.mcp, toolCall(107, 'login.fill_credentials', { protocol_version:'0.1.0', request_id:'fill_queue' }), { headers:ctx.headers, auth });
+        while (authCalls < 3) await new Promise((resolve) => setImmediate(resolve));
+        scopesGranted = false; blocker.release(); await starting;
+        const denied = await pending;
+        expect(denied.status).toBe(403); expect(denied.body.error.code).toBe('SCOPE_DENIED');
+        expect(ctx.worker.calls.slice(callStart).some((call) => call.op === 'login.fill_credentials')).toBe(false);
     });
 
     it('redacts listing output and rejects stale, cross-session, and restarted reads', async () => {

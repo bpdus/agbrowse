@@ -390,7 +390,25 @@ async function guardRequest(route, pagePolicies, getMode = () => 'normal') {
         if (isLogoutUrl(url)) { await abortRoute(route); return; }
         const mode = getMode();
         if (mode === 'login' || mode === 'transitioning') {
-            if (mode !== 'login' || classifyLoginRequest(url, method) !== 'allow' || chainHasWebSocket(request)) { await abortRoute(route); return; }
+            const loginProbe = page && pagePolicies.get(page)?.requestPolicy?.operation === 'naver.login_status';
+            if (mode !== 'login' || (!loginProbe && classifyLoginRequest(url, method) !== 'allow') || chainHasWebSocket(request)) { await abortRoute(route); return; }
+            if (loginProbe) {
+                const policy = pagePolicies.get(page).requestPolicy;
+                if (!redirectChainAllowed(request, policy)) { await abortRoute(route); return; }
+                const response = await route.fetch({ maxRedirects: 0 });
+                const status = response.status?.() ?? 0;
+                if (status >= 300 && status < 400) {
+                    const location = response.headers?.().location;
+                    let next;
+                    try { next = new URL(location, url).href; } catch { await abortRoute(route); return; }
+                    if (classifyLoginStatusRequest(next, 'GET', 'navigation', policy, { redirected: true }) !== 'allow') { await abortRoute(route); return; }
+                    const followed = await route.fetch({ url: next, method: 'GET', maxRedirects: 0 });
+                    if ((followed.status?.() ?? 0) < 300 || (followed.status?.() ?? 0) >= 400) pagePolicies.get(page).loginStatusFinalUrl = next;
+                    await route.fulfill({ response: followed }); return;
+                }
+                if (requestIsNavigation(request)) pagePolicies.get(page).loginStatusFinalUrl = url;
+                await route.fulfill({ response }); return;
+            }
             let currentUrl = url;
             let currentMethod = method.toUpperCase();
             let response = await route.fetch({ maxRedirects: 0 });
@@ -1124,11 +1142,30 @@ export function createAgentRuntime(config) {
                 const url = assertLoginNavigation(payload.url);
                 loginController?.clear(); await loginPage.goto(url, { waitUntil: 'domcontentloaded' }); return { navigated: true };
             }
-            if (op === 'login.screenshot') return { image: (await loginPage.screenshot({ type: 'png' })).toString('base64') };
+            if (op === 'login.screenshot') return { image: (await loginController.screenshot()).toString('base64') };
             if (op === 'login.snapshot') return { snapshot: await loginController.snapshot() };
             if (op === 'login.click') return loginController.click(payload);
             if (op === 'login.type') return loginController.typeLoginText(payload);
             if (op === 'login.press') return loginController.pressLoginKey(payload.key);
+            if (op === 'login.fill_credentials') return loginController.fillCredentials(async () => {
+                const { createNaverCredentialStore } = await import('./agent-naver-credentials.mjs');
+                return createNaverCredentialStore().readCredentials();
+            });
+            if (op === 'login.submit') return loginController.submit();
+            if (op === 'login.check_progress') {
+                const progress = await loginController.checkProgress();
+                if (progress.status !== 'logged_in') return progress;
+                // Probe account evidence on a separate page so the active challenge is never navigated away.
+                const probe = await context.newPage();
+                const policy = loginStatusPolicy();
+                const probePolicy = { mode: 'read', mutationPermit: null, blockedReason: null, requestPolicy: policy, loginStatusFinalUrl: null };
+                pagePolicies.set(probe, probePolicy);
+                try {
+                    const status = await readLoginStatusFromPage(probe, { getValidatedFinalUrl: () => probePolicy.loginStatusFinalUrl, requireValidatedFinalUrl: true });
+                    return { status: status.status === 'logged_in' ? 'logged_in' : 'unknown' };
+                } catch { return { status: 'unknown' }; }
+                finally { pagePolicies.delete(probe); await probe.close().catch(() => {}); }
+            }
             throw readError('ACTION_DENIED');
         });
     }

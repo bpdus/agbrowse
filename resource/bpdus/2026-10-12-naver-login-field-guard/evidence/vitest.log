@@ -1,0 +1,68 @@
+
+ RUN  v3.2.6 /home/box/src/agbrowse
+
+agbrowse-mcp: tool=- status=401 ms=1 correlation=582cb02fcc5fe13f
+ ✓ test/unit/agent-gateway.test.mjs > loopback auth gateway > serves the credential form and enforces exact origin without reflecting submitted secrets 33ms
+ ✓ test/unit/agent-gateway.test.mjs > loopback auth gateway > listens only after start and only on 127.0.0.1 7ms
+ ✓ test/unit/agent-gateway.test.mjs > loopback auth gateway > enforces host, origin, size, and route limits 29ms
+agbrowse-mcp: tool=- status=401 ms=0 correlation=73e05802fd48fb90
+agbrowse-mcp: tool=- status=401 ms=0 correlation=0c20714f84cc8f7a
+ ✓ test/unit/agent-gateway.test.mjs > loopback auth gateway > starts the foreground entry on loopback and rejects other bind addresses 400ms
+ ✓ test/unit/agent-gateway.test.mjs > loopback auth gateway > leaves bootstrap routes open and requires a token everywhere else 19ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > does nothing on import 3ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > returns only the lifecycle methods 1ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > serializes cart inspection through the runtime queue and fails live layouts closed 10ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > returns LOGIN_REQUIRED for a recognized login form without reading its value 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > blocks Naver login redirects before fetching them and records blocked order attempts 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > switches login mode in process while retaining the profile lock and ignores retired context disconnects 113ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > rejects refs after login.end and login.start and after a runtime restart 21ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > applies the login route policy during the initial goto 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > retains runtime ownership after a login context close failure 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > rejects a foreign profile or endpoint before launch 2ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > refuses a symlinked dedicated profile and does not fall back 2ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > refuses an unwritable dedicated profile and does not fall back 1ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > launches installed Chrome over the debugging pipe 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > keeps two sessions on their own targets when tabs move 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > fails a closed target without substituting another tab 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > clears bindings on disconnect and does not relaunch or replay 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > closes Chrome before releasing the lock and rejects old ids after restart 6ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > leaves an existing lock owner untouched and cleans up a failed launch 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > does not enroll a page that is not about:blank 3ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > turns a secret-bearing page creation failure into a stable code 15ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > keeps the profile lock when close fails and retries shutdown before restart 8ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > installs context interception before any page and blocks service workers 9ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > allows only exact account and login redirects during login status on that page 5ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > reinstalls the document watcher on each main-frame navigation 8ms
+ ✓ test/unit/agent-runtime.test.mjs > agent-runtime > retries the watcher when the document element is missing and counts a restored mutation 5ms
+ ✓ test/unit/agent-login-controller.test.mjs > login controller > classifies sanitized progress fixtures with challenge precedence 138ms
+ ✓ test/unit/agent-login-controller.test.mjs > login controller > does not classify a captcha script alone as a human challenge 6ms
+ ✓ test/unit/agent-login-controller.test.mjs > login controller > fills the exact trusted fields without submitting, then submits only explicitly 36ms
+ ✓ test/unit/agent-login-controller.test.mjs > login controller > redacts password controls and refuses password typing, including revealed fields 17ms
+ ✓ test/unit/agent-login-controller.test.mjs > login controller > expires refs after navigation and rejects shortcuts outside the key set 10ms
+ ✓ test/unit/agent-login-controller.test.mjs > login controller > rejects refs when their original element is removed or replaced 15ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > blocks logout and non-allowlisted destinations before request handling 1ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > allows only secure login and static resource requests 0ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > waits for all Chrome profile locks and times out without removing them 7ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > restricts top-level navigation to the login page 1ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > binds visible refs to their real selector elements when hidden inputs precede them 86ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > rejects refs from older snapshots after controls change 23ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > rejects refs from a previous controller generation and malformed refs without clicking 12ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > hands off captcha controls and masks both credential fields in screenshots 14ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > fails closed when validated credential fields are replaced during keychain access 22ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > fails closed when keychain access moves the password field to an untrusted form and changes its type 21ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > fails closed when keychain access changes the validated form action in place 13ms
+ ✓ test/unit/agent-login.test.mjs > agent login policy > fails closed when keychain access navigates the top-level page during keychain access 10ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > exposes explicit credential actions behind login scope and projects closed outputs 8ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > rejects auth, scope, version, and schema failures before the worker tool 2ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > lists login status and keeps cart read and write scopes separate 3ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > hides login controls from read-only devices and gates lifecycle calls behind the dedicated scope 2ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > rechecks cart scopes after a session-queue wait and stops before worker dispatch 2ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > rechecks login scope after queueing and stops credential fill after revocation 1ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > redacts listing output and rejects stale, cross-session, and restarted reads 3ms
+ ✓ test/unit/agent-mcp.test.mjs > agent mcp dispatcher > serves authenticated /mcp through the gateway and stops bad calls at the door 18ms
+
+ Test Files  5 passed (5)
+      Tests  56 passed (56)
+   Start at  13:03:08
+   Duration  3.27s (transform 230ms, setup 0ms, collect 924ms, tests 1.22s, environment 1ms, prepare 260ms)
+

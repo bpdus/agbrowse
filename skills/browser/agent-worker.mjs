@@ -26,7 +26,7 @@ const ALLOWED_ERROR_CODES = new Set([
     'STATE_UNSAFE', 'LOGIN_MODE_REQUIRED', 'PASSWORD_REFUSED', 'PROFILE_RELEASE_TIMEOUT',
 ]);
 const CART_OPERATIONS = new Set(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set']);
-const LOGIN_OPERATIONS = new Set(['login.start','login.end','login.status','login.navigate','login.screenshot','login.snapshot','login.click','login.type','login.press','worker.restart']);
+const LOGIN_OPERATIONS = new Set(['login.start','login.end','login.status','login.navigate','login.screenshot','login.snapshot','login.click','login.type','login.press','login.fill_credentials','login.submit','login.check_progress','worker.restart']);
 const READ_OPERATIONS = new Set([
     'browser.observe',
     'browser.session.close',
@@ -94,6 +94,10 @@ function writeError(stream, code) {
 
 /** Route only fixed worker operations to the matching runtime dispatcher. */
 export async function dispatchWorkerOperation(runtime, op, payload) {
+    if (op === 'credentials.naver.save') {
+        const { createNaverCredentialStore } = await import('./agent-naver-credentials.mjs');
+        return createNaverCredentialStore().saveCredentials(payload.account, payload.password);
+    }
     if (LOGIN_OPERATIONS.has(op)) {
         if (typeof runtime.dispatchLogin !== 'function') throw readError('ACTION_DENIED');
         return runtime.dispatchLogin(op, payload);
