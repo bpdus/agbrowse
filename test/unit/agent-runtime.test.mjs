@@ -209,7 +209,7 @@ describe('agent-runtime', () => {
 
     it('returns only the lifecycle methods', () => {
         const runtime = createAgentRuntime();
-        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchCart', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
+        expect(Object.keys(runtime).sort()).toEqual(['closeSession', 'dispatchCart', 'dispatchLogin', 'dispatchRead', 'inspectSession', 'openSession', 'start', 'stop']);
     });
 
     it('serializes cart inspection through the runtime queue and fails live layouts closed', async () => {

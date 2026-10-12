@@ -85,6 +85,8 @@ grep -Fq 'agent-gateway.mjs' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gatew
 grep -Fq 'allowed.example' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist"
 grep -Fq "$TMP/bin/node" "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist"
 grep -Fq '<key>ProgramArguments</key>' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist"
+grep -Fq '<key>KeepAlive</key>\n  <true/>' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.worker.plist" || grep -A1 -Fq '<key>KeepAlive</key>' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.worker.plist"
+grep -Fq '<dict><key>SuccessfulExit</key><false/></dict>' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist"
 grep -Fq '<string>--state-dir</string>' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist"
 if "$SCRIPT" install --host 0.0.0.0 --gateway-id gw --audience https://example.test/mcp > "$TMP/invalid.out" 2> "$TMP/invalid.err"; then exit 1; fi
 grep -Fq 'must remain 127.0.0.1' "$TMP/invalid.err"

@@ -23,9 +23,10 @@ const ALLOWED_ERROR_CODES = new Set([
     'SESSION_CLOSED',
     'ALREADY_RUNNING',
     'SHUTDOWN_FAILED',
-    'STATE_UNSAFE',
+    'STATE_UNSAFE', 'LOGIN_MODE_REQUIRED', 'PASSWORD_REFUSED', 'PROFILE_RELEASE_TIMEOUT',
 ]);
 const CART_OPERATIONS = new Set(['naver.product.read', 'naver.cart.read', 'naver.cart.prepare', 'naver.cart.set']);
+const LOGIN_OPERATIONS = new Set(['login.start','login.end','login.status','login.navigate','login.screenshot','login.snapshot','login.click','login.type','login.press','worker.restart']);
 const READ_OPERATIONS = new Set([
     'browser.observe',
     'browser.session.close',
@@ -93,6 +94,10 @@ function writeError(stream, code) {
 
 /** Route only fixed worker operations to the matching runtime dispatcher. */
 export async function dispatchWorkerOperation(runtime, op, payload) {
+    if (LOGIN_OPERATIONS.has(op)) {
+        if (typeof runtime.dispatchLogin !== 'function') throw readError('ACTION_DENIED');
+        return runtime.dispatchLogin(op, payload);
+    }
     if (CART_OPERATIONS.has(op)) {
         if (typeof runtime.dispatchCart !== 'function') throw readError('ACTION_DENIED');
         return runtime.dispatchCart(op, payload);
@@ -187,7 +192,11 @@ export async function runAgentWorker(options = {}) {
             if (typeof runtime.dispatchRead === 'function') {
                 endpoint = await startReadEndpoint({
                     ...(options.socketPath ? { socketPath: options.socketPath } : {}),
-                    dispatch: (op, payload) => dispatchWorkerOperation(runtime, op, payload),
+                    dispatch: async (op, payload) => {
+                        const result = await dispatchWorkerOperation(runtime, op, payload);
+                        if (op === 'worker.restart') setTimeout(() => wake('signal'), 0);
+                        return result;
+                    },
                 });
             }
         } catch (error) {

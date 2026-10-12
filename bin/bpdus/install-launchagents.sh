@@ -121,7 +121,9 @@ render_plist() {
 EOF
   printf '  <string>%s</string>\n  <key>LimitLoadToSessionType</key>\n  <string>Aqua</string>\n  <key>WorkingDirectory</key>\n  <string>%s</string>\n  <key>ProgramArguments</key>\n  <array>\n' "$(xml "$label")" "$(xml "$SRC")"
   for arg in "${args[@]}"; do arg_entry "$arg"; done
-  printf '  </array>\n  <key>EnvironmentVariables</key>\n  <dict>\n    <key>HOME</key>\n    <string>%s</string>\n    <key>PATH</key>\n    <string>%s</string>\n  </dict>\n  <key>RunAtLoad</key>\n  <true/>\n  <key>KeepAlive</key>\n  <dict><key>SuccessfulExit</key><false/></dict>\n  <key>ThrottleInterval</key>\n  <integer>10</integer>\n  <key>StandardOutPath</key>\n  <string>%s</string>\n  <key>StandardErrorPath</key>\n  <string>%s</string>\n</dict></plist>\n' "$(xml "$HOME")" "$(xml "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")" "$(xml "$log")" "$(xml "$log")"
+  printf '  </array>\n  <key>EnvironmentVariables</key>\n  <dict>\n    <key>HOME</key>\n    <string>%s</string>\n    <key>PATH</key>\n    <string>%s</string>\n  </dict>\n  <key>RunAtLoad</key>\n  <true/>\n  <key>KeepAlive</key>\n'
+  if [ "$service" = worker ]; then printf '  <true/>\n'; else printf '  <dict><key>SuccessfulExit</key><false/></dict>\n'; fi
+  printf '  <key>ThrottleInterval</key>\n  <integer>10</integer>\n  <key>StandardOutPath</key>\n  <string>%s</string>\n  <key>StandardErrorPath</key>\n  <string>%s</string>\n</dict></plist>\n' "$(xml "$HOME")" "$(xml "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")" "$(xml "$log")" "$(xml "$log")"
 }
 
 label_for() { [ "$1" = worker ] && printf '%s' "$WORKER_LABEL" || printf '%s' "$GATEWAY_LABEL"; }
