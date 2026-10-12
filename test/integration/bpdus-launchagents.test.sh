@@ -27,6 +27,7 @@ STUB
 cat > "$TMP/bin/launchctl" <<'STUB'
 #!/bin/bash
 echo "$*" >> "$TRACE"
+[ "${FAIL_BOOTSTRAP:-0}" = 1 ] && [ "$1" = bootstrap ] && exit 9
 case "$1" in
   print)
     if [ "$2" = gui/501 ]; then exit 0; fi
@@ -55,12 +56,32 @@ grep -Fq "$HOME/.agbrowse-bpdus/src" "$TMP/dry"
 [ -f "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist" ]
 grep -Fq 'agent-gateway.mjs' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist"
 grep -Fq 'allowed.example' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist"
+grep -Fq '<key>ProgramArguments</key>' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist"
+grep -Fq '<string>--state-dir</string>' "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist"
+if "$SCRIPT" install --host 0.0.0.0 --gateway-id gw --audience https://example.test/mcp > "$TMP/invalid.out" 2> "$TMP/invalid.err"; then exit 1; fi
+grep -Fq 'must remain 127.0.0.1' "$TMP/invalid.err"
+
+# Reinstall unloads exact labels before loading replacements.
+"$SCRIPT" install --gateway-id gw2 --audience https://example.test/mcp
+worker_boot=$(grep -nF 'bootout gui/501/me.bpdus.agbrowse.worker' "$TRACE" | tail -1 | cut -d: -f1)
+gateway_boot=$(grep -nF 'bootout gui/501/me.bpdus.agbrowse.gateway' "$TRACE" | tail -1 | cut -d: -f1)
+worker_load=$(grep -nF 'bootstrap gui/501 ' "$TRACE" | tail -2 | head -1 | cut -d: -f1)
+[ "$worker_boot" -lt "$gateway_boot" ] && [ "$gateway_boot" -lt "$worker_load" ]
 "$SCRIPT" restart gateway
 grep -Fq 'kickstart -k gui/501/me.bpdus.agbrowse.gateway' "$TRACE"
-printf 'gui/501/me.bpdus.agbrowse.gateway\n' >> "$STATE"
-"$SCRIPT" restart gateway
-grep -Fq 'bootstrap gui/501 ' "$TRACE"
+grep -Fv 'me.bpdus.agbrowse.worker' "$STATE" > "$STATE.tmp" || true; mv "$STATE.tmp" "$STATE"
+"$SCRIPT" restart worker
+grep -Fq "bootstrap gui/501 $HOME/Library/LaunchAgents/me.bpdus.agbrowse.worker.plist" "$TRACE"
+"$SCRIPT" status > "$TMP/status"
+grep -Fq 'worker installed=yes' "$TMP/status"
+grep -Fq 'worker loaded=yes' "$TMP/status"
+touch "$HOME/Library/LaunchAgents/unrelated.plist"
+FAIL_BOOTSTRAP=1; export FAIL_BOOTSTRAP
+if "$SCRIPT" restart gateway > "$TMP/failure.out" 2> "$TMP/failure.err"; then exit 1; fi
+grep -Fq 'kickstart failed' "$TMP/failure.err"
+unset FAIL_BOOTSTRAP
 "$SCRIPT" uninstall
 [ ! -e "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.worker.plist" ]
 [ ! -e "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist" ]
+[ -e "$HOME/Library/LaunchAgents/unrelated.plist" ]
 echo 'bpdus-launchagents: PASS'
