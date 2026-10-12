@@ -31,7 +31,7 @@ esac
 STUB
 cat > "$BIN/ps" <<'STUB'
 #!/bin/bash
-case "$*" in *424242*) echo "501 node /Users/jjbyun/.agbrowse-bpdus/src/skills/browser/agent-worker.mjs" ;; *434343*) echo "501 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=$PROFILE" ;; *) exit 1 ;; esac
+case "$*" in *424242*) echo "  501 node /Users/jjbyun/.agbrowse-bpdus/src/skills/browser/agent-worker.mjs" ;; *434343*) echo "  501 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=$PROFILE" ;; *) exit 1 ;; esac
 STUB
 cat > "$BIN/launchctl" <<'STUB'
 #!/bin/bash

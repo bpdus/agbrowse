@@ -55,7 +55,9 @@ discover_workers() {
     case "$candidate" in ''|*[!0-9]*) echo 'Worker discovery returned an invalid PID.' >&2; return 2 ;; esac
     details=$(ps -o uid=,args= -p "$candidate" 2>/dev/null); status=$?
     if [ "$status" -ne 0 ]; then kill -0 "$candidate" 2>/dev/null && { echo "Could not verify worker PID $candidate." >&2; return 2; }; continue; fi
-    uid=${details%%[[:space:]]*}; args=${details#*[[:space:]]}
+    read -r uid args <<EOFDETAILS
+$details
+EOFDETAILS
     [ "$uid" = "$(id -u)" ] || continue
     read -r executable script_arg _ <<EOFARGS
 $args
@@ -76,7 +78,9 @@ chrome_pids() {
   [ "$status" -eq 0 ] || { [ "$status" -eq 1 ] && return 1; echo "Could not inspect Chrome profile processes (pgrep status $status)." >&2; return 2; }
   for candidate in $output; do
     details=$(ps -o uid=,args= -p "$candidate" 2>/dev/null) || { kill -0 "$candidate" 2>/dev/null && { echo "Could not verify profile process $candidate." >&2; return 2; }; continue; }
-    uid=${details%%[[:space:]]*}; args=${details#*[[:space:]]}
+    read -r uid args <<EOFDETAILS
+$details
+EOFDETAILS
     [ "$uid" = "$(id -u)" ] || continue
     case "$args" in *Google\ Chrome*|*Google\ Chrome\ Helper*) printf '%s\n' "$candidate" ;; esac
   done

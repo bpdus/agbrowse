@@ -18,7 +18,21 @@ echo node
 STUB
 cat > "$TMP/bin/pgrep" <<'STUB'
 #!/bin/bash
+if [ "${MANAGED_RUNNING:-0}" = 1 ]; then
+  case "$*" in
+    *agent-worker*) grep -Fq 'me.bpdus.agbrowse.worker' "$STATE" && { echo 424242; exit 0; } ;;
+    *agent-gateway*) grep -Fq 'me.bpdus.agbrowse.gateway' "$STATE" && { echo 424243; exit 0; } ;;
+  esac
+fi
 exit 1
+STUB
+cat > "$TMP/bin/ps" <<'STUB'
+#!/bin/bash
+case "$*" in
+  *424242*) echo "  501 node $HOME/.agbrowse-bpdus/src/skills/browser/agent-worker.mjs" ;;
+  *424243*) echo "  501 node $HOME/.agbrowse-bpdus/src/skills/browser/agent-gateway.mjs" ;;
+  *) exit 1 ;;
+esac
 STUB
 cat > "$TMP/bin/plutil" <<'STUB'
 #!/bin/bash
@@ -36,7 +50,12 @@ echo "$*" >> "$TRACE"
 case "$1" in
   print)
     if [ "$2" = gui/501 ]; then exit 0; fi
-    grep -Fq "$2" "$STATE" && { echo 'state = running'; echo 'pid = 4321'; echo 'last exit code = 0'; exit 0; }
+    if grep -Fq "$2" "$STATE"; then
+      echo 'state = running'
+      case "$2" in *worker) echo 'pid = 424242' ;; *gateway) echo 'pid = 424243' ;; esac
+      echo 'last exit code = 0'
+      exit 0
+    fi
     exit 1 ;;
   bootstrap) label=${3##*/}; label=${label%.plist}; echo "$2/$label" >> "$STATE" ;;
   bootout) tmp="$STATE.tmp"; grep -Fv "$2" "$STATE" > "$tmp" || true; mv "$tmp" "$STATE" ;;
@@ -69,6 +88,7 @@ if "$SCRIPT" install --host 0.0.0.0 --gateway-id gw --audience https://example.t
 grep -Fq 'must remain 127.0.0.1' "$TMP/invalid.err"
 
 # Reinstall unloads exact labels before loading replacements.
+MANAGED_RUNNING=1; export MANAGED_RUNNING
 "$SCRIPT" install --port 7444 --gateway-id gw2 --audience https://example.test/mcp
 "$SCRIPT" install --port 7444 --gateway-id gw3 --audience https://example.test/mcp
 worker_boot=$(grep -nF 'bootout gui/501/me.bpdus.agbrowse.worker' "$TRACE" | tail -1 | cut -d: -f1)

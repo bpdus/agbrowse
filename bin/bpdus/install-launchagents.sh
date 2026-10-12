@@ -136,7 +136,9 @@ service_processes() {
   for candidate in $output; do
     case "$candidate" in ''|*[!0-9]*) echo "Invalid $service PID from process discovery." >&2; return 2 ;; esac
     details=$(ps -o uid=,args= -p "$candidate" 2>/dev/null) || { echo "Could not verify $service PID $candidate." >&2; return 2; }
-    uid=${details%%[[:space:]]*}; args=${details#*[[:space:]]}
+    read -r uid args <<EOFDETAILS
+$details
+EOFDETAILS
     [ "$uid" = "$(id -u)" ] || continue
     read -r executable script_arg _ <<EOFARGS
 $args
@@ -170,7 +172,7 @@ wait_processes_stopped() {
 }
 
 install_agents() {
-  local selection=${1:-all} service tmpw tmpg
+  local selection=${1:-all} service tmpw tmpg job_output managed_pid
   select_services "$selection"
   validate_install
   [ "$selection" = all ] || :
@@ -179,7 +181,13 @@ install_agents() {
     service_status=0
     service_pids=$(service_processes "$service") || service_status=$?
     [ "$service_status" -ne 2 ] || die "Could not verify existing $service processes."
-    [ "$service_status" -ne 0 ] || die "Unmanaged $service process found (PID(s): ${service_pids//$'\n'/, }). Stop the old herdr service gracefully, verify Chrome/profile shutdown, then retry."
+    if [ "$service_status" -eq 0 ]; then
+      job_output=$(launchctl print "$DOMAIN/$(label_for "$service")" 2>/dev/null) || job_output=''
+      managed_pid=$(printf '%s\n' "$job_output" | sed -n 's/^[[:space:]]*pid = //p' | head -1)
+      if [ -z "$managed_pid" ] || ! printf '%s\n' "$service_pids" | grep -Fxq "$managed_pid"; then
+        die "Unmanaged $service process found (PID(s): ${service_pids//$'\n'/, }). Stop the old herdr service gracefully, verify Chrome/profile shutdown, then retry."
+      fi
+    fi
   done
   if [ "$DRY_RUN" -eq 1 ]; then
     for service in "${SERVICES[@]}"; do
