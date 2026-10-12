@@ -10,7 +10,66 @@ afterEach(() => {
     else globalThis.getComputedStyle = oldGetComputedStyle;
 });
 
+async function submitWithMarkup(markup) {
+    const dom = new JSDOM(markup, { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
+    const oldDocument = globalThis.document;
+    const oldLocation = globalThis.location;
+    globalThis.document = dom.window.document;
+    globalThis.location = dom.window.location;
+    let clicks = 0;
+    const wrap = (element) => ({
+        element,
+        evaluate: async (fn, arg) => fn(element, arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg),
+        evaluateHandle: async (fn) => wrap(fn(element)),
+        fill: async (value) => { element.value = value; },
+        dispose: async () => {},
+    });
+    const locator = (find) => ({
+        count: async () => find().length,
+        isVisible: async () => find()[0]?.isConnected ?? false,
+        elementHandle: async () => find()[0] ? wrap(find()[0]) : null,
+        evaluate: async (fn) => fn(find()[0]),
+        click: async () => { if (find()[0]) clicks += 1; },
+        locator: (selector) => selector === 'xpath=ancestor::form[1]'
+            ? locator(() => { const el = find()[0]; return el?.closest('form') ? [el.closest('form')] : []; })
+            : locator(() => find().flatMap((el) => [...el.querySelectorAll(selector)])),
+    });
+    const page = {
+        url: () => dom.window.location.href,
+        on() {},
+        evaluate: async (fn, arg) => {
+            const previous = globalThis.document;
+            globalThis.document = dom.window.document;
+            try { return fn(arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg); }
+            finally { if (previous === undefined) delete globalThis.document; else globalThis.document = previous; }
+        },
+        locator: (selector) => locator(() => [...dom.window.document.querySelectorAll(selector)]),
+    };
+    const controller = createLoginController(page);
+    const filled = await controller.fillCredentials(async () => ({ result: 'credentials', account: 'operator', password: 'secret' }));
+    expect(filled).toEqual({ result: 'filled', reason: 'none' });
+    const result = await controller.submit();
+    dom.window.close();
+    if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
+    if (oldLocation === undefined) delete globalThis.location; else globalThis.location = oldLocation;
+    return { result, clicks };
+}
+
 describe('agent login policy', () => {
+    it('submits Naver real login button markup', async () => {
+        const outcome = await submitWithMarkup('<form action="/nidlogin.login"><input id="id" name="id"><input id="pw" name="pw" type="password"><button type="submit" class="btn_login" id="log.login"><span class="btn_text">로그인</span></button></form>');
+        expect(outcome).toEqual({ result: { result: 'submitted', reason: 'none' }, clicks: 1 });
+    });
+
+    it('does not submit a Naver login button outside the credential form', async () => {
+        const outcome = await submitWithMarkup('<form action="/nidlogin.login"><input id="id" name="id"><input id="pw" name="pw" type="password"></form><button type="submit" class="btn_login" id="log.login"><span class="btn_text">로그인</span></button>');
+        expect(outcome).toEqual({ result: { result: 'failed', reason: 'button_unavailable' }, clicks: 0 });
+    });
+
+    it('does not submit when the credential form has two Naver login buttons', async () => {
+        const outcome = await submitWithMarkup('<form action="/nidlogin.login"><input id="id" name="id"><input id="pw" name="pw" type="password"><button type="submit" id="log.login">로그인</button><button type="submit" id="log.login">로그인</button></form>');
+        expect(outcome).toEqual({ result: { result: 'failed', reason: 'button_unavailable' }, clicks: 0 });
+    });
     it('blocks logout and non-allowlisted destinations before request handling', () => {
         expect(isLogoutUrl('https://nid.naver.com/nidlogin.logout?foo=1')).toBe(true);
         expect(classifyLoginRequest('https://nid.naver.com/nidlogin.logout?foo=1', 'GET')).toBe('deny');
@@ -182,7 +241,7 @@ describe('agent login policy', () => {
     });
 
     it('fails closed when validated credential fields are replaced during keychain access', async () => {
-        const dom = new JSDOM('<form><input id="id" name="id"><input id="pw" name="pw" type="password"><button id="log" class="login">Login</button></form>', { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
+        const dom = new JSDOM('<form action="/nidlogin.login"><input id="id" name="id"><input id="pw" name="pw" type="password"><button type="submit" class="btn_login" id="log.login"><span class="btn_text">로그인</span></button></form>', { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
         const oldDocument = globalThis.document;
         const oldLocation = globalThis.location;
         globalThis.document = dom.window.document;
