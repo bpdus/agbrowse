@@ -177,15 +177,19 @@ install_agents() {
   validate_install
   [ "$selection" = all ] || :
   for service in worker gateway; do
-    local service_pids service_status
+    local service_pids service_status service_managed_pid service_stray_pids candidate
     service_status=0
     service_pids=$(service_processes "$service") || service_status=$?
     [ "$service_status" -ne 2 ] || die "Could not verify existing $service processes."
     if [ "$service_status" -eq 0 ]; then
       job_output=$(launchctl print "$DOMAIN/$(label_for "$service")" 2>/dev/null) || job_output=''
-      managed_pid=$(printf '%s\n' "$job_output" | sed -n 's/^[[:space:]]*pid = //p' | head -1)
-      if [ -z "$managed_pid" ] || ! printf '%s\n' "$service_pids" | grep -Fxq "$managed_pid"; then
-        die "Unmanaged $service process found (PID(s): ${service_pids//$'\n'/, }). Stop the old herdr service gracefully, verify Chrome/profile shutdown, then retry."
+      service_managed_pid=$(printf '%s\n' "$job_output" | sed -n 's/^[[:space:]]*pid = //p' | head -1)
+      service_stray_pids=()
+      for candidate in $service_pids; do
+        [ -n "$service_managed_pid" ] && [ "$candidate" = "$service_managed_pid" ] || service_stray_pids+=("$candidate")
+      done
+      if [ "${#service_stray_pids[@]}" -gt 0 ]; then
+        die "Unmanaged $service process found (stray PID(s): ${service_stray_pids[*]}). Stop the old herdr service gracefully, verify Chrome/profile shutdown, then retry."
       fi
     fi
   done
