@@ -265,7 +265,7 @@ export function createGateway(options) {
                 return;
             }
             if (url.pathname === '/admin/naver-credentials') {
-                const securityHeaders = { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'content-security-policy': "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" };
+                const securityHeaders = { 'cache-control': 'no-store', 'referrer-policy': 'same-origin', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'content-security-policy': "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" };
                 if (req.method === 'GET') {
                     const html = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Naver credentials</title><form method="post" autocomplete="off"><label>One-time token <input name="token" required></label><button>Continue</button></form>';
                     res.writeHead(200, { ...securityHeaders, 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) }); res.end(html); return;
@@ -285,7 +285,7 @@ export function createGateway(options) {
                 if (new Set(keys).size !== keys.length) { sendMcp(res, { status: 400, headers: securityHeaders }); return; }
                 if (keys.length === 1 && form.has('token')) {
                     let valid = false;
-                    try { valid = await consumeToken(form.get('token')); } catch { valid = false; }
+                    try { valid = await consumeToken(form.get('token').trim()); } catch { valid = false; }
                     if (!valid) { sendMcp(res, { status: 400, headers: securityHeaders }); return; }
                     const session = randomBytes(32).toString('hex');
                     credentialSessions.set(session, Date.now() + 5 * 60_000);
