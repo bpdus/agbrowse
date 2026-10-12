@@ -397,6 +397,10 @@ describe('agent-runtime', () => {
         const launch = trace.launches[0];
         expect(launch.userDataDir).toBe(profileDir());
         expect(launch.options.channel).toBe('chrome');
+        expect(launch.options.ignoreDefaultArgs).toEqual([
+            '--use-mock-keychain',
+            '--password-store=basic',
+        ]);
         expect(launch.options.headless).toBe(false);
         expect(launch.options.args).toBeUndefined();
         expect(launch.options.cdpPort).toBeUndefined();
