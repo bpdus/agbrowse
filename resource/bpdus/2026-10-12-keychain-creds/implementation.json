@@ -1,0 +1,173 @@
+{
+  "schema_version": 2,
+  "status": "DONE_WITH_CONCERNS",
+  "summary": "Implemented Keychain-backed Naver credentials, one-time token registration, explicit login actions, progress reporting, tests, and operator documentation.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-keychain-creds/plan.json",
+  "tasks": [
+    {
+      "task_id": 1,
+      "status": "complete",
+      "changed_files": [
+        "skills/browser/agent-naver-credentials.mjs",
+        "test/unit/agent-naver-credentials.test.mjs"
+      ]
+    },
+    {
+      "task_id": 2,
+      "status": "complete",
+      "changed_files": [
+        "skills/browser/agent-credentials-admin.mjs",
+        "bin/bpdus/credentials-token.sh",
+        "skills/browser/agent-gateway.mjs",
+        "skills/browser/agent-ipc.mjs",
+        "skills/browser/agent-worker.mjs",
+        "test/unit/agent-credentials-admin.test.mjs",
+        "test/unit/agent-gateway.test.mjs"
+      ]
+    },
+    {
+      "task_id": 3,
+      "status": "complete",
+      "changed_files": [
+        "skills/browser/agent-login.mjs",
+        "skills/browser/agent-runtime.mjs",
+        "skills/browser/agent-worker.mjs",
+        "skills/browser/agent-ipc.mjs",
+        "skills/browser/agent-mcp.mjs",
+        "test/unit/agent-login-controller.test.mjs",
+        "test/unit/agent-mcp.test.mjs",
+        "test/fixtures/agent-login-progress"
+      ]
+    },
+    {
+      "task_id": 4,
+      "status": "complete_with_concerns",
+      "changed_files": [
+        "docs/bpdus/LAUNCHAGENTS.md",
+        "test/fixtures/agent-login-progress",
+        "test/unit/agent-gateway.test.mjs",
+        "test/unit/agent-naver-credentials.test.mjs"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "/home/box/src/agbrowse/bin/bpdus/credentials-token.sh",
+      "sha256": "7f153cfe613f69f9369ae2dc5d56577ca2b73fbcfb57779dfab96525416aaecc"
+    },
+    {
+      "path": "/home/box/src/agbrowse/docs/bpdus/LAUNCHAGENTS.md",
+      "sha256": "ec21e412d1971338264cf27e38856e83fad31972a2e54117e52e8665655821cd"
+    },
+    {
+      "path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-keychain-creds/plan.json",
+      "sha256": "80443001f90e0d0f9133bfc3a64d25d25ae700c2472946f70e58228ae2d912fd"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-credentials-admin.mjs",
+      "sha256": "c51740d04ecc69de4954df6c032f7c7ddb9e856439b18c6622b1af662c2b6549"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-gateway.mjs",
+      "sha256": "c2b2f3793186a0718c08ed7e1ab2130e4f7e7e8e61b3e5e181fce6b027550ad8"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-ipc.mjs",
+      "sha256": "aad7b7f847228c2488f52e18904fa320e6f9d45c857ce4de6931c25f30befcba"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-login.mjs",
+      "sha256": "35297d637de77e13dc2b35d896ce51c9053182ae2ec33a5865fc1bee07c7aa54"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-mcp.mjs",
+      "sha256": "9db13da9d9833fa7868d0468d9d1b1352510f6b0794b630f6d8edd92e88ac3fb"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-naver-credentials.mjs",
+      "sha256": "ada4b74fa5d53d73a2b6ad7b775610993cba6751aa5b323c24cd524d75857311"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-runtime.mjs",
+      "sha256": "ef1011502a49ebc9241fc2d76bbb7ab89443c3cb37b0eb90fea6a593bb9767f5"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-worker.mjs",
+      "sha256": "07aecaf458faa9610bcd1999a8da5ff3f38ed03eda666cd2c51ebf9a2cdb1653"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/fixtures/agent-login-progress/logged-in.html",
+      "sha256": "96f7e4732fe2c295defe1406eb220f621138ad94333e8a503b0805a431f765ce"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/fixtures/agent-login-progress/login-page.html",
+      "sha256": "231f32c0a841b020fbd38effd02572d71654f51239bf5e7a21ca08e9f4a3da83"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/fixtures/agent-login-progress/needs-human.html",
+      "sha256": "3df2e7bb5619d2ccc301c34f6d57fbce406477ce8946e1642feefd0518532ae8"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/fixtures/agent-login-progress/overlap.html",
+      "sha256": "e765ac4b6e2de56219b0f946dd5c06caef9aa0f993569dc19490ab933c2f421e"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/fixtures/agent-login-progress/phone-approval.html",
+      "sha256": "3d687a62bdf606ec124e9bcc46f867fae0e39f130d01a90dd862c43e8744e2c9"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/fixtures/agent-login-progress/unknown.html",
+      "sha256": "be0cc62c94cac305e45780dbf083c9dbf5641aa4698b0c07324525386f875407"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-credentials-admin.test.mjs",
+      "sha256": "d306e854f86c88a05617bc882d1321bb69bec0b309a9e6098f73936347554bc0"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-gateway.test.mjs",
+      "sha256": "1b96d60719d80b7f0b8ba910c04fc429ed2b2ee33ca889790a8426902d482a25"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-login-controller.test.mjs",
+      "sha256": "79d3d48ee53254b6a5772f4240b1d2700c4229f408d1cbd07cbcac2d8dc42e6b"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-mcp.test.mjs",
+      "sha256": "52c10a9cb795b31eaf707346051e20dd3aec0659b8ce57734b4aabae56cd61f9"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-naver-credentials.test.mjs",
+      "sha256": "9c35d6f8584536f2c7421d4fbd135aafa8713d319f12b30e63f9fa2bfb633416"
+    }
+  ],
+  "checks": [
+    {
+      "name": "verification",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-keychain-creds/evidence/self-review.log",
+      "evidence_sha256": "d91294d1919c924205a2c6b7a3e9b6283fd3ffa161c5c9ec28820e8f62f990cf"
+    },
+    {
+      "name": "self_review",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-keychain-creds/evidence/self-review.log",
+      "evidence_sha256": "d91294d1919c924205a2c6b7a3e9b6283fd3ffa161c5c9ec28820e8f62f990cf"
+    },
+    {
+      "name": "tests",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-keychain-creds/evidence/affected-vitest.log",
+      "evidence_sha256": "cc9b28ab22193c35da6ff12fb8e6f6771f7c71017ce5f146ec3409ccc0d9d2a8"
+    },
+    {
+      "name": "typecheck:checkjs",
+      "status": "FAIL",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-keychain-creds/evidence/typecheck.log",
+      "evidence_sha256": "8c322d384c5cd4d5b1b6aa51d4ceec2a99b5cbd45afe39797d2f41acb2616fef"
+    }
+  ],
+  "concerns": [
+    "The requested iMac macOS Keychain and GUI LaunchAgent integration round trip could not run in this Linux environment.",
+    "npm run typecheck:checkjs exits with code 2 due to 132 existing diagnostics in unrelated files; no diagnostics referenced the changed agent-browser modules."
+  ]
+}
