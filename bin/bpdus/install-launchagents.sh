@@ -110,8 +110,8 @@ render_plist() {
   else
     label=$GATEWAY_LABEL; source="$SRC/skills/browser/agent-gateway.mjs"; log="$ROOT/logs/gateway.log"
     args=("$NODE_BIN" "$source" --host "$HOST" --port "$PORT" --state-dir "$ROOT/state" --key-dir "$ROOT/keys" --gateway-id "$GATEWAY_ID" --audience "$AUDIENCE")
-    for host in "${ALLOWED_HOSTS[@]}"; do args+=(--allowed-host "$host"); done
-    for host in "${ALLOWED_ORIGINS[@]}"; do args+=(--allowed-origin "$host"); done
+    for host in ${ALLOWED_HOSTS[@]+"${ALLOWED_HOSTS[@]}"}; do args+=(--allowed-host "$host"); done
+    for host in ${ALLOWED_ORIGINS[@]+"${ALLOWED_ORIGINS[@]}"}; do args+=(--allowed-origin "$host"); done
   fi
   cat <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
