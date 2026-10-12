@@ -439,6 +439,29 @@ describe('agent-runtime', () => {
         expect(await runtime.dispatchLogin('login.start', {})).toEqual({ mode: 'login', ready: true });
         expect(initialRequestFetches).toBe(1);
         expect(initialRequestAborts).toBe(0);
+        const outcomes = [];
+        for (const [url, method, resourceType] of [
+            ['https://rcaptcha.nid.naver.com/captcha.js', 'GET', 'script'],
+            ['https://ncpt.naver.com/captcha', 'POST', 'xhr'],
+            ['https://nid.naver.com/captcha.js', 'GET', 'script'],
+            ['https://nlog.naver.com/pixel', 'GET', 'image'],
+        ]) {
+            let fetched = false;
+            let aborted = false;
+            await loginContext.routes[0].handler({
+                request: () => makeRoutedRequest(url, { page: makePage('captcha-policy'), method, navigation: false, resourceType }),
+                async abort() { aborted = true; },
+                async fetch() { fetched = true; return { status: () => 200, headers: () => ({}) }; },
+                async fulfill() {}, async continue() {},
+            });
+            outcomes.push({ fetched, aborted });
+        }
+        expect(outcomes).toEqual([
+            { fetched: true, aborted: false },
+            { fetched: true, aborted: false },
+            { fetched: true, aborted: false },
+            { fetched: false, aborted: true },
+        ]);
         await runtime.stop();
     });
 

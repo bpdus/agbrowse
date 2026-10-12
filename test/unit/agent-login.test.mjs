@@ -102,10 +102,15 @@ describe('agent login policy', () => {
     });
     it('blocks logout and non-allowlisted destinations before request handling', () => {
         expect(isLogoutUrl('https://nid.naver.com/nidlogin.logout?foo=1')).toBe(true);
-        expect(classifyLoginRequest('https://nid.naver.com/nidlogin.logout?foo=1', 'GET')).toBe('deny');
+        for (const method of ['GET', 'POST']) {
+            expect(classifyLoginRequest('https://nid.naver.com/nidlogin.logout?foo=1', method, 'script')).toBe('deny');
+        }
         expect(classifyLoginRequest('https://example.com/', 'GET')).toBe('deny');
         expect(classifyLoginRequest('https://www.naver.com/', 'GET')).toBe('deny');
         expect(classifyLoginRequest('https://evilpstatic.net/a.js', 'GET')).toBe('deny');
+        for (const host of ['nlog.naver.com', 'nam.veta.naver.com', 'www.naver.com']) {
+            expect(classifyLoginRequest(`https://${host}/captcha.js`, 'GET', 'script')).toBe('deny');
+        }
     });
     it('allows only secure login and static resource requests', () => {
         expect(classifyLoginRequest('https://nid.naver.com/nidlogin.login', 'POST')).toBe('allow');
@@ -113,8 +118,22 @@ describe('agent login policy', () => {
         expect(classifyLoginRequest('https://ncpt.naver.com/static/ncaptcha-api.js', 'GET')).toBe('allow');
         expect(classifyLoginRequest('https://nca.naver.com/challenge', 'GET')).toBe('allow');
         expect(classifyLoginRequest('https://nca.naver.com:443/challenge', 'GET')).toBe('allow');
+        for (const type of ['script', 'image', 'stylesheet', 'font', 'xhr', 'fetch']) {
+            expect(classifyLoginRequest(`https://rcaptcha.nid.naver.com/${type}`, 'GET', type)).toBe('allow');
+            expect(classifyLoginRequest(`https://rcaptcha.nid.naver.com/${type}`, 'HEAD', type)).toBe('allow');
+        }
+        for (const type of ['xhr', 'fetch', 'ping']) {
+            expect(classifyLoginRequest(`https://ncpt.naver.com/${type}`, 'POST', type)).toBe('allow');
+        }
+        expect(classifyLoginRequest('https://nid.naver.com/captcha.js', 'GET', 'script')).toBe('allow');
+        expect(classifyLoginRequest('https://nid.naver.com/any/path.js', 'GET', 'script')).toBe('allow');
         expect(classifyLoginRequest('http://nid.naver.com/nidlogin.login', 'GET')).toBe('deny');
         expect(classifyLoginRequest('https://ncpt.naver.com/challenge', 'POST')).toBe('deny');
+        expect(classifyLoginRequest('https://rcaptcha.nid.naver.com/a.js', 'GET', 'document')).toBe('deny');
+        expect(classifyLoginRequest('https://rcaptcha.nid.naver.com:4443/a.js', 'GET', 'script')).toBe('deny');
+        expect(classifyLoginRequest('https://ncpt.naver.com/challenge', 'POST', 'document')).toBe('deny');
+        expect(classifyLoginRequest('https://nid.naver.com/nidlogin.logout', 'GET', 'script')).toBe('deny');
+        expect(classifyLoginRequest('https://nid.naver.com/nidlogin.logout', 'POST', 'script')).toBe('deny');
     });
     it('waits for all Chrome profile locks and times out without removing them', async () => {
         let lockCalls = 0;
