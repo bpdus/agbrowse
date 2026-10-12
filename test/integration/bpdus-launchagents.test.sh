@@ -78,6 +78,20 @@ grep -Fq 'host with spaces' "$TMP/dry"
 ! grep -Fq -- '--allowed-origin' "$TMP/dry"
 ! grep -Fq 'environment.example' "$TMP/dry"
 grep -Fq "$HOME/.agbrowse-bpdus/src" "$TMP/dry"
+awk '/===== worker =====/{service="worker"; next} /===== gateway =====/{service="gateway"; next} service == "worker"{print > worker_file} service == "gateway"{print > gateway_file}' \
+  worker_file="$TMP/worker.plist" gateway_file="$TMP/gateway.plist" "$TMP/dry"
+plist_value() {
+  awk -v key="$2" '$0 ~ "<key>" key "</key>" { getline; sub(/^[[:space:]]*<string>/, ""); sub(/<\/string>[[:space:]]*$/, ""); print; exit }' "$1"
+}
+for service in worker gateway; do
+  plist="$TMP/$service.plist"
+  [ "$(plist_value "$plist" HOME)" = "$HOME" ]
+  [ "$(plist_value "$plist" PATH)" = "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" ]
+  [ "$(plist_value "$plist" StandardOutPath)" = "$HOME/.agbrowse-bpdus/logs/$service.log" ]
+  [ "$(plist_value "$plist" StandardErrorPath)" = "$HOME/.agbrowse-bpdus/logs/$service.log" ]
+done
+[ "$(awk '/<key>KeepAlive<\/key>/{getline; print; exit}' "$TMP/worker.plist")" = '  <true/>' ]
+[ "$(awk '/<key>KeepAlive<\/key>/{getline; print; exit}' "$TMP/gateway.plist")" = '  <dict><key>SuccessfulExit</key><false/></dict>' ]
 "$SCRIPT" install --port 7444 --gateway-id gw --audience https://example.test/mcp --allowed-host 'allowed.example' --node-bin "$TMP/bin/node"
 [ -f "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.worker.plist" ]
 [ -f "$HOME/Library/LaunchAgents/me.bpdus.agbrowse.gateway.plist" ]
