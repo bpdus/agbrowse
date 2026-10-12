@@ -17,6 +17,7 @@ import {
 } from './agent-auth-store.mjs';
 import { connectReadEndpoint } from './agent-ipc.mjs';
 import { createMcpDispatcher } from './agent-mcp.mjs';
+import { consumeCredentialsToken } from './agent-credentials-admin.mjs';
 
 const BODY_BYTES = 16 * 1024;
 const PROTOCOL_VERSION = '0.1.0';
@@ -202,6 +203,8 @@ function bearerToken(req) {
  *   host?: string,
  *   mcp?: { handle: (request: any) => Promise<any> },
  *   worker?: { call: (op: string, payload: Record<string, unknown>) => Promise<any> },
+ *   credentialsWorker?: { call: (op: string, payload: Record<string, unknown>) => Promise<any> },
+ *   credentials?: { consume?: (token: string) => Promise<boolean>, origin?: string },
  *   log?: (line: string) => void,
  * }} options
  */
@@ -220,6 +223,11 @@ export function createGateway(options) {
         log: options.log ?? ((line) => { process.stderr.write(line); }),
     });
     let allowedHosts = options.allowedHosts.slice();
+    const credentialsWorker = options.credentialsWorker ?? options.worker ?? connectReadEndpoint();
+    const consumeToken = options.credentials?.consume ?? ((token) => consumeCredentialsToken(token));
+    const credentialOrigin = options.credentials?.origin ?? 'https://jjbyuns-imac.tail8f1886.ts.net:8443';
+    let credentialWindow = Date.now();
+    let credentialRequests = 0;
     /** @type {http.Server | null} */
     let server = null;
     let starting = false;
@@ -253,6 +261,34 @@ export function createGateway(options) {
             if (url.search) {
                 sendError(res, authError('AUTH_INVALID'), 404);
                 return;
+            }
+            if (url.pathname === '/admin/naver-credentials') {
+                const securityHeaders = { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" };
+                if (req.method === 'GET') {
+                    const html = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Naver credentials</title><form method="post" autocomplete="off"><label>One-time token <input name="token" required></label><label>Naver ID <input name="account" required></label><label>Password <input name="password" type="password" required></label><button>Save</button></form>';
+                    res.writeHead(200, { ...securityHeaders, 'content-type': 'text/html; charset=utf-8', 'content-length': Buffer.byteLength(html) }); res.end(html); return;
+                }
+                if (req.method !== 'POST') { sendMcp(res, { status: 405, headers: securityHeaders }); return; }
+                if (origin !== credentialOrigin) { sendMcp(res, { status: 403, headers: securityHeaders }); req.resume(); return; }
+                const type = singleHeader(req, 'content-type');
+                if (type !== 'application/x-www-form-urlencoded') { sendMcp(res, { status: 415, headers: securityHeaders }); req.resume(); return; }
+                if (Date.now() - credentialWindow >= 60_000) { credentialWindow = Date.now(); credentialRequests = 0; }
+                credentialRequests += 1;
+                if (credentialRequests > 5) { sendMcp(res, { status: 429, headers: securityHeaders }); req.resume(); return; }
+                const raw = await readBody(req);
+                const form = new URLSearchParams(raw.toString('utf8'));
+                const keys = [...form.keys()];
+                if (keys.length !== 3 || new Set(keys).size !== 3 || !['token','account','password'].every((key) => form.has(key))) { sendMcp(res, { status: 400, headers: securityHeaders }); return; }
+                const token = form.get('token'); const account = form.get('account'); const password = form.get('password');
+                let saved = false;
+                try {
+                    if (token && account && password && await consumeToken(token)) {
+                        const result = await credentialsWorker.call('credentials.naver.save', { account, password });
+                        saved = result?.result === 'saved';
+                    }
+                } catch { saved = false; }
+                const html = saved ? 'saved' : 'Registration failed. Generate a new token and try again.';
+                res.writeHead(saved ? 200 : 400, { ...securityHeaders, 'content-type': 'text/plain; charset=utf-8', 'content-length': Buffer.byteLength(html) }); res.end(html); return;
             }
             if (url.pathname === '/healthz') {
                 if (req.method !== 'GET') {

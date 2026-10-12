@@ -100,6 +100,22 @@ function runEntry(args) {
 }
 
 describe('loopback auth gateway', () => {
+    it('serves the credential form and enforces exact origin without reflecting submitted secrets', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'agent-gateway-creds-'));
+        const auth = createAuthService({ stateStore: createJsonStateStore({ directory: join(root, 'state') }), keyStore: createDevFileKeyStore({ directory: join(root, 'keys') }), gatewayId: 'gw_creds', audience: AUDIENCE });
+        const saves = [];
+        const gateway = createGateway({ auth, port: 0, allowedHosts: ['127.0.0.1:0'], allowedOrigins: ['https://jjbyuns-imac.tail8f1886.ts.net:8443'], credentials: { consume: async (token) => token === 'token-sentinel' }, credentialsWorker: { call: async (_op, payload) => { saves.push(payload); return { result: 'saved' }; } } });
+        track(root, gateway, auth); await gateway.start(); const port = gateway.address().port; const host = `127.0.0.1:${port}`;
+        const page = await request(port, { path: '/admin/naver-credentials', headers: { host } });
+        expect(page.status).toBe(200); expect(page.headers['cache-control']).toBe('no-store'); expect(page.headers['referrer-policy']).toBe('no-referrer');
+        const payload = new URLSearchParams({ token: 'token-sentinel', account: 'id-sentinel', password: 'pw-sentinel' }).toString();
+        const submit = (origin) => request(port, { path: '/admin/naver-credentials', method: 'POST', headers: { host, origin, 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(payload) }, body: payload });
+        const denied = await submit('https://evil.example'); expect(denied.status).toBe(403); expect(denied.body).not.toContain('sentinel');
+        const accepted = await submit('https://jjbyuns-imac.tail8f1886.ts.net:8443');
+        expect(accepted.status).toBe(200); expect(accepted.body).toBe('saved'); expect(accepted.body).not.toContain('sentinel');
+        expect(saves).toEqual([{ account: 'id-sentinel', password: 'pw-sentinel' }]);
+    });
+
     it('listens only after start and only on 127.0.0.1', async () => {
         expect(() => createGateway({
             auth: { submitPairing() {}, issueChallenge() {}, exchangeProof() {} },
