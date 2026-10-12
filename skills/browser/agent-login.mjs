@@ -287,13 +287,47 @@ export function createLoginController(page) {
             try { return { status: await page.evaluate(classifyLoginProgress) }; } catch { return { status: 'unknown' }; }
         },
         async screenshot() {
+            const maskKey = `__loginScreenshotMask_${nonce}`;
             try {
-                let mask;
-                try { mask = credentialMaskHandles?.map((handle) => handle.locator('xpath=.')); } catch { mask = null; }
-                if (!mask || mask.length !== 2) mask = [page.locator('input[type="text"],input[type="email"],input[type="tel"],input[type="password"]')];
-                return await page.screenshot({ type: 'png', mask });
+                await page.evaluate(({ handles, key }) => {
+                    const elements = new Set([...document.querySelectorAll('input,textarea'), ...handles]);
+                    const saved = [];
+                    try {
+                        for (const element of elements) {
+                            if (!(element instanceof Element) || !element.isConnected) continue;
+                            const style = element.style;
+                            saved.push({ element, visibility: style.getPropertyValue('visibility'), priority: style.getPropertyPriority('visibility') });
+                            style.setProperty('visibility', 'hidden');
+                            const rect = element.getBoundingClientRect();
+                            const overlay = document.createElement('div');
+                            Object.assign(overlay.style, { position: 'fixed', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, background: '#fff', opacity: '1', zIndex: '2147483647', pointerEvents: 'none' });
+                            overlay.setAttribute('data-login-screenshot-mask', key);
+                            (document.documentElement || document.body).appendChild(overlay);
+                        }
+                        window[key] = saved;
+                    } catch (error) {
+                        for (const item of saved) {
+                            if (item.visibility) item.element.style.setProperty('visibility', item.visibility, item.priority);
+                            else item.element.style.removeProperty('visibility');
+                        }
+                        document.querySelectorAll(`[data-login-screenshot-mask="${key}"]`).forEach((overlay) => overlay.remove());
+                        throw error;
+                    }
+                }, { handles: credentialMaskHandles ?? [], key: maskKey });
+                return await page.screenshot({ type: 'png' });
+            } catch {
+                throw readError('ACTION_DENIED');
+            } finally {
+                await page.evaluate((key) => {
+                    const saved = window[key] || [];
+                    for (const item of saved) {
+                        if (item.visibility) item.element.style.setProperty('visibility', item.visibility, item.priority);
+                        else item.element.style.removeProperty('visibility');
+                    }
+                    document.querySelectorAll(`[data-login-screenshot-mask="${key}"]`).forEach((overlay) => overlay.remove());
+                    delete window[key];
+                }, maskKey).catch(() => {});
             }
-            catch { if (credentialsFilled) throw readError('ACTION_DENIED'); return await page.screenshot({ type: 'png' }); }
         },
         clear() { invalidate(); clearCredentialMaskHandles(); },
     };

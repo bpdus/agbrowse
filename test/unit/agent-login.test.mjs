@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { readFile } from 'node:fs/promises';
+import { chromium } from 'playwright-core';
 import { assertLoginNavigation, classifyLoginRequest, createLoginController, isLogoutUrl, waitForProfileRelease } from '../../skills/browser/agent-login.mjs';
 
 const oldGetComputedStyle = globalThis.getComputedStyle;
@@ -122,27 +124,61 @@ describe('agent login policy', () => {
         dom.window.close();
     });
 
-    it('hands off captcha controls and masks both credential fields in screenshots', async () => {
+    it('hands off captcha controls and masks every input and textarea during screenshots without handle locator()', async () => {
         const dom = new JSDOM('<form><input id="id" name="id"><input id="pw" name="pw" type="password"><input id="captcha" name="captcha"></form>', { url: 'https://nid.naver.com/nidlogin.login', runScripts: 'outside-only' });
         globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
         dom.window.HTMLElement.prototype.getBoundingClientRect = () => ({ width: 100, height: 20 });
         let screenshotOptions;
         const page = {
             url: () => dom.window.location.href, on() {},
-            evaluate: async (fn, arg) => fn(arg && typeof arg === 'object' ? Object.fromEntries(Object.entries(arg).map(([key, value]) => [key, value?.element ?? value])) : arg),
+            evaluate: async (fn, arg) => {
+                const oldDocument = globalThis.document; const oldWindow = globalThis.window; const oldElement = globalThis.Element;
+                globalThis.document = dom.window.document; globalThis.window = dom.window; globalThis.Element = dom.window.Element;
+                try { return fn(arg && typeof arg === 'object' ? { ...arg, handles: (arg.handles || []).map((value) => value?.element ?? value) } : arg); }
+                finally { if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument; if (oldWindow === undefined) delete globalThis.window; else globalThis.window = oldWindow; if (oldElement === undefined) delete globalThis.Element; else globalThis.Element = oldElement; }
+            },
             $$: async (selector) => [...dom.window.document.querySelectorAll(selector)].map((element) => ({ evaluate: async (fn) => fn(element), fill: async () => {}, click: async () => {}, dispose: async () => {} })),
-            locator: (selector) => ({ selector, evaluate: async (fn) => fn(dom.window.document.querySelector(selector)), count: async () => 1, isVisible: async () => true }),
             screenshot: async (options) => { screenshotOptions = options; return Buffer.from('png'); },
         };
+        const source = await readFile(new URL('../../skills/browser/agent-login.mjs', import.meta.url), 'utf8');
+        expect(source).not.toMatch(/(?:handle|Handle)\.locator\s*\(/);
         const controller = createLoginController(page);
         const { controls } = await controller.snapshot();
         const captchaRef = controls[2].ref;
         await expect(controller.typeLoginText({ ref: captchaRef, text: '1234' })).rejects.toMatchObject({ code: 'HUMAN_REQUIRED' });
         await expect(controller.click({ ref: captchaRef })).rejects.toMatchObject({ code: 'HUMAN_REQUIRED' });
         await controller.screenshot();
-        expect(screenshotOptions.mask).toHaveLength(1);
-        expect(screenshotOptions.mask[0].selector).toBe('input[type="text"],input[type="email"],input[type="tel"],input[type="password"]');
+        expect(screenshotOptions).toEqual({ type: 'png' });
+        expect([...dom.window.document.querySelectorAll('input,textarea')].every((el) => el.style.visibility === '')).toBe(true);
+        expect(dom.window.document.querySelectorAll('[data-login-screenshot-mask]').length).toBe(0);
         dom.window.close();
+    });
+
+    it('does not take a screenshot when masking evaluation fails', async () => {
+        let screenshots = 0;
+        const controller = createLoginController({ on() {}, evaluate: async () => { throw new Error('evaluate failed'); }, screenshot: async () => { screenshots += 1; } });
+        await expect(controller.screenshot()).rejects.toMatchObject({ code: 'ACTION_DENIED' });
+        expect(screenshots).toBe(0);
+    });
+
+    it('screenshots a real page with credential text hidden and restores styles when Chromium is available', async (context) => {
+        let browser;
+        try { browser = await chromium.launch(); } catch { context.skip(); return; }
+        try {
+            const page = await browser.newPage({ viewport: { width: 360, height: 180 } });
+            await page.setContent('<style>body{margin:0;background:#fff}input{position:absolute;left:20px;width:240px;height:50px;border:0;outline:0;background:#fff;font:24px Arial}#id{top:30px}#pw{top:100px}</style><input id="id" name="id" value="secret-id"><input id="pw" type="password" value="secret-password">');
+            const controller = createLoginController(page);
+            const original = await page.locator('#id').evaluate((el) => el.getAttribute('style'));
+            const shot = await controller.screenshot();
+            const after = await page.locator('#id').evaluate((el) => el.getAttribute('style'));
+            expect(shot.byteLength).toBeGreaterThan(0);
+            expect(after).toBe(original);
+            expect(await page.locator('[data-login-screenshot-mask]').count()).toBe(0);
+            await page.locator('#id').evaluate((el) => { el.value = ''; });
+            const blankReference = await page.screenshot({ type: 'png' });
+            expect(shot.equals(blankReference)).toBe(true);
+            await page.close();
+        } finally { await browser.close(); }
     });
 
     it('fails closed when validated credential fields are replaced during keychain access', async () => {
