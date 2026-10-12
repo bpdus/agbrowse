@@ -14,7 +14,7 @@ const source = readFileSync(fileURLToPath(new URL('../../skills/browser/agent-mc
 function fakeWorker() {
     const calls = [];
     let workerId = `wrk_${'ab'.repeat(8)}`;
-    let loginStatus = { status: 'logged_out', evidence: 'login_link' };
+    let loginStatus = { status: 'logged_out', evidence: 'redirect_login' };
     const sessions = new Map();
     let blocker = null;
     return {
@@ -218,17 +218,17 @@ describe('agent mcp dispatcher', () => {
         const login = await handle(ctx.mcp, toolCall(91, 'naver.login_status', {
             protocol_version: '0.1.0', request_id: 'req_login_status', session_id: ctx.sessionId,
         }), { headers: ctx.headers });
-        expect(login.body.result.structuredContent).toEqual({ status: 'logged_out', evidence: 'login_link' });
-        expect(login.body.result.content[0].text).toBe('{"status":"logged_out","evidence":"login_link"}');
+        expect(login.body.result.structuredContent).toEqual({ status: 'logged_out', evidence: 'redirect_login' });
+        expect(login.body.result.content[0].text).toBe('{"status":"logged_out","evidence":"redirect_login"}');
         expect(ctx.worker.calls.at(-1)).toEqual({ op: 'naver.login_status', payload: { session_id: ctx.sessionId } });
         expect(JSON.stringify(login.body)).not.toMatch(/Fixture Private Name|example\.test|nidlogin|url=/i);
 
-        ctx.worker.setLoginStatus({ status: 'logged_in', evidence: 'logout_link' });
+        ctx.worker.setLoginStatus({ status: 'logged_in', evidence: 'account_page' });
         const loginIn = await handle(ctx.mcp, toolCall(97, 'naver.login_status', {
             protocol_version: '0.1.0', request_id: 'req_login_status_in', session_id: ctx.sessionId,
         }), { headers: ctx.headers });
-        expect(loginIn.body.result.structuredContent).toEqual({ status: 'logged_in', evidence: 'logout_link' });
-        expect(loginIn.body.result.content[0].text).toBe('{"status":"logged_in","evidence":"logout_link"}');
+        expect(loginIn.body.result.structuredContent).toEqual({ status: 'logged_in', evidence: 'account_page' });
+        expect(loginIn.body.result.content[0].text).toBe('{"status":"logged_in","evidence":"account_page"}');
 
         const cartRead = await handle(ctx.mcp, toolCall(92, 'naver.cart.read', {
             protocol_version: '0.1.0', request_id: 'req_cart_read', session_id: ctx.sessionId,

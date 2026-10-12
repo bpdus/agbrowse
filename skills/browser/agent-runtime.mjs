@@ -19,7 +19,7 @@ import {
     runListing,
     runObserve,
 } from './agent-naver-search.mjs';
-import { LOGIN_STATUS_URL, loginStatusPolicy, readLoginStatusFromDocument } from './agent-naver-login-status.mjs';
+import { classifyLoginStatusRequest, loginStatusPolicy, readLoginStatusFromPage } from './agent-naver-login-status.mjs';
 import { classifyCartRequest } from './agent-naver-cart.mjs';
 
 const WORKER_DIR_NAME = '.agbrowse-bpdus';
@@ -300,6 +300,20 @@ function requestIsWebSocket(request) {
 }
 
 /**
+ * @param {string} url
+ * @param {string} method
+ * @param {'navigation' | 'resource'} kind
+ * @param {ReturnType<typeof productionSearchPolicy> | ReturnType<typeof loginStatusPolicy>} policy
+ * @param {boolean} [redirected]
+ */
+function classifyPolicyRequest(url, method, kind, policy, redirected = false) {
+    if ('operation' in policy && policy.operation === 'naver.login_status') {
+        return classifyLoginStatusRequest(url, method, kind, policy, { redirected });
+    }
+    return classifyRequest(url, method, kind, policy);
+}
+
+/**
  * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, resourceType?: () => string, redirectedFrom?: () => unknown }} request
  */
 function chainHasWebSocket(request) {
@@ -316,8 +330,8 @@ function chainHasWebSocket(request) {
 }
 
 /**
- * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, resourceType?: () => string }} request
- * @param {ReturnType<typeof productionSearchPolicy>} policy
+ * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, redirectedFrom?: () => unknown, resourceType?: () => string }} request
+ * @param {ReturnType<typeof productionSearchPolicy> | ReturnType<typeof loginStatusPolicy>} policy
  */
 function hopAllowed(request, policy) {
     if (requestIsWebSocket(request)) return false;
@@ -325,12 +339,12 @@ function hopAllowed(request, policy) {
     const url = requestUrl(request);
     const navigation = requestIsNavigation(request);
     if (navigation && method !== 'GET') return false;
-    return classifyRequest(url, method, navigation ? 'navigation' : 'resource', policy) === 'allow';
+    return classifyPolicyRequest(url, method, navigation ? 'navigation' : 'resource', policy, Boolean(requestRedirectedFrom(request))) === 'allow';
 }
 
 /**
  * @param {{ method?: () => string, url?: () => string, isNavigationRequest?: () => boolean, redirectedFrom?: () => unknown }} request
- * @param {ReturnType<typeof productionSearchPolicy>} policy
+ * @param {ReturnType<typeof productionSearchPolicy> | ReturnType<typeof loginStatusPolicy>} policy
  */
 function redirectChainAllowed(request, policy) {
     const seen = new Set();
@@ -370,6 +384,9 @@ async function guardRequest(route, pagePolicies) {
         try { page = request.frame?.().page?.() ?? null; } catch { page = null; }
         const pagePolicy = page && pagePolicies.get(page);
         const policy = pagePolicy?.requestPolicy ?? productionSearchPolicy();
+        const loginStatusTopLevelNavigation = pagePolicy?.requestPolicy?.operation === 'naver.login_status'
+            && requestIsNavigation(request)
+            && !requestRedirectedFrom(request);
         if (chainHasWebSocket(request)) {
             await abortRoute(route);
             return;
@@ -385,7 +402,8 @@ async function guardRequest(route, pagePolicies) {
                     : /(?:^|\/)(?:checkout|order|payment|pay)(?:[./_-]|$)/i.test(parsedUrl.pathname)
                         ? 'ORDER_CREATION_DETECTED'
                         : null;
-            if (pageGate) {
+            const loginStatusProbe = pagePolicy?.requestPolicy?.operation === 'naver.login_status';
+            if (pageGate && !(loginStatusProbe && pageGate === 'LOGIN_REQUIRED')) {
                 if (pagePolicy) pagePolicy.blockedReason = pageGate;
                 await abortRoute(route);
                 return;
@@ -436,6 +454,7 @@ async function guardRequest(route, pagePolicies) {
             const status = typeof response.status === 'function' ? response.status() : 0;
             if (status < 300 || status >= 400) {
                 await route.fulfill({ response });
+                if (loginStatusTopLevelNavigation && pagePolicy) pagePolicy.loginStatusFinalUrl = nextUrl;
                 return;
             }
             if (followed >= MAX_REDIRECTS) {
@@ -460,7 +479,7 @@ async function guardRequest(route, pagePolicies) {
                 await abortRoute(route);
                 return;
             }
-            if (classifyRequest(resolved, followMethod, navigation ? 'navigation' : 'resource', policy) !== 'allow') {
+            if (classifyPolicyRequest(resolved, followMethod, navigation ? 'navigation' : 'resource', policy, true) !== 'allow') {
                 await abortRoute(route);
                 return;
             }
@@ -518,7 +537,7 @@ export function createAgentRuntime(config) {
     let lockedDir = null;
     /** @type {Map<string, { page: import('playwright-core').Page, targetId: string, epoch: number, seenPageEpoch: number, policyApplied: boolean }>} */
     const sessions = new Map();
-    /** @type {WeakMap<object, { mode: 'read' | 'cart', mutationPermit: any, blockedReason: string | null, requestPolicy?: ReturnType<typeof loginStatusPolicy> }>} */
+    /** @type {WeakMap<object, { mode: 'read' | 'cart', mutationPermit: any, blockedReason: string | null, requestPolicy?: ReturnType<typeof loginStatusPolicy>, loginStatusFinalUrl?: string | null }>} */
     const pagePolicies = new WeakMap();
     let intentionalStop = false;
     let disconnectNoted = false;
@@ -696,7 +715,7 @@ export function createAgentRuntime(config) {
         let page;
         try {
             page = await ctx.newPage();
-            pagePolicies.set(page, { mode: 'read', mutationPermit: null, blockedReason: null });
+            pagePolicies.set(page, { mode: 'read', mutationPermit: null, blockedReason: null, loginStatusFinalUrl: null });
             const targetId = await readTargetId(page);
             if (disconnectNoted || state !== 'running' || intentionalStop) {
                 throw new AgentRuntimeError('BROWSER_DISCONNECTED', 'Browser disconnected.');
@@ -942,17 +961,14 @@ export function createAgentRuntime(config) {
                     const statusPolicy = loginStatusPolicy();
                     const previousPolicy = pagePolicy.requestPolicy;
                     pagePolicy.requestPolicy = statusPolicy;
+                    pagePolicy.loginStatusFinalUrl = null;
                     try {
-                        await gotoAllowed(binding.page, binding, LOGIN_STATUS_URL, statusPolicy);
-                        const value = typeof binding.page.evaluate === 'function'
-                            ? await binding.page.evaluate(readLoginStatusFromDocument)
-                            : null;
-                        if (!value || !['logged_in', 'logged_out', 'unknown'].includes(value.status)
-                            || !['logout_link', 'login_link', 'none'].includes(value.evidence)) {
-                            return { status: 'unknown', evidence: 'none' };
-                        }
-                        return { status: value.status, evidence: value.evidence };
+                        return await readLoginStatusFromPage(binding.page, {
+                            getValidatedFinalUrl: () => pagePolicy.loginStatusFinalUrl ?? null,
+                            requireValidatedFinalUrl: true,
+                        });
                     } finally {
+                        pagePolicy.loginStatusFinalUrl = null;
                         if (previousPolicy === undefined) delete pagePolicy.requestPolicy;
                         else pagePolicy.requestPolicy = previousPolicy;
                     }
