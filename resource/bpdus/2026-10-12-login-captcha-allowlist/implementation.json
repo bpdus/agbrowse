@@ -1,0 +1,65 @@
+{
+  "schema_version": 2,
+  "status": "DONE",
+  "summary": "로그인 CAPTCHA에 필요한 Naver 요청만 제한적으로 허용하고 문서·테스트를 갱신했다.",
+  "plan_path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-captcha-allowlist/plan.json",
+  "tasks": [
+    {
+      "task_id": 1,
+      "status": "DONE",
+      "changed_files": [
+        "/home/box/src/agbrowse/skills/browser/agent-login.mjs",
+        "/home/box/src/agbrowse/skills/browser/agent-runtime.mjs",
+        "/home/box/src/agbrowse/test/unit/agent-login.test.mjs",
+        "/home/box/src/agbrowse/test/unit/agent-runtime.test.mjs",
+        "/home/box/src/agbrowse/docs/bpdus/LAUNCHAGENTS.md"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-captcha-allowlist/plan.json",
+      "sha256": "7fb29e047496a15cab141c8c1a920bf11d15832c09ee17ca51b8ef0e0150a520"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-login.mjs",
+      "sha256": "6c38c0796ae3fed430a60c93359486f383f572b36b17c63f8f50a919e60a0695"
+    },
+    {
+      "path": "/home/box/src/agbrowse/skills/browser/agent-runtime.mjs",
+      "sha256": "5316f7c94d5999f6e43e043fac4a4bf9719661bbd2019a0a1f0013654583d273"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-login.test.mjs",
+      "sha256": "6a272125e61816633188bf594991a00f5483aac2bb21f5c8453c89927de4249f"
+    },
+    {
+      "path": "/home/box/src/agbrowse/test/unit/agent-runtime.test.mjs",
+      "sha256": "e44e662b46641da8da25f706195a99dc3468a0622ce845a74f172a03413453b9"
+    },
+    {
+      "path": "/home/box/src/agbrowse/docs/bpdus/LAUNCHAGENTS.md",
+      "sha256": "9609abcbabb066e7989d2ad6e96735282aad2dc49afefcb1db99c805d0a1ff55"
+    }
+  ],
+  "checks": [
+    {
+      "name": "verification",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-captcha-allowlist/evidence/vitest.log",
+      "evidence_sha256": "a11c9bb5881328dbdb019de0ea38455f80591edf44f293993e1fb77fbe6aae1b"
+    },
+    {
+      "name": "self_review",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-captcha-allowlist/evidence/diff-check.log",
+      "evidence_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "tests",
+      "status": "PASS",
+      "evidence_file": "/home/box/src/agbrowse/resource/bpdus/2026-10-12-login-captcha-allowlist/evidence/vitest.log",
+      "evidence_sha256": "a11c9bb5881328dbdb019de0ea38455f80591edf44f293993e1fb77fbe6aae1b"
+    }
+  ]
+}

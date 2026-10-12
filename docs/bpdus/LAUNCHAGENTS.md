@@ -91,7 +91,7 @@ launchctl kickstart -k gui/$(id -u)/me.bpdus.agbrowse.worker
 
 에이전트 로그인 순서는 `login.start` → `login.fill_credentials` → `login.submit` → `login.check_progress` 반복 확인이다. `fill_credentials`는 신뢰된 Naver 로그인 페이지의 실제 ID·비밀번호 입력란을 채우지만 제출하지 않는다. 로그인 페이지가 아닌 경우 `login.submit`은 실패한다. `needs_human`은 캡차가 감지된 상태이며 자동 해결하지 않는다. `needs_phone_approval`은 휴대폰·새 기기 승인 상태이므로 사람이 승인해야 한다. 확인이 끝나면 `login.end`로 로그인 모드를 종료하고 새 일반 세션에서 `naver.login_status`를 호출한다.
 
-로그인 모드의 탐색 허용 호스트는 `nid.naver.com`, proper subdomain인 `*.pstatic.net`, 정확히 `ncpt.naver.com`과 `nca.naver.com`뿐이며 HTTPS 기본 포트만 허용한다. `nid.naver.com/nidlogin.logout`은 모든 모드에서 차단한다. 로그인 모드에서 차단한 요청은 경로·쿼리 없이 호스트, 메서드, 리소스 유형만 worker 로그에 남기며 세션당 최대 200줄로 제한한다. 로그인 도구는 한 worker 소유 페이지에만 동작한다. snapshot ref는 페이지 이동과 모드 종료 뒤 무효가 된다. 비밀번호 필드의 snapshot label은 숨기며 스크린샷에서는 마스킹한다. Keychain 비밀번호는 도구 응답·로그·오류에 포함하지 않는다.
+로그인 모드에서는 HTTPS 기본 포트에서 `nid.naver.com`의 로그인 요청과 GET script, `*.pstatic.net` 및 `nca.naver.com`의 GET/HEAD, `rcaptcha.nid.naver.com`의 GET/HEAD script·image·stylesheet·font·xhr·fetch, `ncpt.naver.com`의 기존 GET/HEAD와 xhr·fetch·ping 리소스 유형 POST만 허용한다. `nid.naver.com/nidlogin.logout`은 모든 모드와 메서드에서 먼저 차단한다. 로그인 모드에서 차단한 요청은 경로·쿼리 없이 호스트, 메서드, 리소스 유형만 worker 로그에 남기며 세션당 최대 200줄로 제한한다. 로그인 도구는 한 worker 소유 페이지에만 동작한다. snapshot ref는 페이지 이동과 모드 종료 뒤 무효가 된다. 비밀번호 필드의 snapshot label은 숨기며 스크린샷에서는 마스킹한다. Keychain 비밀번호는 도구 응답·로그·오류에 포함하지 않는다.
 
 `login-naver.sh`는 기존 수동 절차를 위한 legacy fallback으로 남아 있다. 새 로그인 흐름에는 사용하지 않는다.
 

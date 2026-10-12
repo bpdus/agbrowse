@@ -395,7 +395,7 @@ async function guardRequest(route, pagePolicies, getMode = () => 'normal', logLo
         if (isLogoutUrl(url)) { await block(); return; }
         if (mode === 'login' || mode === 'transitioning') {
             const loginProbe = page && pagePolicies.get(page)?.requestPolicy?.operation === 'naver.login_status';
-            if (mode !== 'login' || (!loginProbe && classifyLoginRequest(url, method) !== 'allow') || chainHasWebSocket(request)) { await block(); return; }
+            if (mode !== 'login' || (!loginProbe && classifyLoginRequest(url, method, request.resourceType?.() ?? '') !== 'allow') || chainHasWebSocket(request)) { await block(); return; }
             if (loginProbe) {
                 const policy = pagePolicies.get(page).requestPolicy;
                 if (!redirectChainAllowed(request, policy)) { await block(); return; }

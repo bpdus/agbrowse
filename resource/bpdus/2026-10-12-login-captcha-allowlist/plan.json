@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "domain": "feature",
+  "summary": "로그인 모드의 Naver CAPTCHA 요청을 제한적으로 허용한다.",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "CAPTCHA 요청 허용 규칙과 테스트를 추가한다",
+      "files": ["skills/browser/agent-login.mjs", "skills/browser/agent-runtime.mjs", "test/unit/agent-login.test.mjs", "test/unit/agent-runtime.test.mjs", "docs/bpdus/LAUNCHAGENTS.md"],
+      "target": "classifyLoginRequest 및 로그인 route guard",
+      "depends_on": "none",
+      "change": "요청한 정확한 호스트·메서드·리소스 유형만 허용하고 로그아웃은 우선 차단한다.",
+      "effect": "CAPTCHA 요청이 통과하며 그 밖의 지정 호스트는 차단된다.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "인증 중 네트워크 허용 경계 변경으로 잘못된 허용은 계정 세션의 외부 요청을 가능하게 한다.",
+        "test_decision": "reuse",
+        "test_reason": "기존 로그인 분류기 및 런타임 테스트로 허용·차단 경계를 직접 검증한다.",
+        "subject": "CAPTCHA 로그인 요청 분류와 실제 route guard 결과",
+        "procedure": "npx vitest run test/unit/agent-login.test.mjs test/unit/agent-runtime.test.mjs test/unit/agent-mcp.test.mjs",
+        "pass_criterion": "세 테스트 파일이 통과하고 지정 CAPTCHA 요청만 fetch되며 금지 호스트와 로그아웃이 차단된다."
+      }
+    }
+  ],
+  "verification": ["npx vitest run test/unit/agent-login.test.mjs test/unit/agent-runtime.test.mjs test/unit/agent-mcp.test.mjs", "git diff --check"],
+  "risks": ["CAPTCHA 동작에 필요한 추가 호스트 요청이 허용된다."],
+  "status": "READY"
+}

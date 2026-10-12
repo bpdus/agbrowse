@@ -15,14 +15,20 @@ export function isLogoutUrl(value) {
     } catch { return false; }
 }
 
-export function classifyLoginRequest(value, method = 'GET') {
+export function classifyLoginRequest(value, method = 'GET', resourceType = '') {
     let url;
     try { url = new URL(value); } catch { return 'deny'; }
     if (isLogoutUrl(url.href) || url.protocol !== 'https:' || (url.port && url.port !== '443')) return 'deny';
     const verb = method.toUpperCase();
     const host = url.hostname.toLowerCase();
+    const type = String(resourceType).toLowerCase();
+    if (host === 'rcaptcha.nid.naver.com') {
+        return ['GET', 'HEAD'].includes(verb) && ['script', 'image', 'stylesheet', 'font', 'xhr', 'fetch'].includes(type) ? 'allow' : 'deny';
+    }
+    if (host === 'ncpt.naver.com' && verb === 'POST' && ['xhr', 'fetch', 'ping'].includes(type)) return 'allow';
     if (host === 'nid.naver.com') {
         if (LOGIN_PATHS.has(url.pathname) && ['GET', 'HEAD', 'POST'].includes(verb)) return 'allow';
+        if (type === 'script' && verb === 'GET') return 'allow';
         if (/^\/(?:login|nidlogin|captcha|static)(?:\/|\.|$)/i.test(url.pathname) && ['GET', 'HEAD'].includes(verb)) return 'allow';
         return 'deny';
     }
