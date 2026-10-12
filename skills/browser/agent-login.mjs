@@ -48,7 +48,7 @@ export async function waitForProfileRelease(profileDir, options = {}) {
     do {
         let present = false;
         for (const name of CHROME_LOCKS) {
-            try { io.lstatSync(path.join(profileDir, name)); present = true; }
+            try { await (io.promises ?? io).lstat(path.join(profileDir, name)); present = true; }
             catch (error) { if (/** @type {{code?:string}} */ (error).code !== 'ENOENT') throw readError('PROFILE_RELEASE_TIMEOUT'); }
         }
         if (!present) return;

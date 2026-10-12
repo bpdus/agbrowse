@@ -5,6 +5,31 @@
             "cdp": 0,
             "nonLiteralSend": 0
         },
+        "skills/browser/agent-auth-store.mjs": {
+            "sync": 42,
+            "cdp": 0,
+            "nonLiteralSend": 0
+        },
+        "skills/browser/agent-cart-store.mjs": {
+            "sync": 32,
+            "cdp": 0,
+            "nonLiteralSend": 0
+        },
+        "skills/browser/agent-ipc.mjs": {
+            "sync": 17,
+            "cdp": 0,
+            "nonLiteralSend": 0
+        },
+        "skills/browser/agent-mcp-client.mjs": {
+            "sync": 11,
+            "cdp": 0,
+            "nonLiteralSend": 0
+        },
+        "skills/browser/agent-runtime.mjs": {
+            "sync": 13,
+            "cdp": 1,
+            "nonLiteralSend": 0
+        },
         "skills/browser/browser-lifecycle.mjs": {
             "sync": 8,
             "cdp": 0,
@@ -188,7 +213,7 @@
         }
     },
     "totals": {
-        "sync": 331,
-        "cdp": 54
+        "sync": 446,
+        "cdp": 55
     }
 }

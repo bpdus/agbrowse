@@ -17,10 +17,10 @@ describe('agent login policy', () => {
     });
     it('waits for all Chrome profile locks and times out without removing them', async () => {
         let lockCalls = 0;
-        const fakeFs = { lstatSync() { lockCalls += 1; if (lockCalls === 1) return {}; const error = new Error(); error.code = 'ENOENT'; throw error; } };
+        const fakeFs = { promises: { async lstat() { lockCalls += 1; if (lockCalls === 1) return {}; const error = new Error(); error.code = 'ENOENT'; throw error; } } };
         await waitForProfileRelease('/profile', { fs: fakeFs, intervalMs: 1, timeoutMs: 20 });
         expect(lockCalls).toBeGreaterThan(3);
-        const lockedFs = { lstatSync() { return {}; } };
+        const lockedFs = { promises: { async lstat() { return {}; } } };
         await expect(waitForProfileRelease('/profile', { fs: lockedFs, intervalMs: 1, timeoutMs: 4 })).rejects.toMatchObject({ code: 'PROFILE_RELEASE_TIMEOUT' });
     });
 
