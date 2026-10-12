@@ -276,9 +276,17 @@ export function createLoginController(page) {
             try {
                 await ensureHumanMayContinue();
                 if (!credentialsFilled || new URL(page.url()).origin !== 'https://nid.naver.com' || new URL(page.url()).pathname !== '/nidlogin.login') return { result: 'failed', reason: 'not_filled' };
-                const button = page.locator('#log.login');
+                const loginForm = page.locator('input#id[name="id"]').locator('xpath=ancestor::form[1]');
+                const button = loginForm.locator('[id="log.login"]');
                 if (await button.count() !== 1 || !await button.isVisible()) return { result: 'failed', reason: 'button_unavailable' };
-                const valid = await button.evaluate((el) => el instanceof el.ownerDocument.defaultView.HTMLButtonElement || el instanceof el.ownerDocument.defaultView.HTMLInputElement ? el.form?.querySelector('input#id[name="id"]') && el.form?.querySelector('input#pw[name="pw"]') : Boolean(el.closest('form')?.querySelector('input#id[name="id"]') && el.closest('form')?.querySelector('input#pw[name="pw"]')));
+                const valid = await button.evaluate((el) => {
+                    const form = el.form ?? el.closest('form');
+                    if (!form || !form.isConnected || !form.contains(el) || location.origin !== 'https://nid.naver.com') return false;
+                    let action; try { action = new URL(form.action, location.href); } catch { return false; }
+                    return action.protocol === 'https:' && action.host === 'nid.naver.com' && action.pathname === '/nidlogin.login'
+                        && form.querySelector('input#id[name="id"]')?.form === form
+                        && form.querySelector('input#pw[name="pw"]')?.form === form;
+                });
                 if (!valid) return { result: 'failed', reason: 'button_untrusted' };
                 await button.click(); credentialsFilled = false; invalidate(); return { result: 'submitted', reason: 'none' };
             } catch { return { result: 'failed', reason: 'submit_failed' }; }
