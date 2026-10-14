@@ -1,0 +1,1 @@
+PARTIAL: GN label을 reference 기준으로 고치고, `browser/patches/native-webui.json`에 15개 edit를 작성했다. script로 확인한 결과 모든 anchor가 reference에서 정확히 1회 매칭됐다. 실제 GN과 컴파일은 실행하지 않았다. 또 reference에 정의가 없는 `//chrome/browser/ui/tabs:tab_strip`, `//chrome/browser/bookmarks`, `mybrowse:resources`는 확인하지 못했다.

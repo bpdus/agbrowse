@@ -1,0 +1,91 @@
+{
+  "observed_at": "2026-10-14T00:10:37.285Z",
+  "transport": "actual Unix socket",
+  "real_engine": true,
+  "browser_integrated": false,
+  "permissions": {
+    "connection": 384,
+    "token": 384,
+    "socket": 384,
+    "dir": 448
+  },
+  "health": {
+    "host": "macbook",
+    "capabilities": {
+      "engines": [
+        "codex",
+        "claude"
+      ],
+      "modes": [
+        "chat",
+        "browser"
+      ],
+      "browser": false,
+      "opencodex": false,
+      "queue_boundary": "turn_end",
+      "steer": "per_engine"
+    }
+  },
+  "invalid_token_status": 401,
+  "session_id": "d3f64ccb-614f-456f-b60e-b33f40b68123",
+  "status": "done",
+  "engine_session_id": "01a137bf-2ca5-7a20-9e9e-b5ae96ca3e59",
+  "result": "IPC_READY_20261014",
+  "events": [
+    {
+      "seq": 1,
+      "type": "created"
+    },
+    {
+      "seq": 2,
+      "type": "turn_started"
+    },
+    {
+      "seq": 3,
+      "type": "engine_session"
+    },
+    {
+      "seq": 4,
+      "type": "engine.turn_started"
+    },
+    {
+      "seq": 5,
+      "type": "engine.assistant_delta"
+    },
+    {
+      "seq": 6,
+      "type": "engine.assistant_delta"
+    },
+    {
+      "seq": 7,
+      "type": "engine.assistant_delta"
+    },
+    {
+      "seq": 8,
+      "type": "engine.assistant_delta"
+    },
+    {
+      "seq": 9,
+      "type": "engine.assistant_delta"
+    },
+    {
+      "seq": 10,
+      "type": "engine.assistant_delta"
+    },
+    {
+      "seq": 11,
+      "type": "engine.assistant_message"
+    },
+    {
+      "seq": 12,
+      "type": "turn_ended"
+    }
+  ],
+  "pass": true,
+  "daemon_exit": {
+    "code": 0,
+    "signal": null
+  },
+  "socket_removed": true,
+  "lock_removed": true
+}

@@ -1,0 +1,84 @@
+// Copyright 2026 The MyBrowse Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mybrowse.mojom;
+
+// The only operations the page may request from the local agent daemon. The
+// browser process maps each value to a fixed daemon op name; the page never
+// supplies an op name, token, socket path or file path.
+enum AgentOp {
+  kHealth,
+  kList,
+  kGet,
+  kCreate,
+  kCommand,
+  kEvents,
+};
+
+// Exactly one field is non-empty.
+// |response_json| is the daemon's response frame after the browser process
+// verified version and request id and rebuilt it without unknown fields.
+// |error_name| is one of a fixed set of transport error names, for example
+// "agent_unavailable" or "agent_timeout".
+struct AgentReply {
+  string response_json;
+  string error_name;
+};
+
+struct TabInfo {
+  // SessionTabHelper::IdForTab() value of the tab.
+  int32 id;
+  string title;
+  string url;
+  bool active;
+};
+
+struct TabListResult {
+  // Empty on success, otherwise a fixed error name.
+  string error_name;
+  array<TabInfo> tabs;
+};
+
+struct TabActionResult {
+  // Empty on success, otherwise a fixed error name.
+  string error_name;
+  // Tab that was opened or selected, 0 if none.
+  int32 tab_id;
+};
+
+struct BookmarkInfo {
+  string title;
+  string url;
+};
+
+struct BookmarkListResult {
+  string error_name;
+  bool loaded;
+  array<BookmarkInfo> bookmarks;
+};
+
+interface PageHandlerFactory {
+  CreatePageHandler(pending_receiver<PageHandler> handler);
+};
+
+// Browser-side handler for chrome://mybrowse and its left sidebar page.
+interface PageHandler {
+  // Forwards one validated request to the agent daemon. |payload_json| is a
+  // JSON object of at most 64 KiB.
+  Request(AgentOp op, string payload_json) => (AgentReply reply);
+
+  // Tab operations act only on the window that owns this page.
+  GetTabs() => (TabListResult result);
+  OpenTab(string url) => (TabActionResult result);
+  ActivateTab(int32 tab_id) => (TabActionResult result);
+  CloseTab(int32 tab_id) => (TabActionResult result);
+
+  // Selects or creates the tab for chrome://mybrowse/?session=|session_id| in
+  // the owner window. |session_id| must be a UUID.
+  OpenSession(string session_id) => (TabActionResult result);
+  // Selects or creates the plain chrome://mybrowse/ home tab.
+  OpenHome() => (TabActionResult result);
+
+  GetBookmarks() => (BookmarkListResult result);
+};

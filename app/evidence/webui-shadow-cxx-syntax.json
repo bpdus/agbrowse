@@ -1,0 +1,42 @@
+{
+  "scope": "syntax only, modules disabled, no link or app verification",
+  "baseline_generated_headers_read_only": true,
+  "results": [
+    {
+      "file": "ipc_client_mac.cc",
+      "exit_code": 0
+    },
+    {
+      "file": "mybrowse_agent_client.cc",
+      "exit_code": 0
+    },
+    {
+      "file": "mybrowse_agent_files.cc",
+      "exit_code": 0
+    },
+    {
+      "file": "mybrowse_bookmarks.cc",
+      "exit_code": 0
+    },
+    {
+      "file": "mybrowse_page_handler.cc",
+      "exit_code": 0
+    },
+    {
+      "file": "mybrowse_request.cc",
+      "exit_code": 0
+    },
+    {
+      "file": "mybrowse_tab_service.cc",
+      "exit_code": 0
+    },
+    {
+      "file": "mybrowse_ui.cc",
+      "exit_code": 0
+    },
+    {
+      "file": "mybrowse_window_context.cc",
+      "exit_code": 0
+    }
+  ]
+}

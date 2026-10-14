@@ -1,0 +1,75 @@
+{
+  "run_id": "20261013-234244-claude-mybrowse-plan-review",
+  "target": "claude",
+  "session_id": "36e93d6a-373d-449e-a8d7-58947fcdb598",
+  "project": null,
+  "created_at": "2026-10-13T14:42:44Z",
+  "last_activity": "2026-10-13T14:58:58Z",
+  "state": "open",
+  "expires_at": null,
+  "ttl_days": 7,
+  "turns": 2,
+  "collected_turn": 2,
+  "staged": {
+    "mybrowse-plan.json": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse-plan.json",
+      "sha256": "aafebb7123fe6e8912a9717c6be5cfee0d48d6036e35f6169444d164b8bf9420"
+    },
+    "mybrowse-plan-2026-10-13.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse-plan-2026-10-13.md",
+      "sha256": "c51c98168649efe4d61e5ea4f3969f88076e38d068dd082d3789bb29d936194f"
+    },
+    "types.ts": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/pi-gui-source/packages/session-driver/src/types.ts",
+      "sha256": "ae6188d8389a62b8ccc7110e67a54cfd0e461ad7cbb767c4082506ee779ae5bc"
+    },
+    "pi-addon-extensions.ts": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/pi-gui-source/packages/pi-sdk-driver/src/pi-addon-extensions.ts",
+      "sha256": "da9182e3550b8c2f86d7624a28acc8cf9c57d0193fefdc425133c6d8f45a6c9b"
+    },
+    "constants.js": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chrome-adapter-source/src/constants.js",
+      "sha256": "ebaa1622d99a010cf2f47cdf8aa3ed94298be6e1349d1da352b33300b3bf38bb"
+    },
+    "mybrowse/plan.json": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/plan.json",
+      "sha256": "55d95c252e6810aea09d77c8c896401a14ed15c8b5334520d71b36ef4e9759b0"
+    },
+    "mybrowse/specs/task-3.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-3.md",
+      "sha256": "1c8261455ef42ea0401a4fed18208a79ffcff8ce39901cb1ec133f7ad603d0c4"
+    },
+    "mybrowse/specs/task-7.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-7.md",
+      "sha256": "8e6966399abc60d8b062ee2211f6a0ba33a59fe667cb62ea7ea61536b7c9ad08"
+    },
+    "mybrowse/specs/contracts.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/contracts.md",
+      "sha256": "bd3f92c2772ed41b9a69c6812cd9b566e85733767a7f76f8ed542eb1c0ee90d7"
+    },
+    "mybrowse/specs/task-6.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-6.md",
+      "sha256": "8de6b68f3bf2e3bc51d6e580a0675858bd12a360bd5bb66f315f83979d834f9a"
+    },
+    "mybrowse/specs/task-2.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-2.md",
+      "sha256": "b5426ee00e1a677428fb8e49ecc18c735da9948655a7be58cd2d9acbffadba74"
+    },
+    "mybrowse/specs/task-8.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-8.md",
+      "sha256": "094674e7bf08304f119b966b79af29f659fe136c1d84f15dffd2e61cf2da149f"
+    },
+    "mybrowse/specs/task-5.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-5.md",
+      "sha256": "82de1e9f9c01781c6b1711a0873a986417bdd9cb5b637022e9647dd795a273a2"
+    },
+    "mybrowse/specs/task-1.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-1.md",
+      "sha256": "828592e8fd6d3e0a02dce080cb7edd9e91e4748a2c5f727e78bab85ceb995ff4"
+    },
+    "mybrowse/specs/task-4.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-4.md",
+      "sha256": "050cca6e0bb75b3c9b54e8d2018bd6ea9bec09f131d4168b19e3d96a963b5945"
+    }
+  }
+}

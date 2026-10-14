@@ -1,0 +1,1 @@
+PARTIAL: `style.css`를 중복 selector 없이 다시 썼다. body, `.sidebar`, `.home-view` 규칙은 각각 1개다. 실제 탭 목록이 MyBrowse 사이드바 뒤에 오도록 `ReorderChildView` anchor edit를 `native-webui.json`에 추가했다(사이드바가 없으면 기존 동작). 16개 anchor 모두 reference에서 정확히 1회 일치했다. stylelint와 Chromium 빌드는 실행하지 않았다.

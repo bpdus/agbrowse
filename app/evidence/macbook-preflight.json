@@ -1,0 +1,20 @@
+{
+  "platform": "darwin",
+  "architecture": "arm64",
+  "node": "v24.15.0",
+  "memoryGiB": 24,
+  "macOS": "26.6.2",
+  "developerDirectory": "/Applications/Xcode.app/Contents/Developer",
+  "fullXcode": true,
+  "xcode": "Xcode 27.0\nBuild version 27A266a",
+  "sdk": "27.0",
+  "sdkPath": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+  "firstLaunchReady": true,
+  "metalInstalled": true,
+  "metal": "Apple metal version 32023.921 (metalfe-32023.921.6)\nTarget: air64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /private/var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.1.266.1.W4klsz/Metal.xctoolchain/usr/metal/current/bin",
+  "observed_at": "2026-10-13T23:52:13.572Z",
+  "disk": "Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on\n/dev/disk3s5   926Gi   616Gi   287Gi    69%    6.2M  3.0G    0%   /System/Volumes/Data",
+  "status": "PREREQUISITES_ONLY",
+  "next": "고정 Chromium 커밋과 해당 버전의 빌드 조건을 확인해야 합니다.",
+  "source": "https://chromium.googlesource.com/chromium/src/+/main/docs/mac_build_instructions.md"
+}

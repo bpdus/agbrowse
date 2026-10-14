@@ -1,0 +1,15 @@
+{
+  "repository": "https://chromium.googlesource.com/chromium/src.git",
+  "tag": "155.0.8059.40",
+  "commit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+  "verified_by": "git ls-remote refs/tags/155.0.8059.40",
+  "verified_at": "2026-10-13",
+  "target": "chrome",
+  "depot_tools_repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+  "depot_tools_commit": "52ae103994896b9ce7742a605de8f43b410e5515",
+  "architectures": ["arm64", "x64"],
+  "build_verified": false,
+  "store_verified": false,
+  "security_release_status_verified": false,
+  "note": "처음 호환 검증에 사용하는 후보 커밋입니다. 출시 전 보안 릴리스와 해당 커밋의 Xcode 요구조건을 다시 확인해야 합니다."
+}

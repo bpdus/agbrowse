@@ -1,0 +1,2 @@
+status: DONE
+summary: Pi RPC 실행기(`src/engines/pi.mjs`)와 JSONL 전송 계층(`src/engines/pi-rpc.mjs`)을 구현했습니다. 가짜 프로세스 테스트 39개가 모두 통과했습니다(연속 2회). 실제 Pi 계정·제공자·LLM 왕복은 검사하지 않았습니다. `--no-tools` 같은 Pi CLI 플래그는 제공된 문서에 없어 추정한 값이므로, 실제 `--help`로 확인이 필요합니다.

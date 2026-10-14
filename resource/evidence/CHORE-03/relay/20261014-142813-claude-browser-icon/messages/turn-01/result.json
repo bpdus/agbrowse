@@ -1,0 +1,17 @@
+{
+  "status": "PARTIAL",
+  "summary": "apply-icon.mjs와 README.md를 구현했고, 문법 검사와 인자·경로 검증 테스트를 통과했습니다. 다만 sandbox가 sips/iconutil/actool의 시스템 임시 폴더 쓰기를 막아 아이콘 생성과 적용·롤백은 실제로 실행해 보지 못했으며, root가 sandbox 밖에서 확인해야 합니다.",
+  "changed_files": ["apply-icon.mjs", "README.md"],
+  "verification": [
+    {"command": "node --check apply-icon.mjs", "result": "통과 (actool 수정 후 다시 실행해도 통과)"},
+    {"command": "node apply-icon.mjs에 --bogus x, 값 없는 --output, --output 중복, 이미 있는 --output, .app 접미사가 없는 --app, 없는 .app, 없는 --chromium-src, 인자 없음을 넣어 실행", "result": "모두 의도한 메시지와 함께 exit 1로 끝났고, output 폴더는 생기지 않음"},
+    {"command": "work/_fx에 가짜 Fake.app을 만들고 실행 (Resources/app.icns symlink, CFBundleIconName=WrongName)", "result": "'Symlink not allowed'와 'Unexpected CFBundleIconName'으로 거부했고, output은 생기지 않음"},
+    {"command": "node apply-icon.mjs --output <work>/_scratch-gen (생성만)", "result": "실패: sips가 /var/folders/.../T에 쓰지 못해 error 13을 냄 (sandbox 원인). manifest에는 status generation-failed가 기록됨. sandbox 해제 실행은 거부됨"},
+    {"command": "합성 PNG로 iconutil과 xcrun actool을 따로 실행", "result": "sandbox에서는 둘 다 시스템 임시 폴더 권한 오류로 실패함. actool은 이때 exit 1을 내고 com.apple.actool.errors를 출력했으며, 출력 확인 guard를 추가함"},
+    {"command": "rm -rf _fx _scratch-gen; ls -A", "result": "work 폴더에는 apply-icon.mjs, README.md, icon-source.png, .claude, _relay만 남음. icon-source.png는 수정하지 않음"}
+  ],
+  "questions": [
+    "root가 sandbox 밖에서 먼저 'node apply-icon.mjs --output <새 폴더>'(생성만)를 실행해, iconset/app.icns/Assets.car와 manifest가 만들어지는지 확인해 주실 수 있나요?",
+    "apply와 rollback 경로는 실제로 실행해 보지 못했습니다. 실제 대상에 쓰기 전에 실제 .app의 복사본에 --app을 먼저 실행해 보시겠어요?"
+  ]
+}

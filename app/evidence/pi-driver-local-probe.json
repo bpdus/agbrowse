@@ -1,0 +1,17 @@
+{
+  "version": "0.87.1",
+  "entry_sha256": "e79626f2dd6f94aa45d30f3fa63cd84319a6eefcd150b353cfaf274366926774",
+  "isolated_home": true,
+  "real_credentials_read": false,
+  "real_llm_called": false,
+  "network_scope": "127.0.0.1 synthetic provider only",
+  "driver_module": "src/engines/pi.mjs",
+  "normal_response": true,
+  "resume_same_actual_session_id": true,
+  "assistant_event_translation": true,
+  "eof_exit_code": 0,
+  "provider_request_count": 2,
+  "tools_in_provider_requests": 0,
+  "runtime_cache_verified": false,
+  "live_provider_verified": false
+}

@@ -1,0 +1,25 @@
+{
+  "checks": [
+    {
+      "label": "unauthenticated API rejected",
+      "status": 401
+    },
+    {
+      "label": "foreign Origin rejected",
+      "status": 403
+    },
+    {
+      "label": "real UI JavaScript served",
+      "status": 200
+    },
+    {
+      "label": "browser gate is honest",
+      "status": 200
+    },
+    {
+      "label": "idempotent create over actual TCP",
+      "status": 200
+    }
+  ],
+  "browser_status": "waiting_user"
+}

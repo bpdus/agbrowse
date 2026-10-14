@@ -1,0 +1,36 @@
+[
+  {
+    "signal": "SIGTERM",
+    "signalled": true,
+    "exit": {
+      "code": 0,
+      "signal": null
+    },
+    "ownedChildAlive": false,
+    "result": {
+      "code": null,
+      "signal": "SIGTERM",
+      "stdout": "",
+      "stderr": "",
+      "error": null
+    },
+    "stderr": ""
+  },
+  {
+    "signal": "SIGHUP",
+    "signalled": true,
+    "exit": {
+      "code": 0,
+      "signal": null
+    },
+    "ownedChildAlive": false,
+    "result": {
+      "code": null,
+      "signal": "SIGTERM",
+      "stdout": "",
+      "stderr": "",
+      "error": null
+    },
+    "stderr": ""
+  }
+]

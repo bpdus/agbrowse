@@ -1,0 +1,48 @@
+Window: "Example Domain", App: Chromium.
+0 표준 윈도우 Example Domain - Chromium, URL: example.com/, Secondary Actions: Raise
+	1 container Example Domain - Chromium, URL: example.com/
+		2 container
+			3 도구 막대
+				4 스크롤 영역
+					5 툴바
+						6 버튼 뒤로, Help: 클릭하면 이전 페이지로 가고 누르고 있으면 방문 기록이 나타납니다.
+						7 버튼 (disabled) 앞으로, Help: 클릭하면 다음 페이지로 가고 누르고 있으면 방문 기록이 나타납니다.
+						8 버튼 새로고침, Help: 페이지 새로고침
+				9 container
+					10 팝업 버튼 사이트 정보 보기
+					11 텍스트 필드 (settable) 주소창 및 검색창, Value: example.com, Placeholder: Google에서 검색하거나 URL을 입력하세요.
+					12 버튼 현재 탭을 북마크에 추가
+				13 버튼 나
+				14 팝업 버튼 Chromium
+			15 container
+				16 스크롤 영역
+					17 HTML 콘텐츠 Example Domain, URL: example.com/
+						18 텍스트 This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.
+						19 텍스트 هذا النطاق مُخصص للاستخدام في أمثلة التوثيق دون الحاجة إلى إذن. هذه ليست خدمة، يُرجى تجنب الاعتماد عليها لأغراض الاختبار والمراقبة.
+						20 텍스트 该域名仅用于文档示例，无需获得许可。这并非一项服务，请勿将其用于测试和监控目的。
+						21 텍스트 L’usage de ce domaine est réservé à des exemples de documentation, sans autorisation préalable. Il ne s’agit pas d’un service ; son utilisation à des fins de test ou de surveillance est à éviter.
+						22 텍스트 Данный домен предназначен для использования в примерах документации без необходимости получения предварительного разрешения. Это не сервис; не рекомендуется его использование для тестирования и мониторинга.
+						23 텍스트 Este dominio está destinado al uso en ejemplos de documentación sin necesidad de permiso. Esto no es un servicio; evitar utilizarlo para realizar pruebas o monitoreos.
+						24 link Learn more, Value: iana.org/help/example-domains
+			25 팝업 버튼 탭 검색
+			26 container
+				27 탭 그룹
+					28 탭 (selected, settable, boolean) Example Domain, Value: on
+						29 버튼 닫기
+			30 버튼 새 탭
+	31 닫기 버튼
+	32 전체 화면 버튼 Help: 이 버튼을 누르면 윈도우를 확대/축소합니다., Secondary Actions: 윈도우 확대/축소
+	33 최소화 버튼
+34 menu bar
+	35 Chromium
+	36 파일
+	37 수정
+	38 보기
+	39 방문 기록
+	40 북마크
+	41 프로필
+	42 탭
+	43 창
+	44 도움말
+
+The focused UI element is 17 HTML 콘텐츠 Example Domain, URL: example.com/

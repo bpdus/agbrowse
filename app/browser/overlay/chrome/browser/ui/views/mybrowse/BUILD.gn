@@ -1,0 +1,35 @@
+# Copyright 2026 The MyBrowse Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_mac)
+
+# Header only, so that the vertical tab strip region can name the view type.
+source_set("mybrowse") {
+  sources = [ "mybrowse_sidebar_web_view.h" ]
+  public_deps = [
+    "//base",
+    "//ui/base",
+    "//ui/gfx/geometry",
+    "//ui/views",
+    "//ui/views/controls/webview",
+  ]
+}
+
+source_set("impl") {
+  sources = [ "mybrowse_sidebar_web_view.cc" ]
+  deps = [
+    ":mybrowse",
+    "//base",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/browser_window",
+
+    # Headers only. webui/mybrowse:impl depends on browser_public_dependencies,
+    # which reaches //chrome/browser/ui, so depending on it here would form a
+    # cycle. The root //chrome/browser target links both impl targets.
+    "//chrome/browser/ui/webui/mybrowse",
+    "//content/public/browser",
+    "//ui/base",
+    "//url",
+  ]
+}

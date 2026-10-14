@@ -1,0 +1,36 @@
+{
+  "task": "CHORE-03",
+  "status": "VERIFIED",
+  "conversation_code": "BI6R2P9N4Q7X",
+  "session_id": "01a134dc-e9af-7d02-b8dc-c8ce8d2bf6df",
+  "goal": "Apply supplied image as native browser icon",
+  "scope": [
+    "Keep image artwork and transparency",
+    "Generate mac AppIcon catalog and app.icns",
+    "Backup and replace only icon resources in Chromium source and built arm64 app",
+    "Persist reusable icon packaging command for future arm64/x64 builds"
+  ],
+  "acceptance": [
+    "Source PNG hash identical to attachment",
+    "ICNS decodes correctly",
+    "Assets.car compiled with AppIcon name",
+    "App and source resources match packaged files",
+    "Visible macOS icon matches supplied artwork"
+  ],
+  "restrictions": [
+    "No Chromium compilation",
+    "No bundle ID or app name changes",
+    "No commit or push",
+    "No changes to user profile or tabs"
+  ],
+  "verification": {
+    "source_png_identical": true,
+    "iconutil_decode": true,
+    "asset_catalog_appicon": true,
+    "target_files_and_backups_hash_verified": 4,
+    "effective_macos_icon": "NSWorkspace.icon(forFile:) rendered supplied logo,1024x1024",
+    "dock_screenshot": "not verified; Finder UI changed during inspection and Dock query timed out",
+    "full_chromium_rebuild": false,
+    "commit_or_push": false
+  }
+}

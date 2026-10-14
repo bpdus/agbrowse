@@ -1,0 +1,2 @@
+status: DONE
+summary: 자식 정리를 close 기준으로 바꿔 exit 뒤 마지막 stdout 보존, close 전 onEnd 차단, 정리 실패 시 failed/stop reject, abort listener 제거, 엄격한 session ID, retry 실패 시 done 차단을 반영했습니다. 두 테스트 파일 47개가 연속 2회 모두 통과했습니다.

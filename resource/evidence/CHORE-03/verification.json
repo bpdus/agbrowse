@@ -1,0 +1,19 @@
+{
+  "task": "CHORE-03",
+  "source_png_identical": true,
+  "iconutil_decode": true,
+  "asset_catalog_appicon": true,
+  "target_files_and_backups_hash_verified": 4,
+  "effective_macos_icon": "NSWorkspace.icon(forFile:) rendered supplied logo,1024x1024",
+  "dock_screenshot": "not verified; Finder UI changed during inspection and Dock query timed out",
+  "full_chromium_rebuild": false,
+  "commit_or_push": false,
+  "post_coding_check": {
+    "scope": "Only icon packaging files and native icon resources",
+    "requirements": "PASS: source and current app use supplied icon",
+    "rules": "Branch worktree used; no commit/push",
+    "slop_cleanup": "N/A",
+    "security": "Native packaging tools, verified backups; no credentials/profile changes",
+    "residual": "Dock UI screenshot not verified; properly signed release needs re-sign after resource changes"
+  }
+}

@@ -1,0 +1,563 @@
+{
+  "schema_version": 2,
+  "domain": "feature",
+  "work_id": "2026-10-13-mybrowse-architecture",
+  "summary": "두 Mac의 독립 Chromium 앱에서 웹페이지와 대화를 제공한다. 설치된 Pi의 런타임과 제공자 설정을 공유하고, Codex·Claude 직접 실행도 지원한다.",
+  "status": "READY",
+  "questions": [],
+  "scope": {
+    "product": "새 앱 내부 웹페이지, 좌측 북마크·대화·탭, Search/Ask 홈과 최근 작업, Chrome Web Store와 Bitwarden, 자율 실행과 Muse 왕복, 두 Mac 지원",
+    "technical": "Chromium chrome 타깃과 WebUI, pi-gui의 React 화면 및 설정 차용, typed WebUI·로컬 IPC, Codex·Claude CLI 드라이버, opencodex, 지정한 MCP 호환 연결과 Mac별 DB",
+    "implementation_authorized_by_this_artifact": false,
+    "files_are_proposed_new_project_paths": true,
+    "existing_deployment_changed": false,
+    "deferred": [
+      "쿠키·비밀번호 일괄 이전",
+      "Google Chrome Sync",
+      "Git worktree·코드 리뷰·터미널 작업 화면",
+      "고급 Vault와 자동 메모리"
+    ],
+    "removed_from_previous_plan": [
+      "Muse의 session next/act/finish 필수 반복",
+      "무인 에이전트를 후속 범위로 미루는 설계",
+      "직접 만든 내장 제어 확장을 기본 경로로 쓰는 설계",
+      "독립 Chromium 빌드를 화면 결정 전에 확정하는 설계",
+      "기존 Chrome 창에 웹페이지를 표시하는 제품 경로",
+      "웹페이지 위치 미결정 상태",
+      "원본 Chrome 로그인 자동 승계 가정"
+    ],
+    "implementation_authorization": "사용자 요청: Clirelay로 검증과 구현해. 계획은 plan으로 작성해서 스펙을 정확하게 정하고 들어가"
+  },
+  "baseline": {
+    "repository": "https://github.com/bpdus/agbrowse",
+    "commit": "a3b6aba479d51365dabdaf8aa59468b0f292f09e",
+    "handoff": "docs/handoff-2026-10-12.md",
+    "current_browser": "설치된 Chrome과 전용 프로필",
+    "navigation_policy": "네이버 전용 origin·경로·리소스 제한, 전역 요청 검사, WebSocket과 서비스 워커 제한"
+  },
+  "decisions": {
+    "hosts": [
+      "imac",
+      "macbook"
+    ],
+    "agent_location": "작업을 실행하는 Mac",
+    "muse_role": "고수준 작업 접수, 진행 조회, 중간 개입과 결과 활용",
+    "loop_owner": "선택한 Pi, Codex 또는 Claude 실행기 한 개",
+    "engines": [
+      "pi",
+      "codex",
+      "claude"
+    ],
+    "optional_router": "opencodex",
+    "default_browser": "MyBrowse.app 내부의 독립 Chromium 브라우저와 전용 프로필",
+    "browser_adapter": "codex-control-chrome-mcp",
+    "desktop_adapter": "codex-computer-use-mcp",
+    "desktop_fallback": "확장 팝업, 파일 선택창과 macOS 앱 화면",
+    "ui": "좌측 바로가기·북마크·대화·탭과 중앙 홈·실제 웹페이지·대화; 탐색 중 대화 패널 지원",
+    "web_content_location": "inside_mybrowse_app",
+    "extension_store": "Chrome Web Store",
+    "required_extension": "Bitwarden",
+    "session_authority": "작업 Mac의 SQLite",
+    "remote_transport": "tailnet HTTPS 작업 API와 SSE; MCP와 CDP는 로컬",
+    "billing_default": "명시적으로 선택한 연결만 사용한다. API 키 경로와 유료 fallback을 자동 활성화하지 않는다.",
+    "chrome_vertical_tabs": "상류 기능의 재사용 후보이다. 제품 UI는 대화와 북마크가 포함된 통합 좌측 목록으로 만든다.",
+    "optional_agent_panel": "앱 내부 WebUI 대화 패널을 제공한다. 외부 Chrome sidePanel을 최종 UI로 사용하지 않는다.",
+    "browser_content": "일반 웹사이트는 Chromium WebContents에서 표시한다. iframe 임베딩을 브라우저로 사용하지 않는다.",
+    "ai_ui_source": "pi-gui의 필요한 화면과 연결 설계를 차용한다. 설치된 Pi는 RPC 어댑터로 연결한다.",
+    "runtime_boundary": "Node 보조 프로세스가 설치된 Pi RPC 또는 공식 CLI를 호출한다. WebUI는 typed IPC로 연결한다.",
+    "profile_policy": "새 프로필에서 로그인한다. 원본 Chrome 프로필은 동시에 공유하지 않는다.",
+    "ui_question_resolution": "사용자가 새 앱 내부 표시를 명시했다.",
+    "data_roots": {
+      "browser": "~/Library/Application Support/MyBrowse/Browser",
+      "daemon": "~/Library/Application Support/MyBrowse/Agent",
+      "native_socket": "Agent/run/<profile>/bridge.sock (0700 directory)"
+    },
+    "webui_ipc_owner": "브라우저 프로세스가 소켓과 Mojo를 소유한다. 외부 페이지에는 브리지를 노출하지 않는다.",
+    "bitwarden_biometrics": "별도 후속 호환 검증 항목이다.",
+    "preferred_engine_activation": "등록한 Pi의 호환성과 명시적으로 선택한 제공자가 확인된 뒤 활성화한다. 현재 구현은 아직 codex/claude이다.",
+    "provider_settings": "해당 Mac의 기존 Pi agent directory를 공유한다. 별도 모델·인증 설정 사본을 만들지 않는다.",
+    "pi_updates": "등록된 Pi 업데이트를 다음 새 작업에서 감지한다. 무과금 호환 검사 후 사용하며, 진행 중인 작업은 기존 프로세스를 유지한다.",
+    "planned_preferred_engine": "pi",
+    "implemented_engines": [
+      "codex",
+      "claude"
+    ],
+    "implemented_default_engine": "codex",
+    "pi_runtime_cache": "설치한 Pi 버전과 필요한 의존성을 검증해 버전별 실행 캐시에 보관한다. 제공자 설정과 인증은 기존 Pi 경로를 공유한다."
+  },
+  "engine_contracts": {
+    "codex": {
+      "start": [
+        "thread/start 또는 thread/resume",
+        "turn/start"
+      ],
+      "steer": "turn/steer는 실행 중인 턴에 지시를 추가한다.",
+      "stop": "turn/interrupt와 도구 중계기의 조작 차단을 함께 적용한다.",
+      "auth": "사용자가 각 Mac에서 직접 codex login을 한다.",
+      "limits": "ChatGPT 구독 권한과 사용 한도를 따른다."
+    },
+    "claude": {
+      "start": "claude -p와 stream-json 출력",
+      "resume": "공식 CLI가 반환한 session_id로 이어간다.",
+      "steer": "live 입력 지원을 검증한다. 필요하면 체크포인트 후 중단·재개한다.",
+      "auth": "사용 가능한 별도 Claude 구독 로그인",
+      "subscription_note": "ChatGPT Pro는 Claude 사용 권한을 제공하지 않는다. --bare의 OAuth 미사용 조건을 확인한다."
+    },
+    "opencodex": {
+      "role": "Pi가 선택할 수 있는 모델 제공자 프록시이며 독립 에이전트 엔진은 아니다.",
+      "configuration": "opencodex의 Pi 통합을 적용한 기존 Pi 제공자 설정을 사용한다. 제공자·인증·fallback은 선택한 프로필을 따른다.",
+      "billing": "각 제공자의 사용 조건을 따른다. 모든 경로가 무료라고 가정하지 않는다.",
+      "switch": "실행기와 모델 변경은 잠시 멈추고 체크포인트로 이어간다."
+    },
+    "pi": {
+      "role": "자율 에이전트 런타임",
+      "transport": "설치된 pi --mode rpc의 JSONL",
+      "configuration": "PI_CODING_AGENT_DIR 또는 ~/.pi/agent의 기존 models.json과 auth.json을 Pi가 사용한다.",
+      "sessions": "--session-dir로 MyBrowse 폴더를 지정한다. 실제 Pi session ID와 세션 형식 호환을 검사한다.",
+      "updates": "새 작업 전에 실행 파일·버전·RPC·이벤트 계약을 검사한다. 호환 실패는 waiting_provider이다.",
+      "auth": "Pi가 인증과 OAuth 갱신을 처리한다. renderer와 Muse에 비밀 값을 전달하지 않는다.",
+      "loop": "Pi가 판단한다. 다른 CLI 판단 루프를 중첩하지 않는다.",
+      "implementation_verified": false,
+      "driver_file_implemented": true,
+      "driver_local_synthetic_provider_verified": true,
+      "service_registered": false
+    }
+  },
+  "adapter_baselines": {
+    "chrome": {
+      "repository": "https://github.com/iola1999/codex-control-chrome-mcp",
+      "version": "1.4.1",
+      "commit": "c701215a63fc5ca6bdc208deb27417cb7da3cb44",
+      "ownership": "독립 커뮤니티 프로젝트",
+      "extension_id": "hehggadaopoacecdllhhajmbjkdcmajg",
+      "native_host": "com.openai.codexextension",
+      "prerequisites": [
+        "Node.js 20 이상; 제품은 공통 Node.js 22 이상을 검토",
+        "MyBrowse의 확장 설치 지원",
+        "MyBrowse 전용 Native Messaging 등록과 브리지 식별"
+      ],
+      "integration_checks": [
+        "MyBrowse에서 공식 Codex 확장 설치와 실행",
+        "제품 전용 manifest 경로와 등록·복구",
+        "Google Chrome manifest 보존",
+        "프로필·브리지·탭 식별",
+        "공개 CDP 포트 없는 관찰·조작 왕복"
+      ],
+      "custom_chromium_support": "MyBrowse는 상류의 chrome/edge 지원 목록에 없다. 첫 시제품에서 확장 설치·Native Messaging·브리지 선택을 확인한다.",
+      "fallback": "MCP 도구 프런트엔드를 유지하고 MyBrowse 측 전송을 제한된 자체 로컬 브리지로 보완한다. 외부 Chrome으로 자동 전환하지 않는다."
+    },
+    "computer": {
+      "repository": "https://github.com/tmustier/codex-computer-use-mcp",
+      "package_page": "https://pi.dev/packages/codex-computer-use-mcp",
+      "version": "0.5.2",
+      "commit": "dc72bae614dccd01ef9d0ffd8fdcfd42c990fc78",
+      "ownership": "독립 커뮤니티 프로젝트",
+      "prerequisites": [
+        "Node.js 22 이상",
+        "공식 ChatGPT Mac 앱",
+        "설치된 Computer Use 구성요소",
+        "화면 기록과 손쉬운 사용 권한",
+        "잠금 해제된 GUI 사용자 세션"
+      ],
+      "model_turns": "어댑터는 모델을 실행하지 않는다. 모델용 app-server와 별도 연결이다.",
+      "control_scope": "컴퓨터 조작에는 Mac 단위 단일 제어권을 확보한다.",
+      "integration_checks": [
+        "새 앱 번들 식별자로 화면 접근",
+        "OS 권한·잠금 상태 처리",
+        "Mac 단위 단일 제어권"
+      ]
+    }
+  },
+  "local_inspection": {
+    "codex": "0.162.1",
+    "claude": "2.1.296",
+    "opencodex": "2.82.0",
+    "authentication_verified": true,
+    "both_mac_live_execution_verified": false,
+    "adapters_installed_by_this_revision": false,
+    "chrome": "155.0.8059.40",
+    "chrome_vertical_tabs_enabled_verified": false,
+    "mybrowse_built": false,
+    "pi_gui_source_verified": true,
+    "both_mac_preflight_verified": true,
+    "full_xcode": {
+      "macbook": true,
+      "imac": false
+    },
+    "architectures": {
+      "macbook": "arm64",
+      "imac": "x86_64"
+    },
+    "node_versions": {
+      "macbook": "24.15.0",
+      "imac": "22.23.2"
+    },
+    "local_chat_verified": {
+      "codex": true,
+      "claude": true
+    },
+    "local_codex_queue_verified": true,
+    "xcode_macbook": {
+      "version": "27.0",
+      "build": "27A266a",
+      "sdk": "27.0",
+      "checked_at": "2026-10-14T01:35:54Z"
+    },
+    "pi": {
+      "version": "0.87.1",
+      "startup_rpc_verified": true,
+      "local_synthetic_provider_verified": true,
+      "live_provider_verified": false,
+      "registered_in_service": false
+    }
+  },
+  "session_contract": {
+    "statuses": [
+      "queued",
+      "running",
+      "waiting_user",
+      "waiting_provider",
+      "paused",
+      "done",
+      "failed",
+      "uncertain"
+    ],
+    "default_action_budget": 30,
+    "queue_boundary": "보장된 기본 경계는 현재 턴 종료 이후이다. 도구 경계 개입은 실행기 실검증 후 별도 capability로 활성화한다.",
+    "steer": "지시 버전과 실행기 개입을 함께 관리한다. 이미 보낸 조작의 취소를 보장하지 않는다.",
+    "stop": "새 도구 실행부터 차단하고 소유한 실행기만 중단한다.",
+    "resume": "공식 실행기 세션 ID와 최신 화면을 사용한다.",
+    "disconnect": "Muse 또는 CLI 출력 연결 해제로 Mac 실행을 끝내지 않는다.",
+    "uncertain": "불명확한 제출을 자동 반복하지 않는다.",
+    "host_binding": "작업 호스트를 다른 Mac으로 자동 변경하지 않는다."
+  },
+  "acceptance_criteria": [
+    "웹페이지와 대화가 같은 MyBrowse 앱에서 열린다. 좌측 북마크·대화·탭과 중앙 홈이 실제 상태를 반영한다.",
+    "새 앱에서 Chrome Web Store의 Bitwarden 설치·업데이트·시험 자동 입력이 동작한다.",
+    "CLI 자율 에이전트가 앱 내부 탭을 조작하고 대화에 결과와 실제 대상 정보를 반환한다.",
+    "MCP 설정과 제공자 경로가 실제 실행기에 반영되고 API 유료 경로를 자동 활성화하지 않는다.",
+    "Muse 왕복과 stop·queue·resume가 두 Mac에서 검증된다. 업데이트 이후 프로필과 기록을 보존한다."
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "title": "두 Mac의 Chromium 빌드 조건을 확인한다",
+      "files": [
+        "scripts/preflight.mjs",
+        "docs/chromium-gates.md"
+      ],
+      "target": "두 Mac의 Chromium 빌드 조건을 확인한다",
+      "depends_on": "none",
+      "change": "두 Mac의 CPU와 Xcode를 기록하고 실제 Chromium 빌드·스토어·브리지·서명 게이트를 분리한다. 전체 Xcode가 없으면 blocked를 명시한다.",
+      "effect": "두 Mac의 Chromium 빌드 조건을 확인한다 결과와 한계가 확인된다.",
+      "verification": {
+        "method": "functional",
+        "risk": "high",
+        "risk_reason": "인증·취소·대상 경계 또는 실제 앱 호환을 검증해야 한다.",
+        "test_decision": "omit",
+        "test_reason": "실제 대상에서 기능을 확인해야 한다.",
+        "subject": "두 Mac의 Chromium 빌드 조건을 확인한다",
+        "procedure": "스펙의 수락 기준과 지정 명령을 실행하고 실제 증거를 기록한다.",
+        "pass_criterion": "실행한 검사가 통과하고 미실행 항목은 완료로 표시하지 않는다."
+      }
+    },
+    {
+      "id": 2,
+      "title": "CLI 작업을 저장하고 중단·재접속한다",
+      "files": [
+        "src/store.mjs",
+        "src/broker.mjs",
+        "src/service.mjs",
+        "src/http.mjs",
+        "test/core.test.mjs"
+      ],
+      "target": "CLI 작업을 저장하고 중단·재접속한다",
+      "depends_on": "none",
+      "change": "SQLite와 세션 API, SSE 재접속, 호스트·클라이언트별 중복 방지, revision과 lease, stop·queue 경계를 구현한다.",
+      "effect": "CLI 작업을 저장하고 중단·재접속한다 결과와 한계가 확인된다.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "인증·취소·대상 경계 또는 실제 앱 호환을 검증해야 한다.",
+        "test_decision": "add",
+        "test_reason": "세션과 실행기 경계 회귀 검증이 필요하다.",
+        "subject": "CLI 작업을 저장하고 중단·재접속한다",
+        "procedure": "스펙의 수락 기준과 지정 명령을 실행하고 실제 증거를 기록한다.",
+        "pass_criterion": "실행한 검사가 통과하고 미실행 항목은 완료로 표시하지 않는다."
+      }
+    },
+    {
+      "id": 3,
+      "title": "Pi 설정 공유와 공식 CLI를 연결한다",
+      "files": [
+        "src/engines/codex.mjs",
+        "src/engines/claude.mjs",
+        "src/engines/environment.mjs",
+        "test/engines.test.mjs",
+        "src/engines/pi.mjs",
+        "src/engines/pi-runtime.mjs",
+        "test/pi-runtime.test.mjs",
+        "specs/pi-shared-runtime.md"
+      ],
+      "target": "Pi 설정 공유와 공식 CLI를 연결한다",
+      "depends_on": 2,
+      "change": "기존 공식 CLI 실행을 유지한다. 설치된 Pi의 RPC 어댑터를 추가한다. 같은 Mac의 Pi 제공자·인증 설정과 전용 작업 세션을 사용한다. 새 작업마다 버전 호환을 검사한다.",
+      "effect": "Pi와 앱이 같은 제공자 설정을 사용한다. Pi 업데이트 뒤 호환되는 새 런타임을 다음 작업에서 사용한다.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "인증·취소·대상 경계 또는 실제 앱 호환을 검증해야 한다.",
+        "test_decision": "add",
+        "test_reason": "세션과 실행기 경계 회귀 검증이 필요하다.",
+        "subject": "Pi 설정 공유와 공식 CLI를 연결한다",
+        "procedure": "가짜 RPC로 취소·호환 거부·이벤트·설정 변경 경계를 검사한다. 두 Mac의 실제 Pi와 명시적으로 선택한 제공자 왕복을 확인한다. 비밀 값 노출과 유료 자동 전환 여부를 확인한다.",
+        "pass_criterion": "공유 제공자와 실제 Pi session ID가 확인된다. 업데이트 중 기존 작업은 유지된다. 지원하지 않는 버전은 모델 요청 전에 멈춘다."
+      }
+    },
+    {
+      "id": 4,
+      "title": "CLI와 Muse의 같은 작업 계약을 연결한다",
+      "files": [
+        "src/cli.mjs",
+        "src/main.mjs",
+        "docs/muse-contract.md",
+        "test/http.test.mjs"
+      ],
+      "target": "CLI와 Muse의 같은 작업 계약을 연결한다",
+      "depends_on": 3,
+      "change": "exec·session 명령과 토큰 인증 localhost API를 연결한다. 직접 조작·원격 접속은 연결되지 않으면 미지원으로 명시한다.",
+      "effect": "CLI와 Muse의 같은 작업 계약을 연결한다 결과와 한계가 확인된다.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "인증·취소·대상 경계 또는 실제 앱 호환을 검증해야 한다.",
+        "test_decision": "add",
+        "test_reason": "세션과 실행기 경계 회귀 검증이 필요하다.",
+        "subject": "CLI와 Muse의 같은 작업 계약을 연결한다",
+        "procedure": "스펙의 수락 기준과 지정 명령을 실행하고 실제 증거를 기록한다.",
+        "pass_criterion": "실행한 검사가 통과하고 미실행 항목은 완료로 표시하지 않는다."
+      }
+    },
+    {
+      "id": 5,
+      "title": "대화와 탭을 담은 앱 화면을 준비한다",
+      "files": [
+        "ui/index.html",
+        "ui/app.mjs",
+        "ui/style.css",
+        "src/protocol.d.ts",
+        "docs/ui-port.md"
+      ],
+      "target": "대화와 탭을 담은 앱 화면을 준비한다",
+      "depends_on": 4,
+      "change": "실제 데몬 API에 연결되는 내부 화면 시제품을 만든다. 브라우저 프리뷰와 특권 WebUI를 구분한다. pi-gui 포팅 경계를 기록한다. Pi 제공자 목록은 설치된 Pi 연결부에서 받는다. opencodex는 Pi 제공자로 표시한다.",
+      "effect": "대화와 탭을 담은 앱 화면을 준비한다 결과와 한계가 확인된다.",
+      "verification": {
+        "method": "functional",
+        "risk": "medium",
+        "risk_reason": "인증·취소·대상 경계 또는 실제 앱 호환을 검증해야 한다.",
+        "test_decision": "omit",
+        "test_reason": "실제 대상에서 기능을 확인해야 한다.",
+        "subject": "대화와 탭을 담은 앱 화면을 준비한다",
+        "procedure": "스펙의 수락 기준과 지정 명령을 실행하고 실제 증거를 기록한다.",
+        "pass_criterion": "실행한 검사가 통과하고 미실행 항목은 완료로 표시하지 않는다."
+      }
+    },
+    {
+      "id": 6,
+      "title": "자체 Chromium과 지정 MCP를 연결한다",
+      "files": [
+        "browser/chromium.lock.json",
+        "browser/patches",
+        "adapters/chrome",
+        "adapters/computer",
+        "browser/build.mjs",
+        "browser/build-spec.md",
+        "browser/test/build.test.mjs",
+        "specs/webui-ipc.md",
+        "src/ipc.mjs",
+        "test/ipc.test.mjs",
+        "specs/native-ipc-client.md",
+        "browser/native/ipc_client_mac.h",
+        "browser/native/ipc_client_mac.cc",
+        "browser/native/ipc_client_test.cc",
+        "specs/native-webui.md",
+        "browser/overlay",
+        "browser/patches/native-webui.json",
+        "browser/native/test/ipc-client.test.mjs",
+        "browser/native/test/ipc-daemon.test.mjs"
+      ],
+      "target": "자체 Chromium과 지정 MCP를 연결한다",
+      "depends_on": 1,
+      "change": "고정 Chromium을 빌드한 뒤 WebContents와 WebUI·Mojo를 통합한다. 별도 Native Messaging 경로와 소켓을 실검증한다. Xcode 미충족 시 구현 완료로 표시하지 않는다. Pi 브라우저 도구는 MyBrowse 중계기를 통과한다. 제공자 설정 공유만으로 MCP 완료로 판정하지 않는다.",
+      "effect": "자체 Chromium과 지정 MCP를 연결한다 결과와 한계가 확인된다.",
+      "verification": {
+        "method": "automated",
+        "risk": "high",
+        "risk_reason": "인증·취소·대상 경계 또는 실제 앱 호환을 검증해야 한다.",
+        "test_decision": "add",
+        "test_reason": "빌드 드라이버의 경로·도구 고정·취소·실패 분기를 자동 검사하고 앱 호환은 실제 실행으로 확인한다.",
+        "subject": "자체 Chromium과 지정 MCP를 연결한다",
+        "procedure": "빌드 드라이버 검사와 실제 신호 중단 검사를 실행한다. 이후 고정 소스 빌드·앱 실행·스토어·MCP 왕복을 기록한다.",
+        "pass_criterion": "자동 검사와 실제 앱 검사가 통과한다. 다운로드나 가짜 도구 결과만으로 앱 완료를 선언하지 않는다."
+      }
+    },
+    {
+      "id": 7,
+      "title": "스토어·Bitwarden과 두 Mac의 설치를 검증한다",
+      "files": [
+        "docs/extension-compatibility.md",
+        "browser/build",
+        "daemon/onboarding"
+      ],
+      "target": "스토어·Bitwarden과 두 Mac의 설치를 검증한다",
+      "depends_on": 6,
+      "change": "실제 앱에서 스토어 설치·유지·업데이트·자동 입력과 두 Mac 실행을 확인한다. 원본 Chrome 설정을 보존한다.",
+      "effect": "스토어·Bitwarden과 두 Mac의 설치를 검증한다 결과와 한계가 확인된다.",
+      "verification": {
+        "method": "functional",
+        "risk": "high",
+        "risk_reason": "인증·취소·대상 경계 또는 실제 앱 호환을 검증해야 한다.",
+        "test_decision": "omit",
+        "test_reason": "실제 대상에서 기능을 확인해야 한다.",
+        "subject": "스토어·Bitwarden과 두 Mac의 설치를 검증한다",
+        "procedure": "스펙의 수락 기준과 지정 명령을 실행하고 실제 증거를 기록한다.",
+        "pass_criterion": "실행한 검사가 통과하고 미실행 항목은 완료로 표시하지 않는다."
+      }
+    },
+    {
+      "id": 8,
+      "title": "교차 검토와 구현 증거를 남긴다",
+      "files": [
+        "evidence",
+        "implementation.json",
+        "README.md"
+      ],
+      "target": "교차 검토와 구현 증거를 남긴다",
+      "depends_on": 5,
+      "change": "CLIrelay로 구현을 검토하고 원 실행자가 검증을 재실행한다. 완료 항목과 외부 의존 항목을 구분한다.",
+      "effect": "교차 검토와 구현 증거를 남긴다 결과와 한계가 확인된다.",
+      "verification": {
+        "method": "automated",
+        "risk": "medium",
+        "risk_reason": "인증·취소·대상 경계 또는 실제 앱 호환을 검증해야 한다.",
+        "test_decision": "add",
+        "test_reason": "세션과 실행기 경계 회귀 검증이 필요하다.",
+        "subject": "교차 검토와 구현 증거를 남긴다",
+        "procedure": "스펙의 수락 기준과 지정 명령을 실행하고 실제 증거를 기록한다.",
+        "pass_criterion": "실행한 검사가 통과하고 미실행 항목은 완료로 표시하지 않는다."
+      }
+    }
+  ],
+  "verification": [
+    "node --test: SQLite 재시작, 취소·중복·revision·인증과 SSE 경계",
+    "공식 로그인 CLI의 실제 text-only 왕복과 세션 ID 보존",
+    "두 Mac preflight와 Chromium/스토어/MCP 미검증 게이트 구분",
+    "CLIrelay 구현·독립 검토 후 원 실행자가 검사 재실행"
+  ],
+  "risks": [
+    "지정한 Chrome MCP 상류는 MyBrowse를 기본 등록 대상으로 지원하지 않는다. 설치 경로와 브리지 선택을 이식·검증해야 한다.",
+    "pi-gui는 Electron과 Pi 실행기를 사용한다. React 화면, typed IPC와 CLI 실행기는 포팅이 필요하며 그대로 붙는 완성 브라우저가 아니다.",
+    "Electron의 확장 지원은 부분적이다. 전체 브라우저는 Chromium 타깃을 사용하고 실제 스토어 호환을 먼저 입증한다.",
+    "독립 앱은 원본 Chrome 로그인과 프로필을 자동 승계하지 않는다. 가져오기와 새 로그인 범위를 명시해야 한다.",
+    "Chromium 빌드·보안 업데이트, 제공자별 구독과 개입, 컴퓨터 조작 권한 및 Muse tailnet 연결은 실제 환경에서 검증해야 한다.",
+    "설치된 Pi와 pi-gui의 SDK 요구 버전이 다르다. 외부 Pi RPC 어댑터는 업데이트마다 호환 검사와 실제 도구 왕복 검증이 필요하다."
+  ],
+  "source_urls": [
+    "https://github.com/bpdus/agbrowse/blob/a3b6aba479d51365dabdaf8aa59468b0f292f09e/skills/browser/agent-runtime.mjs",
+    "https://learn.chatgpt.com/docs/auth",
+    "https://learn.chatgpt.com/docs/app-server",
+    "https://code.claude.com/docs/en/authentication",
+    "https://code.claude.com/docs/en/headless",
+    "https://github.com/lidge-jun/opencodex",
+    "https://github.com/iola1999/codex-control-chrome-mcp/tree/c701215a63fc5ca6bdc208deb27417cb7da3cb44",
+    "https://pi.dev/packages/codex-computer-use-mcp",
+    "https://github.com/tmustier/codex-computer-use-mcp/tree/dc72bae614dccd01ef9d0ffd8fdcfd42c990fc78",
+    "https://bitwarden.com/help/getting-started-browserext/",
+    "https://chromewebstore.google.com/detail/bitwarden-password-manage/nngceckbapebfimnlniiiahkandclblb",
+    "https://tailscale.com/docs/features/tailscale-serve",
+    "https://blog.google/products-and-platforms/products/chrome/new-chrome-productivity-features/",
+    "https://developer.chrome.com/docs/extensions/reference/api/sidePanel",
+    "https://github.com/minghinmatthewlam/pi-gui/tree/572c0c6de8ffd3a245c224b912bb8752ca200780",
+    "https://github.com/minghinmatthewlam/pi-gui/blob/572c0c6de8ffd3a245c224b912bb8752ca200780/docs/architecture.md",
+    "https://github.com/minghinmatthewlam/pi-gui/blob/572c0c6de8ffd3a245c224b912bb8752ca200780/packages/pi-sdk-driver/src/pi-addon-extensions.ts",
+    "https://github.com/minghinmatthewlam/pi-gui/blob/572c0c6de8ffd3a245c224b912bb8752ca200780/packages/pi-sdk-driver/src/runtime-supervisor.ts",
+    "https://www.electronjs.org/docs/latest/api/extensions",
+    "https://chromium.googlesource.com/chromium/src/+/main/docs/mac_build_instructions.md",
+    "https://github.com/chromium/chromium/blob/main/docs/webui/webui_explainer.md",
+    "https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md",
+    "https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md",
+    "https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/configuration.md"
+  ],
+  "pi_gui_baseline": {
+    "repository": "https://github.com/minghinmatthewlam/pi-gui",
+    "commit": "572c0c6de8ffd3a245c224b912bb8752ca200780",
+    "version": "1.0.1",
+    "license": "MIT",
+    "electron": "37.10.3",
+    "pi_runtime_dependency": "@earendil-works/pi-coding-agent ^1.0.0; 조사한 lockfile은 1.0.0",
+    "verified_at_source": [
+      "대화 입력·스트리밍·도구 결과 UI",
+      "대화 목록",
+      "OAuth 제공자 설정과 RuntimeSupervisor.login",
+      "MCP 설정 관리와 createMcpExtension 연결",
+      "SessionDriver 계약"
+    ],
+    "reuse_paths": [
+      "apps/desktop/src/features/conversation",
+      "apps/desktop/src/features/threads/sidebar.tsx",
+      "apps/desktop/src/features/settings/settings-providers-section.tsx",
+      "apps/desktop/src/features/settings/settings-mcp-section.tsx",
+      "packages/session-driver",
+      "packages/pi-sdk-driver/src/mcp-config.ts"
+    ],
+    "required_porting": [
+      "Electron window.piApp/preload를 typed WebUI bridge로 교체",
+      "Codex·Claude SessionDriver 호환 연결",
+      "MCP 설정을 실행기별 형식으로 변환",
+      "Pi OAuth와 CLI 인증 상태를 구분",
+      "Git 프로젝트 전제를 브라우저 프로필과 작업 전제로 변경"
+    ],
+    "electron_shell_for_final_browser": false,
+    "installed_or_run": false,
+    "upstream_macos_release_scope": "Apple Silicon 안내; 두 Mac 및 Intel 호환은 새 빌드에서 확인",
+    "license_action": "차용한 소스와 의존성의 저작권·라이선스 고지를 보존한다."
+  },
+  "spec_docs": {
+    "architecture": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/contracts.md",
+    "project_structure": null,
+    "db": null,
+    "prd": null,
+    "design": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/task-5.md"
+  },
+  "pi_shared_runtime": {
+    "spec": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/pi-shared-runtime.md",
+    "installed_package": "@earendil-works/pi-coding-agent",
+    "observed_version": "0.87.1",
+    "observed_node_requirement": ">=22.19.0",
+    "observed_opencodex_version": "2.82.0",
+    "screenshot_pi_integration": "not_applied",
+    "credentials_inspected": false,
+    "configuration_modified": false,
+    "live_model_verified": false,
+    "runtime_mode": "external_registered_cli",
+    "gui_sdk_dependency_mismatch": "pi-gui ^1.0.0 versus installed Pi 0.87.1",
+    "per_host_config": true,
+    "automatic_token_copy_between_hosts": false,
+    "startup_rpc_probe": "PASS: get_state, get_commands, get_available_models, EOF shutdown; isolated agent dir and PI_OFFLINE=1",
+    "execution_allowed_versions": [],
+    "startup_verified_versions": [
+      "0.87.1"
+    ],
+    "local_synthetic_provider_verified_versions": [
+      "0.87.1"
+    ],
+    "local_synthetic_provider_evidence": "evidence/pi-local-provider-probe.json",
+    "runtime_cache_verified": false,
+    "model_execution_enabled": false,
+    "driver_tests_passed": 48,
+    "driver_local_synthetic_provider_evidence": "evidence/pi-driver-local-probe.json",
+    "driver_implemented": true,
+    "service_registered": false
+  }
+}

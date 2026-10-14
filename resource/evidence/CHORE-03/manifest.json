@@ -1,0 +1,126 @@
+{
+  "tool": "apply-icon.mjs",
+  "createdAt": "2026-10-14T05:32:10.928Z",
+  "status": "applied",
+  "source": {
+    "path": "/Users/jjbyun/SynologyDrive/worktree/bpbrowser--chore-CHORE-03-supplied-browser-icon/app/browser/branding/icon-source.png",
+    "sha256": "01b61c4330b8e5749c10246b901ed74d50ba8d41efce58e444b6444ca6614191",
+    "width": 1254,
+    "height": 1254,
+    "hasAlpha": true,
+    "format": "png"
+  },
+  "artifacts": {
+    "app.icns": {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.icns",
+      "sha256": "59b611bd01ec2be28ffde7bda100c64939af389b0779038fe15a10d3563258e7",
+      "bytes": 1010654
+    },
+    "Assets.car": {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/compiled/Assets.car",
+      "sha256": "dbe1e7f965b282639514e26ef257958de484e4ac070ee851a03ffab26b61e442",
+      "bytes": 1176920
+    },
+    "icon-info.plist": {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/compiled/icon-info.plist",
+      "sha256": "2cb2dbb43d7fd36a46a161d0b13b68ead7aedc009160de705366c08f2d17965c",
+      "bytes": 298
+    },
+    "iconset": [
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_16x16.png",
+        "sha256": "35f3a728990193dc39c5f0030fe00971d0e3f82c6d7f8b9434d98410eb38a2ff",
+        "bytes": 748
+      },
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_16x16@2x.png",
+        "sha256": "a07b9d96693d209956a08d312eb7148167ee3342a6278d9056a3f0cd0d9bfb48",
+        "bytes": 1875
+      },
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_32x32.png",
+        "sha256": "a07b9d96693d209956a08d312eb7148167ee3342a6278d9056a3f0cd0d9bfb48",
+        "bytes": 1875
+      },
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_32x32@2x.png",
+        "sha256": "3b11d70e73b3e6a1879f75c83850c1050c80175fef4ffc76658895d91b5ca7ca",
+        "bytes": 5173
+      },
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_128x128.png",
+        "sha256": "0ea6bb4a3e5f37c01a8292ee6f863bc94579fa2589b6ec4086c05e8425cb83fa",
+        "bytes": 15059
+      },
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_128x128@2x.png",
+        "sha256": "caecff6301fe3b525920ad2fc5901f40683568376235675b2ebfcfdf7120331f",
+        "bytes": 45409
+      },
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_256x256.png",
+        "sha256": "caecff6301fe3b525920ad2fc5901f40683568376235675b2ebfcfdf7120331f",
+        "bytes": 45409
+      },
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_256x256@2x.png",
+        "sha256": "b9ef6b343c79808723648541a6e19decc684ddc267a26fae8d0863bccd0eeb2b",
+        "bytes": 153468
+      },
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_512x512.png",
+        "sha256": "b9ef6b343c79808723648541a6e19decc684ddc267a26fae8d0863bccd0eeb2b",
+        "bytes": 153468
+      },
+      {
+        "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/build/app.iconset/icon_512x512@2x.png",
+        "sha256": "26705d7497159c7bc43a682002dae0431f6205234b9a7d856e3b625fb0d111ae",
+        "bytes": 587659
+      }
+    ]
+  },
+  "targets": [
+    {
+      "label": "chromium-src",
+      "root": "/Users/jjbyun/SynologyDrive/bpbrowser/work/chromium/src",
+      "dir": "/Users/jjbyun/SynologyDrive/bpbrowser/work/chromium/src/chrome/app/theme/chromium/mac",
+      "files": [
+        {
+          "name": "app.icns",
+          "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/chromium/src/chrome/app/theme/chromium/mac/app.icns",
+          "backup": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/backups/chromium-src/app.icns",
+          "before": "a1c2b17191234ee4ab1259d4fb5056ef340cc64345c1a7d2b504c632812ff062",
+          "after": "59b611bd01ec2be28ffde7bda100c64939af389b0779038fe15a10d3563258e7"
+        },
+        {
+          "name": "Assets.car",
+          "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/chromium/src/chrome/app/theme/chromium/mac/Assets.car",
+          "backup": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/backups/chromium-src/Assets.car",
+          "before": "961218f6eef627cad9b6ef7401f1774efd9c1cbcd3eebd299d7843415a1fcbb7",
+          "after": "dbe1e7f965b282639514e26ef257958de484e4ac070ee851a03ffab26b61e442"
+        }
+      ]
+    },
+    {
+      "label": "app",
+      "root": "/Users/jjbyun/SynologyDrive/bpbrowser/work/chromium/src/out/Release-arm64/Chromium.app",
+      "dir": "/Users/jjbyun/SynologyDrive/bpbrowser/work/chromium/src/out/Release-arm64/Chromium.app/Contents/Resources",
+      "files": [
+        {
+          "name": "app.icns",
+          "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/chromium/src/out/Release-arm64/Chromium.app/Contents/Resources/app.icns",
+          "backup": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/backups/app/app.icns",
+          "before": "a1c2b17191234ee4ab1259d4fb5056ef340cc64345c1a7d2b504c632812ff062",
+          "after": "59b611bd01ec2be28ffde7bda100c64939af389b0779038fe15a10d3563258e7"
+        },
+        {
+          "name": "Assets.car",
+          "path": "/Users/jjbyun/SynologyDrive/bpbrowser/work/chromium/src/out/Release-arm64/Chromium.app/Contents/Resources/Assets.car",
+          "backup": "/Users/jjbyun/SynologyDrive/bpbrowser/work/icon-change/applied-20261014/backups/app/Assets.car",
+          "before": "961218f6eef627cad9b6ef7401f1774efd9c1cbcd3eebd299d7843415a1fcbb7",
+          "after": "dbe1e7f965b282639514e26ef257958de484e4ac070ee851a03ffab26b61e442"
+        }
+      ]
+    }
+  ]
+}

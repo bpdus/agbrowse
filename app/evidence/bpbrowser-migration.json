@@ -1,0 +1,59 @@
+{
+  "old_root": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https",
+  "new_root": "/Users/jjbyun/SynologyDrive/bpbrowser",
+  "repo_old": "bpdus/agbrowse",
+  "repo_new": "bpdus/bpbrowser",
+  "session_id": "01a134dc-e9af-7d02-b8dc-c8ce8d2bf6df",
+  "conversation_code": "BP7R4M2N8Q6X",
+  "original_git_head": "a3b6aba479d51365dabdaf8aa59468b0f292f09e",
+  "moves": [
+    {
+      "from": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/agbrowse-plan-source",
+      "to": "/Users/jjbyun/SynologyDrive/bpbrowser"
+    },
+    {
+      "from": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse",
+      "to": "/Users/jjbyun/SynologyDrive/bpbrowser/app"
+    },
+    {
+      "from": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work",
+      "to": "/Users/jjbyun/SynologyDrive/bpbrowser/work"
+    }
+  ],
+  "before_inodes": {
+    "repo": 79611380,
+    "app": 79703899,
+    "work": 79515675,
+    "chromium": 80108824
+  },
+  "after_inodes": {
+    "repo": 79611380,
+    "app": 79703899,
+    "work": 79515675,
+    "chromium": 80108824
+  },
+  "filesystem_move_verified": true,
+  "verification": {
+    "repository_head_preserved": true,
+    "local_origin_updated": true,
+    "workspace_registry_registered": true,
+    "workspace_board_registered": true,
+    "build_status": "arm64 built",
+    "node_tests": {
+      "passed": 123,
+      "failed": 0,
+      "skipped": 0,
+      "command_mode": "legacy path aliases retained with Node preserve-symlinks flags and an isolated short IPC fixture directory"
+    },
+    "native_browser_restarted_at_new_path": true,
+    "commit_or_push_executed": false,
+    "nas_sync_verified": false
+  },
+  "limitation": "Canonical-path test run exposed an existing IPC test assumption that ROOT is long enough to exceed the Unix socket limit. That run was terminated; the compatibility-path run passed. Production code was not changed.",
+  "current_state": {
+    "project_root": "/Users/jjbyun/SynologyDrive/bpbrowser",
+    "old_directory_removed": true,
+    "compatibility_paths_retained": false,
+    "cleanup_evidence": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/old-path-removal.json"
+  }
+}
