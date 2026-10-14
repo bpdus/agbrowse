@@ -6,3 +6,7 @@ node_modules/
 .browser-agent/
 playwright-report/
 coverage/
+
+# Local Chromium checkout, generated builds, profiles and private runtime data.
+/work/
+/.claude/settings.local.json
