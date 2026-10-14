@@ -1,0 +1,63 @@
+{
+  "run_id": "20261014-100458-claude-pi-shared-plan",
+  "target": "claude",
+  "session_id": "9cdec342-0631-45c1-99fc-20b4be62b6d6",
+  "project": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse",
+  "created_at": "2026-10-14T01:04:58Z",
+  "last_activity": "2026-10-14T01:12:00Z",
+  "state": "open",
+  "expires_at": null,
+  "ttl_days": 7,
+  "turns": 2,
+  "collected_turn": 0,
+  "staged": {
+    "plan.json": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/plan.json",
+      "sha256": "6197e898229d18a0e078b9440a03d2605c2825edc70eaab8c6232e4898dd82d9"
+    },
+    "pi-shared-runtime.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/pi-shared-runtime.md",
+      "sha256": "a3b1eded44960bc4719ab652b5c17217a83c3749a89ffdc19b405a4ff583f720"
+    },
+    "contracts.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/contracts.md",
+      "sha256": "d1d1ca355e72e816b3f55e37f9e61ce29949bf0cebf4c46becfee05635e2d3d0"
+    },
+    "rpc.md": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/docs/rpc.md",
+      "sha256": "4c6756093c8b949a82332fc2f34ae12373560b3ea444ff70fcfecd623489eaea"
+    },
+    "models.md": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/docs/models.md",
+      "sha256": "1054c905dd468ace0c00188010b69d89f163569e83a9c73714fc4ec90163c8f3"
+    },
+    "configuration.md": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/docs/configuration.md",
+      "sha256": "4c1773dc39d57f703e6e6dcebe34b443b93bedf204c490f81375d4d743fa131e"
+    },
+    "cli.md": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/docs/cli.md",
+      "sha256": "436a2870d274077662283e2085a4a34d96971434f54e064eebd799d0c1c42126"
+    },
+    "pi-rpc-probe.json": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/evidence/pi-rpc-probe.json",
+      "sha256": "ebcacf622782924f5d35d5771b4ec83749bfbada631a61e342f41265deba58f2"
+    },
+    "rpc-commands.md": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/docs/rpc-commands.md",
+      "sha256": "600bed271395edc92fffd40531a16669ba96af5a51a1d134f8e739e0cfd5d9e1"
+    },
+    "auth-storage.js": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js",
+      "sha256": "0b45029901579032b19273a1427f63b622df8e1aaf9ea185eb932c0d4898998c"
+    },
+    "settings-manager.js": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js",
+      "sha256": "5368b155ec26d88374cec9e66b8e588b5041a0fb0047414f70b34e13892c4f48"
+    },
+    "rpc-mode.js": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/dist/modes/rpc/rpc-mode.js",
+      "sha256": "bdd94e753e6d19731d9fb9ea370462d095d64f1e78bddd7651320663fa57c4ff"
+    }
+  }
+}

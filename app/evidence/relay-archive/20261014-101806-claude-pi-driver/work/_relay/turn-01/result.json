@@ -1,0 +1,4 @@
+{"status": "DONE", "summary": "Pi RPC 실행기(src/engines/pi.mjs)와 JSONL 전송 계층(pi-rpc.mjs)을 구현했고, 가짜 프로세스 테스트 39개가 모두 통과했습니다. 실제 Pi 계정·제공자·LLM 왕복은 검사하지 않았습니다.",
+ "changed_files": ["src/engines/pi.mjs", "src/engines/pi-rpc.mjs", "test/pi-engine.test.mjs", "test/pi-rpc.test.mjs"],
+ "verification": [{"command": "node --test test/pi-rpc.test.mjs test/pi-engine.test.mjs (2회 연속 실행)", "result": "39개 중 39개 통과, 실패 0, 약 1.7초"}],
+ "questions": ["Pi 0.87.1의 --no-tools/--no-extensions/--no-skills/--no-prompt-templates/--no-themes 플래그 철자를 실제 --help로 확인해 주세요. 제공된 문서에는 없어 추정한 값입니다.", "모델 미준비·모델 불일치는 Codex의 로그인 필요와 같은 방식으로 onWaiting('pi_provider_unavailable')만 호출하고 onEnd는 호출하지 않았습니다. 서비스가 다른 방식을 원하면 알려 주세요.", "stop 이후에는 Codex처럼 onEnd를 호출하지 않습니다. paused 종료 콜백이 필요한지 확인해 주세요."]}

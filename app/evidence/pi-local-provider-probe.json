@@ -1,0 +1,24 @@
+{
+  "package": "@earendil-works/pi-coding-agent",
+  "version": "0.87.1",
+  "entry_sha256": "e79626f2dd6f94aa45d30f3fa63cd84319a6eefcd150b353cfaf274366926774",
+  "isolated_home": true,
+  "real_credentials_read": false,
+  "network_scope": "127.0.0.1 synthetic provider only",
+  "real_llm_called": false,
+  "browser_tools_enabled": false,
+  "checks": {
+    "normal_prompt_and_settled": true,
+    "eof_shutdown": true,
+    "resume_same_actual_session_id": true,
+    "steer_before_settled": true,
+    "clear_queue_abort_and_settled": true
+  },
+  "provider_request_count": 4,
+  "tools_in_provider_requests": 0,
+  "actual_session_id_verified": true,
+  "resume_session_id_matched": true,
+  "steered_agent_end_count": 1,
+  "live_provider_verified": false,
+  "runtime_cache_verified": false
+}

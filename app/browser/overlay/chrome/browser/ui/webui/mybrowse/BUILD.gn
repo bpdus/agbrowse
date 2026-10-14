@@ -1,0 +1,70 @@
+# Copyright 2026 The MyBrowse Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+
+# The mojom has no platform code, so the WebUI resources can reference its
+# generated TypeScript on every platform.
+mojom("mojo_bindings") {
+  sources = [ "mybrowse.mojom" ]
+  webui_module_path = "/"
+}
+
+if (is_mac) {
+  # Headers only. Other targets include these without linking the sources.
+  source_set("mybrowse") {
+    sources = [
+      "ipc_client_mac.h",
+      "mybrowse_agent_client.h",
+      "mybrowse_agent_files.h",
+      "mybrowse_bookmarks.h",
+      "mybrowse_constants.h",
+      "mybrowse_page_handler.h",
+      "mybrowse_request.h",
+      "mybrowse_tab_service.h",
+      "mybrowse_ui.h",
+      "mybrowse_window_context.h",
+    ]
+    public_deps = [
+      ":mojo_bindings",
+      "//base",
+      "//content/public/browser",
+      "//mojo/public/cpp/bindings",
+      "//ui/webui",
+      "//url",
+    ]
+  }
+
+  source_set("impl") {
+    sources = [
+      "ipc_client_mac.cc",
+      "mybrowse_agent_client.cc",
+      "mybrowse_agent_files.cc",
+      "mybrowse_bookmarks.cc",
+      "mybrowse_page_handler.cc",
+      "mybrowse_request.cc",
+      "mybrowse_tab_service.cc",
+      "mybrowse_ui.cc",
+      "mybrowse_window_context.cc",
+    ]
+    public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+    deps = [
+      ":mybrowse",
+      "//base",
+      "//chrome/browser/bookmarks",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/resources/mybrowse:resources",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/browser/ui/tabs:tab_strip",
+      "//components/bookmarks/browser",
+      "//components/sessions",
+      "//components/tabs:public",
+      "//content/public/browser",
+      "//content/public/common",
+      "//services/network/public/mojom",
+      "//ui/webui",
+      "//url",
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MyBrowse</title><link rel="stylesheet" href="style.css"><script src="app.mjs" type="module"></script></head>
+<body>
+<aside class="sidebar">
+ <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
+ <button class="brand" id="home-button"><span class="brand-mark">m</span> mybrowse <span class="collapse">◧</span></button>
+ <div class="shortcuts"><button data-bookmark="https://github.com">GH</button><button data-bookmark="https://google.com">G</button><button data-bookmark="https://notion.so">N</button></div>
+ <p class="section-label">북마크</p><button class="nav-item" data-bookmark="https://github.com">◈ <span>GitHub</span></button><button class="nav-item" data-bookmark="https://notion.so">▧ <span>Notion</span></button>
+ <div class="section-heading"><span>대화</span><button id="new-chat" aria-label="새 대화">＋</button></div>
+ <div id="chat-list" class="chat-list"></div>
+ <div class="section-heading"><span>탭</span><span class="count">0</span></div><button class="nav-item" id="new-tab">＋ <span>새 탭</span></button><p class="empty-tabs">앱 브라우저 연결 대기</p>
+ <div class="sidebar-bottom"><button class="nav-item" id="settings-button">⚙ <span>연결 설정</span></button><div class="host-status"><span class="dot"></span><span id="host-label">로컬 연결 확인</span><span class="preview">프리뷰</span></div></div>
+</aside>
+<main>
+ <header class="toolbar"><div class="navigation"><button disabled aria-label="뒤로">‹</button><button disabled aria-label="앞으로">›</button><button id="refresh" aria-label="새로고침">↻</button></div><span class="address">mybrowse / home</span><button id="panel-button" aria-label="대화로 이동">▤</button></header>
+ <div id="notice" role="status" class="notice hidden"></div>
+ <section id="home" class="home-view">
+  <div class="hero"><div class="hero-mark">m</div><p class="eyebrow">YOUR BROWSER, WITH A LITTLE HELP</p><h1>어디서 시작할까요?</h1><p class="hero-subtitle">웹을 둘러보고, 생각을 이어가세요.</p></div>
+  <form id="composer" class="composer"><label class="sr-only" for="prompt">작업 또는 대화 입력</label><textarea id="prompt" rows="2" placeholder="무엇을 도와드릴까요?" required></textarea><div class="composer-bottom"><span class="local-pill">⌘ Local</span><select id="engine" aria-label="실행기"><option value="codex">Codex CLI</option><option value="claude">Claude Code</option><option value="opencodex" disabled>opencodex · 연결 대기</option></select><select id="mode" aria-label="작업 종류"><option value="chat">대화</option><option value="browser">브라우저 작업</option></select><button class="submit" type="submit">Ask <span>↗</span></button></div></form>
+  <div class="suggestions"><button data-suggestion="이 앱에서 브라우저 작업과 대화가 어떻게 연결되는지 설명해줘.">앱 구조 알아보기</button><button data-suggestion="읽고 싶은 글의 내용을 붙여넣으면 핵심을 정리해줘.">함께 읽고 정리하기</button><button data-suggestion="오늘 해야 할 일을 정리할 수 있도록 도와줘.">하루 계획 세우기</button></div>
+  <div class="recent-heading"><h2>최근 작업</h2><span id="task-count">0개의 대화</span></div><div id="recent-tasks" class="recent-grid"></div>
+  <footer>대화는 이 Mac에서 실행합니다. 웹페이지는 Chromium 통합 후 앱 안에서 열립니다.</footer>
+ </section>
+ <section id="conversation" class="conversation hidden"><div class="conversation-heading"><div><p class="eyebrow" id="session-meta">LOCAL SESSION</p><h1 id="session-title">대화</h1></div><span id="session-status" class="status-badge"></span></div><div id="timeline" aria-live="polite"></div><form id="followup" class="followup"><label class="sr-only" for="followup-text">추가 지시</label><textarea id="followup-text" rows="2" placeholder="추가 지시를 입력하세요"></textarea><div class="followup-buttons"><button type="button" data-action="stop">중단</button><button type="button" data-action="steer">중간 지시</button><button type="button" data-action="queue">다음 턴 예약</button><button type="submit" class="submit">이어하기 ↗</button></div></form></section>
+ <section id="settings" class="settings hidden"><p class="eyebrow">CONNECTIONS</p><h1>연결 설정</h1><p>CLI 인증은 각 CLI의 공식 로그인 저장소에서 읽습니다.</p><form id="auth-form"><label for="token">로컬 데몬 연결 토큰</label><input id="token" type="password" autocomplete="off" placeholder="mybrowse auth token으로 확인하세요"><button class="submit" type="submit">연결</button></form><p class="subtle">토큰은 현재 화면의 메모리에만 보관합니다.</p><div class="setting-row"><div><strong>Codex / Claude</strong><p>공식 구독 로그인으로 대화를 실행합니다.</p></div><span>CLI</span></div><div class="setting-row"><div><strong>브라우저 MCP</strong><p>자체 Chromium의 Native Messaging 연결이 필요합니다.</p></div><span>연결 대기</span></div><div class="setting-row"><div><strong>opencodex</strong><p>제공자와 인증 경로의 추가 검증이 필요합니다.</p></div><span>연결 대기</span></div></section>
+</main>
+</body></html>

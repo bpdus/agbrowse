@@ -1,0 +1,3 @@
+status: PARTIAL
+
+summary: IPC `list`를 rowid 커서 방식의 요약 페이지로 바꿨습니다. `Store.listSummaries`와 `SessionService.listSummaries`를 추가했고, 기존 `list()`는 그대로입니다. listen 성공 뒤 검사가 실패해도 `shutdown()`으로 listener를 닫도록 고쳤습니다. 샌드박스가 소켓 bind를 막아(EPERM) IPC 소켓 테스트는 실행하지 못했습니다. 소켓 없이 확인한 것은 문법 검사, 기존 core/http 테스트 32개, 메모리 Store 직접 호출입니다. 직접 호출에서는 230개 세션이 중복·누락 없이 최신순으로 읽혔고, title은 240자 이내였습니다. 루트가 `MYBROWSE_IPC_TEST_DIR=/private/tmp node --test test/ipc.test.mjs`로 실제 검사를 해야 합니다.

@@ -1,0 +1,36 @@
+{
+  "status": "DONE",
+  "summary": "contracts.md에 맞춰 SQLite Store, Broker, SessionService, loopback HTTP API(SSE 포함)와 가짜 엔진 기반 경계 검사 32개를 구현했고 모두 통과했습니다. 다만 샌드박스가 포트 바인딩을 막아 HTTP 검사는 실제 node:http 서버를 메모리 소켓 쌍으로 구동했으며, 실제 TCP 바인딩과 실제 엔진·브라우저 연동은 검증하지 않았습니다.",
+  "changed_files": [
+    "mybrowse/src/store.mjs",
+    "mybrowse/src/broker.mjs",
+    "mybrowse/src/service.mjs",
+    "mybrowse/src/http.mjs",
+    "mybrowse/test/core.test.mjs",
+    "mybrowse/test/http.test.mjs"
+  ],
+  "verification": [
+    {
+      "command": "node --test mybrowse/test/core.test.mjs mybrowse/test/http.test.mjs (3회 반복)",
+      "result": "매회 tests 32, pass 32, fail 0 (core 23, http 9)"
+    },
+    {
+      "command": "core.test.mjs: 가짜 엔진과 임시 SQLite 파일 사용",
+      "result": "재시작 시 running/queued를 uncertain으로 바꾸고 재실행하지 않음, 생성·명령 중복과 본문 불일치 409, host 불일치, stale revision, steer 미지원 409(revision 불변), 턴 종료 후 queue 순서 전달, 시작 중 stop 경쟁(늦은 handle 정지·비활성화), 늦은 callback 무시, waiting_user 유지, 동기 callback, 시작 실패, lease 충돌·block·stale·no_lease, mutation 실패 시 uncertain, in-flight mutation이 있으면 uncertain 우선 적용을 확인함"
+    },
+    {
+      "command": "http.test.mjs: 실제 node:http 서버와 클라이언트를 메모리 Duplex 소켓 쌍으로 연결하고 server.address()만 stub",
+      "result": "/health 공개와 capabilities(browser=false, opencodex=false, queue_boundary=turn_end, engines), bearer 401, URL 토큰 400, 외부 Origin·null Origin 403, 잘못된 Host 421, 64KiB 초과 413(Content-Length 선언과 chunked 스트리밍 모두), 415·잘못된 JSON 400, {session}/{sessions} 응답 형태, 명령 재전송 시 재실행 없음, SSE의 after_seq·Last-Event-ID 재생과 실시간 이벤트, /ui 허용 목록 파일과 CSP 제공·경로 이탈 404, 0.0.0.0 listen 거부를 확인함"
+    },
+    {
+      "command": "실제 loopback 포트에서 http.test.mjs 실행",
+      "result": "샌드박스가 listen EPERM으로 차단했고, 샌드박스 밖 실행은 승인되지 않음. 실제 TCP 바인딩은 미검증"
+    }
+  ],
+  "questions": [
+    "Broker의 관찰 도구 허용 목록(chrome_list_tabs, chrome_screenshot 등)은 추정한 이름입니다. codex-control-chrome-mcp의 실제 도구 이름으로 맞춰야 합니다. 목록에 없는 도구는 mutation으로 처리되므로 기본값은 안전합니다.",
+    "Session에 contracts.md에 없는 task 필드(원래 작업)를 추가했습니다. 계약 문서에 반영할까요?",
+    "service.get(id)는 세션이 없으면 null을 반환하지 않고 404 ServiceError를 던집니다. main.mjs와 cli.mjs도 이 동작을 전제로 해도 될까요?",
+    "POST /v1/sessions는 신규 생성과 중복 반환을 모두 200으로 응답합니다. 201로 구분해야 할까요?"
+  ]
+}

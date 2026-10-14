@@ -1,0 +1,6 @@
+{
+  "name": "mybrowse", "version": "0.1.0", "private": true, "type": "module",
+  "engines": {"node": ">=24.15.0"},
+  "bin": {"mybrowse": "./src/cli.mjs"},
+  "scripts": {"start": "node src/main.mjs", "test": "node --test test/*.test.mjs", "test:browser-build": "node --test browser/test/*.test.mjs", "browser:build": "node browser/build.mjs", "preflight": "node scripts/preflight.mjs", "check": "node scripts/check.mjs"}
+}

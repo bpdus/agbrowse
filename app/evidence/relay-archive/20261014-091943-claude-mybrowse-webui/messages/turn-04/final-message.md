@@ -1,0 +1,1 @@
+PARTIAL: `app.ts`에 3초 간격의 비중첩 health/목록 갱신을 추가했다. 실패하면 기존 데이터를 유지하고, `pagehide`에서 타이머를 취소하며, bfcache에서 복귀하면 갱신을 다시 시작한다. `bridge.ts`는 변이 요청의 `proxy_error`와 `timeout`에 결과 불확실 표지를 유지한다. tsc와 GN 검사는 실행하지 않았다.

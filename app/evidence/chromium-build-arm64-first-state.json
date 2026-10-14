@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "sync": {
+    "status": "completed",
+    "commit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+    "sourceCreatedByDriver": false,
+    "startedAt": "2026-10-13T23:39:41.437Z",
+    "resumed": false,
+    "exitCode": 0,
+    "endedAt": "2026-10-13T23:43:30.626Z",
+    "head": "cfaadc5a132d78e1828635aa8405a499f3e14864"
+  },
+  "gen": {
+    "arm64": {
+      "status": "completed",
+      "exitCode": 0,
+      "at": "2026-10-13T23:45:39.781Z",
+      "commit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+      "argsHash": "569beee6b4a2a09ebadcb7b19a6a6a29b17853a1a4c07fbc2ea3f360bd39ac43"
+    }
+  },
+  "build": {
+    "arm64": {
+      "status": "failed",
+      "jobs": 6,
+      "commit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+      "argsHash": "569beee6b4a2a09ebadcb7b19a6a6a29b17853a1a4c07fbc2ea3f360bd39ac43",
+      "startedAt": "2026-10-13T23:46:08.709Z",
+      "exitCode": 1,
+      "endedAt": "2026-10-13T23:47:03.117Z"
+    }
+  },
+  "lockCommit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+  "prepare": {
+    "at": "2026-10-13T23:39:18.444Z",
+    "checkoutConfiguration": "small"
+  }
+}

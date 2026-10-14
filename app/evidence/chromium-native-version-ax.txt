@@ -1,0 +1,120 @@
+Window: "버전 정보", App: Chromium.
+0 표준 윈도우 버전 정보 - Chromium, URL: chrome://version/, Secondary Actions: Raise
+	1 container 버전 정보 - Chromium, URL: chrome://version/
+		2 container
+			3 도구 막대
+				4 스크롤 영역
+					5 container chrome://webui-toolbar.top-chrome/
+						6 툴바
+							7 버튼 뒤로, Help: 클릭하면 이전 페이지로 가고 누르고 있으면 방문 기록이 나타납니다.
+							8 버튼 (disabled) 앞으로, Help: 클릭하면 다음 페이지로 가고 누르고 있으면 방문 기록이 나타납니다.
+							9 버튼 새로고침, Help: 페이지 새로고침
+				10 container
+					11 팝업 버튼 Chromium
+					12 텍스트 필드 (settable) 주소창 및 검색창, Value: chrome://version, Placeholder: Google에서 검색하거나 URL을 입력하세요.
+					13 버튼 현재 탭을 북마크에 추가
+				14 버튼 나
+				15 팝업 버튼 Chromium
+			16 container
+				17 스크롤 영역
+					18 HTML 콘텐츠 버전 정보, URL: chrome://version/
+						19 container
+							20 이미지 Chromium 로고
+							21 텍스트 The Chromium Authors
+							22 텍스트 Copyright 2026 The Chromium Authors. All rights reserved.
+							23 container
+								24 container Chromium:
+									25 text Chromium :
+								26 container 155.0.8059.40 (개발자 빌드) (arm64) 버전 문자열 복사
+									27 container
+										28 text 155.0.8059.40  ( 개발자 빌드 )  (arm64)
+									29 버튼 버전 문자열 복사
+							30 container
+								31 container 개정:
+									32 text 개정 :
+								33 container 0000000000000000000000000000000000000000-0000000000000000000000000000000000000000
+									34 텍스트 0000000000000000000000000000000000000000-0000000000000000000000000000000000000000
+							35 container
+								36 container OS:
+									37 text OS :
+								38 container macOS 버전 26.6.2(빌드 25G83)
+									39 container
+										40 텍스트 macOS 버전 26.6.2(빌드 25G83)
+							41 container
+								42 container JavaScript:
+									43 text JavaScript :
+								44 container V8 15.5.35.20
+									45 text V8 15.5.35.20
+							46 container
+								47 container 사용자 에이전트:
+									48 text 사용자 에이전트 :
+								49 container Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36
+									50 텍스트 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36
+							51 container
+								52 container 명령줄:
+									53 text 명령줄 :
+								54 container /Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chromium/src/out/Release-arm64/Chromium.app/Contents/MacOS/Chromium --user-data-dir=/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chromium-native-smoke-profile --no-first-run --no-default-browser-check --use-mock-keychain --disable-features=DialMediaRouteProvider --flag-switches-begin --flag-switches-end https://example.com
+									55 텍스트 /Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chromium/src/out/Release-arm64/Chromium.app/Contents/MacOS/Chromium --user-data-dir=/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chromium-native-smoke-profile --no-first-run --no-default-browser-check --use-mock-keychain --disable-features=DialMediaRouteProvider --flag-switches-begin --flag-switches-end https://example.com
+							56 container
+								57 container 실행 가능 경로:
+									58 text 실행 가능 경로 :
+								59 container /Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chromium/src/out/Release-arm64/Chromium.app/Contents/MacOS/Chromium
+									60 텍스트 /Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chromium/src/out/Release-arm64/Chromium.app/Contents/MacOS/Chromium
+							61 container
+								62 container 프로필 경로:
+									63 text 프로필 경로 :
+								64 container /Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chromium-native-smoke-profile/Default
+									65 텍스트 /Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chromium-native-smoke-profile/Default
+							66 container
+								67 container Linker:
+									68 text Linker :
+								69 container lld
+									70 텍스트 lld
+							71 container
+								72 container 변형 소스:
+									73 text 변형 소스 :
+								74 container field-trial-config (command line or about flags)
+									75 텍스트 field-trial-config (command line or about flags)
+							76 container
+								77 container 버전 시드 유형:
+									78 text 버전 시드 유형 :
+								79 container Null
+									80 텍스트 Null
+							81 container
+								82 container 명령줄 변형:
+									83 text 명령줄 변형 :
+								84 container eyJkaXNhYmxlLWZlYXR1cmVzIjoiQVZGb3VuZGF0aW9uQ2FwdHVyZUZvcndh...
+									85 텍스트 eyJkaXNhYmxlLWZlYXR1cmVzIjoiQVZGb3VuZGF0aW9uQ2FwdHVyZUZvcndh...
+								86 container 변형 문자열 복사
+									87 버튼 변형 문자열 복사
+							88 container
+								89 container 활성 버전:
+									90 text 활성 버전 :
+								91 container 1db03297-3f4a17df 6c9bc01b-3f4a17df c203d55b-3f4a17df a66dbd64-71c38a98 1e11dbbb-3f4a17df 832e9e2-3f4a17df 89986dbe-3f01b610 e0a24f31-3d47f4f4 75251bde-3d47f4f4 fbf04c3e-3f4a17df fa220cc1-3f4a17df 76e51e2c-3f4a17df f7adf49b-3f4a17df 171eed38-3f4a17df ae6d8246-3f4a17df 6f87b0c-3f4a17df 5d6e19f0-3d47f4f4 be9ac099-f9095748 5d43ba47-3f4a17df 3fcef0b9-3f4a17df 4583a71-3f4a17df 9f488d92-3f4a17df 2ad3343-3f4a17df bf7e54f4-3f4a17df 47a0a3b2-3f4a17df 4ce9e3a9-a3629d29 63ef0138-3f4a17df 8f80c10-78198108 a4ca7cb1-3f4a (showing 0-100 of 363 items)
+									92 text 1db03297-3f4a17df 6c9bc01b-3f4a17df c203d55b-3f4a17df a66dbd64-71c38a98 1e11dbbb-3f4a17df 832e9e2-3f4a17df 89986dbe-3f01b610 e0a24f31-3d47f4f4 75251bde-3d47f4f4 fbf04c3e-3f4a17df fa220cc1-3f4a17df 76e51e2c-3f4a17df f7adf49b-3f4a17df 171eed38-3f4a17df ae6d8246-3f4a17df 6f87b0c-3f4a17df 5d6e19f0-3d47f4f4 be9ac099-f9095748 5d43ba47-3f4a17df 3fcef0b9-3f4a17df 4583a71-3f4a17df 9f488d92-3f4a17df 2ad3343-3f4a17df bf7e54f4-3f4a17df 47a0a3b2-3f4a17df 4ce9e3a9-a3629d29 63ef0138-3f4a17df 8f80c10-78198108 a4ca7cb1-3f4a17df 9a26d980-13a3e431 da968c94-3f4a17df ae727645-d13781e7 de69cad8-3f4a17df b0f4d712-3f4a17df 99fb13df-c3c0f822 ba1f9add-3f4a17df cdc6dc11-e921803b 92b406bd-3f4a17df e51c83b-dc4755e5 fbde1821-3f4a17df 40ff6f40-fb6df2c9 fb92da45-3f4a17df d6ad7f9a-a9080253 9507cc99-f2018abe c2bfaa56-3f4a17df 797fe373-3f4a17df b0b483da-3f4a17df a3b91d85-3f4a17df 17a43872-3f4a17df e4d43646-3f4a17df f7d06457-e9d42fcd d512da3a-513c429d fd36b611-c64b7b92 63f121e7-3f4a17df 25127394-3f4a17df bf9ed750-d9924ac7 4b86e77-9609086 a34be965-3f4a17df 8e887d5e-3f4a17df 18b8e9fd-3f4a17df ff1e0777-3f4a17df d096ab89-97a6d585 eb689255-3f4a17df b127f8bf-3f4a17df 58cdc9f0-5b5c92cd 153d998a-53b1d3ec 4dc2f223-3f4a17df e9854fc-2e12b55 f314f5b9-a2b13a7f 238649f0-a2b13a7f b5c2948-84db5eb1 8095bf60-3f4a17df 531e1626-4513f3bf f44c0371-3f4a17df c9e39c5f-3f4a17df 352f87df-3f4a17df 820f17d2-e484eeec 40debc11-3f4a17df 44666d99-3d47f4f4 b1b6eab0-381bdb0c e22763c8-b8554d7a f914376f-3f4a17df 21e47f2a-3f4a17df 46bf16e3-3d47f4f4 c295f76c-3f4a17df ea0e1b65-3f4a17df e14ee5ee-c6d6098d fd051c38-3f4a17df c5c172fe-443695d8 284a13f5-3f4a17df 8f9d758f-f0fa2256 73f2ea1f-7fe57363 38b96156-3f4a17df 47b4cae6-3f4a17df 35c106c9-3f4a17df 639ee5d3-3f4a17df 7dcaa2cd-3f4a17df e6d68be3-85c54e1c 186230f2-3f4a17df f6f5c542-3f4a17df
+								93 container 변형 문자열 복사
+									94 버튼 변형 문자열 복사
+			95 팝업 버튼 탭 검색
+			96 container
+				97 탭 그룹
+					98 탭 (settable, boolean) Example Domain, Value: off
+						99 버튼 닫기
+					100 탭 (selected, settable, boolean) 버전 정보, Value: on
+						101 버튼 닫기
+			102 버튼 새 탭
+	103 닫기 버튼
+	104 전체 화면 버튼 Help: 이 버튼을 누르면 윈도우를 확대/축소합니다., Secondary Actions: 윈도우 확대/축소
+	105 최소화 버튼
+106 menu bar
+	107 Chromium
+	108 파일
+	109 수정
+	110 보기
+	111 방문 기록
+	112 북마크
+	113 프로필
+	114 탭
+	115 창
+	116 도움말
+
+The focused UI element is 18 HTML 콘텐츠 버전 정보, URL: chrome://version/

@@ -1,0 +1,63 @@
+{
+  "run_id": "20261014-101806-claude-pi-driver",
+  "target": "claude",
+  "session_id": "37da16c0-51c2-4191-ac39-51cd8687845a",
+  "project": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse",
+  "created_at": "2026-10-14T01:18:06Z",
+  "last_activity": "2026-10-14T01:33:36Z",
+  "state": "open",
+  "expires_at": null,
+  "ttl_days": 7,
+  "turns": 3,
+  "collected_turn": 3,
+  "staged": {
+    "pi-driver.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/pi-driver.md",
+      "sha256": "32daa6d818d84210d4bb6350ef3d60b0beda5173734ffa46e29bd772e135e7d8"
+    },
+    "pi-shared-runtime.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/pi-shared-runtime.md",
+      "sha256": "98855843cb95144f95279a35abcdf99d227df65381dddacc725e1f3050bd9ccb"
+    },
+    "rpc.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/rpc.mjs",
+      "sha256": "1198d2ebe79a5d9f8399fbeb4bb293d4981ccbf49095398c9e587fafc7a034b5"
+    },
+    "environment.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/environment.mjs",
+      "sha256": "f4898113120fd99cfc8d88e322f443fd8627cb43914275b06003ffc0fe4c6551"
+    },
+    "codex.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/codex.mjs",
+      "sha256": "9353547fcbe1089cc4cc2a63fb82a8150d4039bf2282f2fb476a8db3a77db23a"
+    },
+    "engines.test.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/test/engines.test.mjs",
+      "sha256": "cddf78a6f8a580e1282311825b915309a6bc06fa66c0cf5218c42802c032e576"
+    },
+    "rpc-commands.md": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/docs/rpc-commands.md",
+      "sha256": "600bed271395edc92fffd40531a16669ba96af5a51a1d134f8e739e0cfd5d9e1"
+    },
+    "json.md": {
+      "source": "/Users/jjbyun/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent/docs/json.md",
+      "sha256": "839a2a2da8112298a7f8870afa71d1998db2d43b8f68c9c179a0c696b6477a5e"
+    },
+    "src/engines/rpc.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/rpc.mjs",
+      "sha256": "1198d2ebe79a5d9f8399fbeb4bb293d4981ccbf49095398c9e587fafc7a034b5"
+    },
+    "src/engines/codex.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/codex.mjs",
+      "sha256": "9353547fcbe1089cc4cc2a63fb82a8150d4039bf2282f2fb476a8db3a77db23a"
+    },
+    "src/engines/environment.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/environment.mjs",
+      "sha256": "f4898113120fd99cfc8d88e322f443fd8627cb43914275b06003ffc0fe4c6551"
+    },
+    "src/engines/claude.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/claude.mjs",
+      "sha256": "0f49271ccee94f270ff83b8dd6e491489e5c7ed92e32485c6b74da36e2f72bbe"
+    }
+  }
+}

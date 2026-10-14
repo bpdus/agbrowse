@@ -1,0 +1,22 @@
+{
+  "scope": "syntax only, modules disabled, no link or app verification",
+  "baseline_generated_headers_read_only": true,
+  "results": [
+    {
+      "file": "mybrowse_sidebar_web_view.cc",
+      "exit_code": 0
+    },
+    {
+      "file": "vertical_tab_strip_region_view.cc",
+      "exit_code": 1
+    },
+    {
+      "file": "chrome_web_ui_configs.cc",
+      "exit_code": 1
+    },
+    {
+      "file": "chrome_browser_interface_binders_webui_parts_desktop.cc",
+      "exit_code": 1
+    }
+  ]
+}

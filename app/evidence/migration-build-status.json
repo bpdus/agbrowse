@@ -1,0 +1,47 @@
+{
+  "lock": {
+    "tag": "155.0.8059.40",
+    "commit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+    "build_verified": false
+  },
+  "paths": {
+    "chromiumDir": "/Users/jjbyun/SynologyDrive/bpbrowser/work/chromium",
+    "depotToolsDir": "/Users/jjbyun/SynologyDrive/bpbrowser/work/depot_tools"
+  },
+  "depotToolsMissing": [],
+  "gclient": "present",
+  "source": "source_ready",
+  "sync": {
+    "status": "completed",
+    "commit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+    "sourceCreatedByDriver": false,
+    "startedAt": "2026-10-13T23:39:41.437Z",
+    "resumed": false,
+    "exitCode": 0,
+    "endedAt": "2026-10-13T23:43:30.626Z",
+    "head": "cfaadc5a132d78e1828635aa8405a499f3e14864"
+  },
+  "arches": {
+    "arm64": {
+      "state": "built",
+      "outDir": "out/Release-arm64",
+      "lastBuild": {
+        "status": "completed",
+        "jobs": 6,
+        "commit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+        "argsHash": "569beee6b4a2a09ebadcb7b19a6a6a29b17853a1a4c07fbc2ea3f360bd39ac43",
+        "startedAt": "2026-10-13T23:52:14.481Z",
+        "exitCode": 0,
+        "endedAt": "2026-10-14T04:05:01.485Z",
+        "binary": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/work/chromium/src/out/Release-arm64/Chromium.app/Contents/MacOS/Chromium"
+      }
+    },
+    "x64": {
+      "state": "source_ready",
+      "outDir": "out/Release-x64",
+      "lastBuild": null
+    }
+  },
+  "head": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+  "version": "155.0.8059.40"
+}

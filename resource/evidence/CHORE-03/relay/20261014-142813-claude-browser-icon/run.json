@@ -1,0 +1,19 @@
+{
+  "run_id": "20261014-142813-claude-browser-icon",
+  "target": "claude",
+  "session_id": "6470e849-61f4-4d70-a456-bf2f9441002f",
+  "project": "/Users/jjbyun/SynologyDrive/bpbrowser",
+  "created_at": "2026-10-14T05:28:13Z",
+  "last_activity": "2026-10-14T05:32:10Z",
+  "state": "open",
+  "expires_at": null,
+  "ttl_days": 7,
+  "turns": 1,
+  "collected_turn": 1,
+  "staged": {
+    "icon-source.png": {
+      "source": "/Users/jjbyun/SynologyDrive/worktree/bpbrowser--chore-CHORE-03-supplied-browser-icon/app/browser/branding/icon-source.png",
+      "sha256": "01b61c4330b8e5749c10246b901ed74d50ba8d41efce58e444b6444ca6614191"
+    }
+  }
+}

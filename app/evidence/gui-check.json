@@ -1,0 +1,13 @@
+{
+  "tested_at": "2026-10-14",
+  "browser": "Codex in-app browser, development preview only",
+  "observed": [
+    "Home renders with sidebar and current daemon host",
+    "Memory-only test token loads actual sessions",
+    "UI submits a real Claude chat and displays result",
+    "After fixes, switching Claude/Codex conversations displays only selected result",
+    "Console error/warn log query returned zero entries"
+  ],
+  "chromium_webui_verified": false,
+  "screenshot": "../ui-preview.png"
+}

@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "chromium_commit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+  "edits": [
+    {
+      "path": "chrome/browser/ui/webui/chrome_web_ui_configs.cc",
+      "anchor": "#include \"chrome/browser/ui/webui/whats_new/whats_new_ui.h\"\n#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)\n",
+      "replacement": "#include \"chrome/browser/ui/webui/whats_new/whats_new_ui.h\"\n#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)\n\n#if BUILDFLAG(IS_MAC)\n#include \"chrome/browser/ui/webui/mybrowse/mybrowse_ui.h\"\n#endif  // BUILDFLAG(IS_MAC)\n"
+    },
+    {
+      "path": "chrome/browser/ui/webui/chrome_web_ui_configs.cc",
+      "anchor": "  map.AddWebUIConfig(std::make_unique<WhatsNewUIConfig>());\n#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)\n",
+      "replacement": "  map.AddWebUIConfig(std::make_unique<WhatsNewUIConfig>());\n#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)\n\n#if BUILDFLAG(IS_MAC)\n  map.AddWebUIConfig(std::make_unique<mybrowse::MyBrowseUIConfig>());\n#endif  // BUILDFLAG(IS_MAC)\n"
+    },
+    {
+      "path": "chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc",
+      "anchor": "#include \"chrome/browser/ui/webui/whats_new/whats_new_ui.h\"\n#endif\n",
+      "replacement": "#include \"chrome/browser/ui/webui/whats_new/whats_new_ui.h\"\n#endif\n\n#if BUILDFLAG(IS_MAC)\n#include \"chrome/browser/ui/webui/mybrowse/mybrowse.mojom.h\"\n#include \"chrome/browser/ui/webui/mybrowse/mybrowse_ui.h\"\n#endif  // BUILDFLAG(IS_MAC)\n"
+    },
+    {
+      "path": "chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc",
+      "anchor": "  RegisterWebUIControllerInterfaceBinder<whats_new::mojom::PageHandlerFactory,\n                                         WhatsNewUI>(map);\n#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)\n",
+      "replacement": "  RegisterWebUIControllerInterfaceBinder<whats_new::mojom::PageHandlerFactory,\n                                         WhatsNewUI>(map);\n#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)\n\n#if BUILDFLAG(IS_MAC)\n  RegisterWebUIControllerInterfaceBinder<mybrowse::mojom::PageHandlerFactory,\n                                         mybrowse::MyBrowseUI>(map);\n#endif  // BUILDFLAG(IS_MAC)\n"
+    },
+    {
+      "path": "chrome/browser/ui/webui/BUILD.gn",
+      "anchor": "        \"//chrome/browser/ui/webui/app_settings\",\n        \"//chrome/browser/ui/webui/whats_new\",\n      ]\n    }\n  }\n",
+      "replacement": "        \"//chrome/browser/ui/webui/app_settings\",\n        \"//chrome/browser/ui/webui/whats_new\",\n      ]\n    }\n  }\n\n  if (is_mac) {\n    # Headers only; //chrome/browser links :impl.\n    deps += [ \"//chrome/browser/ui/webui/mybrowse\" ]\n  }\n"
+    },
+    {
+      "path": "chrome/browser/ui/BUILD.gn",
+      "anchor": "      allow_circular_includes_from +=\n          [ \"//chrome/browser/ui/views/extensions:extensions_toolbar_desktop\" ]\n    }\n  }\n}\n",
+      "replacement": "      allow_circular_includes_from +=\n          [ \"//chrome/browser/ui/views/extensions:extensions_toolbar_desktop\" ]\n    }\n  }\n\n  if (is_mac) {\n    # Headers only (interface binders, vertical tab strip region). The impl\n    # targets are linked by //chrome/browser, because webui/mybrowse:impl\n    # depends on browser_public_dependencies and would form a cycle here.\n    deps += [\n      \"//chrome/browser/ui/views/mybrowse\",\n      \"//chrome/browser/ui/webui/mybrowse\",\n    ]\n  }\n}\n"
+    },
+    {
+      "path": "chrome/browser/BUILD.gn",
+      "anchor": "    deps += [\n      \"//chrome/browser/contextual_cueing/internals\",\n      \"//chrome/browser/safe_browsing/suspicious_site_warnings\",\n    ]\n  }\n\n  # This target intentionally has no sources of its own",
+      "replacement": "    deps += [\n      \"//chrome/browser/contextual_cueing/internals\",\n      \"//chrome/browser/safe_browsing/suspicious_site_warnings\",\n    ]\n  }\n\n  if (is_mac) {\n    deps += [\n      \"//chrome/browser/ui/views/mybrowse\",\n      \"//chrome/browser/ui/views/mybrowse:impl\",\n      \"//chrome/browser/ui/webui/mybrowse\",\n      \"//chrome/browser/ui/webui/mybrowse:impl\",\n    ]\n  }\n\n  # This target intentionally has no sources of its own"
+    },
+    {
+      "path": "chrome/browser/resources/BUILD.gn",
+      "anchor": "  if (safe_browsing_mode == 1) {\n    public_deps += [ \"reset_password:resources\" ]\n  }\n}\n",
+      "replacement": "  if (safe_browsing_mode == 1) {\n    public_deps += [ \"reset_password:resources\" ]\n  }\n\n  if (is_mac) {\n    public_deps += [ \"mybrowse:resources\" ]\n  }\n}\n"
+    },
+    {
+      "path": "tools/gritsettings/resource_ids.spec",
+      "anchor": "  \"<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/whats_new/resources.grd\": {\n",
+      "replacement": "  \"<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/mybrowse/resources.grd\": {\n    \"META\": {\"sizes\": {\"includes\": [30]}},\n    \"includes\": [5170],\n  },\n  \"<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/whats_new/resources.grd\": {\n"
+    },
+    {
+      "path": "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h",
+      "anchor": "#include \"base/timer/timer.h\"\n",
+      "replacement": "#include \"base/timer/timer.h\"\n#include \"build/build_config.h\"\n"
+    },
+    {
+      "path": "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h",
+      "anchor": "class VerticalTabStripBottomContainer;\n",
+      "replacement": "class VerticalTabStripBottomContainer;\n#if BUILDFLAG(IS_MAC)\nclass MyBrowseSidebarWebView;\n#endif\n"
+    },
+    {
+      "path": "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h",
+      "anchor": "  raw_ptr<views::ResizeArea> resize_area_ = nullptr;\n",
+      "replacement": "  raw_ptr<views::ResizeArea> resize_area_ = nullptr;\n#if BUILDFLAG(IS_MAC)\n  // Null unless this is a regular window. Hidden while the region is collapsed.\n  raw_ptr<MyBrowseSidebarWebView> mybrowse_sidebar_ = nullptr;\n#endif\n"
+    },
+    {
+      "path": "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc",
+      "anchor": "#include \"chrome/browser/ui/views/frame/tab_strip_region_view.h\"\n",
+      "replacement": "#include \"chrome/browser/ui/views/frame/tab_strip_region_view.h\"\n#if BUILDFLAG(IS_MAC)\n#include \"chrome/browser/ui/views/mybrowse/mybrowse_sidebar_web_view.h\"\n#endif\n"
+    },
+    {
+      "path": "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc",
+      "anchor": "  top_button_separator_->SetProperty(\n      views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));\n\n  bottom_button_container_ =",
+      "replacement": "  top_button_separator_->SetProperty(\n      views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));\n\n#if BUILDFLAG(IS_MAC)\n  // Created before the first OnCollapseStateChanged() below so that the\n  // initial collapsed state hides it.\n  if (auto sidebar =\n          MyBrowseSidebarWebView::MaybeCreate(browser_view->browser())) {\n    mybrowse_sidebar_ = AddChildView(std::move(sidebar));\n  }\n#endif\n\n  bottom_button_container_ ="
+    },
+    {
+      "path": "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc",
+      "anchor": "  bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;\n",
+      "replacement": "  bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;\n\n#if BUILDFLAG(IS_MAC)\n  if (mybrowse_sidebar_) {\n    mybrowse_sidebar_->SetVisible(!collapsed);\n  }\n#endif\n"
+    },
+    {
+      "path": "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc",
+      "anchor": "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n  CHECK(separator_index.has_value());\n  ReorderChildView(tab_strip_view(), separator_index.value() + 1);\n",
+      "replacement": "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n  CHECK(separator_index.has_value());\n  size_t tab_strip_index = separator_index.value() + 1;\n#if BUILDFLAG(IS_MAC)\n  // The real tab list goes after the MyBrowse sidebar (bookmarks and chats).\n  if (mybrowse_sidebar_) {\n    std::optional<size_t> sidebar_index = GetIndexOf(mybrowse_sidebar_);\n    CHECK(sidebar_index.has_value());\n    tab_strip_index = sidebar_index.value() + 1;\n  }\n#endif\n  ReorderChildView(tab_strip_view(), tab_strip_index);\n"
+    }
+  ],
+  "preimages": {
+    "chrome/browser/ui/webui/chrome_web_ui_configs.cc": "e96a1eadc4595835fea0148b14edcc2125f5eacd3b439946124f29c029b8d675",
+    "chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc": "b63d8d4169577b29a405c833a422c6c5b9e95c7a58f160f9e0455eedb939ab12",
+    "chrome/browser/ui/webui/BUILD.gn": "9bff25e53a6d2ce1b364c7baf03225915f5c9d02bbd22ca01e5cec96b49e994a",
+    "chrome/browser/ui/BUILD.gn": "b952b1fd222b1da3cd6e28a363738b6a6a971f6ca5ef1d61beb976a1d3778fe0",
+    "chrome/browser/BUILD.gn": "5c9a66b731954d1d28c7f630071880f0a879bfef924338362004b9ad19f4444b",
+    "chrome/browser/resources/BUILD.gn": "10fa6d5828ed4254f70df74c5c6b6fa75ff5a35f4515379b69e0f27c98361df9",
+    "tools/gritsettings/resource_ids.spec": "dee816e323cedb6c2a458e152e1cef8e956a9c6a445165e1437545f3321e8007",
+    "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h": "343bbbd5d78f8baa21db2d85785c89c129625a427decce3374a74c14fda7bd1a",
+    "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc": "a3557dd5bb50a5ba12370a2f2a9c0c088044de2e7f96c45c8b6b9969f9b21e40"
+  },
+  "overlay_sha256": {
+    "chrome/browser/ui/webui/mybrowse/ipc_client_mac.h": "8e3b0764ed74c40cf8600ec4ddbff04ccdae62cb3a7560b02552e760a2953ece",
+    "chrome/browser/ui/webui/mybrowse/BUILD.gn": "b29b57f727f2fdc9420188cd8b62ad85543d64dd1c7a55736d591829668d6827",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_page_handler.cc": "73237d34e801c27ebde7cb2f7b1c6a3ebb301c4fe79a7b585013d0d69dc83c2f",
+    "chrome/browser/ui/webui/mybrowse/ipc_client_mac.cc": "8677d3b8af73614a0536df12e4f0e8b485f813771c478698120b8cca347309b0",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_bookmarks.cc": "cd8640905e9a4580b9eba8fdd330685fc223a9c78f43ae8b182564b6513f9545",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_ui.cc": "91be29ac37703db7c3f17802a355853eede25122d9ad2938207baee46d42349d",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_agent_files.cc": "71f78c01df91f5881f81f9206d1ca9f7e8276fb5311e0713bfa89506c2e2d2c4",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_tab_service.h": "6852a05b6b2fb82ad5e0cc48c081892cfb47f4f304e3be1ea199780f9fdbc1d8",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_agent_client.cc": "ce501c3e513380b3bb0a1011077b6ca48a00610705aa6817e31c43cbc1c5e384",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_agent_client.h": "e126ee57ae6a15eefb5ce2aeb296713c6afe44e74df70c5d765c843898c86e76",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_bookmarks.h": "8c79a7d36f5af8694bb34a74e99dbfcbc123d9d277827825f30ee755ec9433ed",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_window_context.h": "3aeb1e71bb396531f486d1195cb62c8e7301508e86da41a2f0032e1a14236857",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_request.cc": "1945e7ea823c9322aaff95d25e10ccb7a0e290a4e8d9503614ca6bf3c1a85e7e",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_tab_service.cc": "7064ef44f05048dcbe3a3ab39bd8d5f74e14492f65364eb3f9766e0b30424938",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_ui.h": "10117e4dcf1d3e03cf05ffe4339415a7b3a3fa89c3e5b84505baef756c1cc0d8",
+    "chrome/browser/ui/webui/mybrowse/mybrowse.mojom": "e8cac8dfb23ca751c0199cc193fb3246d9a00f7c22eeb60ab9d2ad49db64da0a",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_window_context.cc": "c5f1be8e1d0ffed16424c30f024cecd85c1be536e3759a708fc12aa28a325fcd",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_constants.h": "da291f911a388764d5b60b2075d19bfde3c557975bb8dc02ae72e92417bff2cc",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_request.h": "51b7307fa7e23cd80bc1d69f6720131c5d6ffc81754f7b14237d8abdb7f0a3bc",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_agent_files.h": "46e07066f28f77e19809ebda7be82e7f6c08324b8a70e0f8419d94964093d819",
+    "chrome/browser/ui/webui/mybrowse/mybrowse_page_handler.h": "7f46fb7f5b92e76e92fa5339a8ec90d01fae40233eba004c9f500334992b517a",
+    "chrome/browser/ui/views/mybrowse/mybrowse_sidebar_web_view.cc": "a401600ada599cf7cbe99521381ed3416d671e6428f166afd9390c3026768f08",
+    "chrome/browser/ui/views/mybrowse/BUILD.gn": "f5d5d325e54440adb1c6839ca00a4652672cd38a005a0b893d88d96fe0701023",
+    "chrome/browser/ui/views/mybrowse/mybrowse_sidebar_web_view.h": "c1d7e602ca8ec8b110f56a04caf1cb0201e62de74cce3a23a70d2cd193f218fd",
+    "chrome/browser/resources/mybrowse/BUILD.gn": "01c7f9384cb509c038ffe477092e539bf579763d8e24fa4fa701e09a4cbfdb76",
+    "chrome/browser/resources/mybrowse/selection.ts": "c3dedf683247781e18a0bead51baed77f078aa2ce4ff2c827f95953b4c43a8c0",
+    "chrome/browser/resources/mybrowse/app.ts": "cd6132c808b22b7f43c2db75b74d75fc47c68fce4208b68ceacca3c07665e6bc",
+    "chrome/browser/resources/mybrowse/bridge.ts": "a6429dff5b8c0c97b04c161d2a9a48b5eda655771f5ffd027b14618738aadbd6",
+    "chrome/browser/resources/mybrowse/style.css": "71fcceea9a900f1dee23c2a75cf00e505d880b0e82a29ac66de7cb98b7f8a221",
+    "chrome/browser/resources/mybrowse/mybrowse.html": "d6d7e1a987c241d31054ce389bd1db39b48888af156505fbfa6b071cd75ba949"
+  }
+}

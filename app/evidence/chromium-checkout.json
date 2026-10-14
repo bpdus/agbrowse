@@ -1,0 +1,9 @@
+{
+  "observed_at": "2026-10-14T08:39:13.741014+09:00",
+  "repository": "https://chromium.googlesource.com/chromium/src.git",
+  "commit": "cfaadc5a132d78e1828635aa8405a499f3e14864",
+  "version": "MAJOR=155\nMINOR=0\nBUILD=8059\nPATCH=40\n",
+  "clone_completed": true,
+  "build_verified": false,
+  "depot_tools_commit": "52ae103994896b9ce7742a605de8f43b410e5515"
+}

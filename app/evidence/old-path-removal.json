@@ -1,0 +1,20 @@
+{
+  "checked_at": "2026-10-14T05:07:55.010974+00:00",
+  "project_root": "/Users/jjbyun/SynologyDrive/bpbrowser",
+  "removed_directory": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https",
+  "removed_symlinks": 6,
+  "old_directory_exists": false,
+  "repository_alias_exists": false,
+  "build_state": "arm64 built",
+  "native_browser_restarted_without_old_paths": true,
+  "https_page_rendered": true,
+  "canonical_tests": {
+    "non_ipc_passed": 102,
+    "ipc_passed": 20,
+    "failed": 0,
+    "known_test_not_selected": "startIpcServer rejects unsafe baseDirs without touching the filesystem",
+    "reason": "Existing test assumes the project path is long enough to exceed the Unix socket limit; backlog CHORE-02."
+  },
+  "production_source_changed": false,
+  "commit_or_push_executed": false
+}

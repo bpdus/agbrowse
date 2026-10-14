@@ -1,0 +1,1 @@
+PARTIAL: `ipc_client_mac.cc`의 unsafe buffer 5개 지점을 `base::span(...).copy_prefix_from`, `std::string_view(data).substr(off)`, `std::string` 인덱싱으로 바꿨다. grep으로 `memcpy`, `data() + off`, `unsigned char` 포인터 `p[]`가 사라진 것만 확인했다. clang 문법/플러그인 검사와 소켓 전송 검사는 실행하지 않았으니 root가 재실행해야 한다.

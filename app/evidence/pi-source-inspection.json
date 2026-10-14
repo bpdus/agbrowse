@@ -1,0 +1,25 @@
+{
+  "package_version": "0.87.1",
+  "files": {
+    "package.json": {
+      "sha256": "627631b613ba4ca29eba8df793f5280fd20b19f01d73826e9ffda14c15def5dc"
+    },
+    "dist/core/auth-storage.js": {
+      "sha256": "0b45029901579032b19273a1427f63b622df8e1aaf9ea185eb932c0d4898998c",
+      "lock_lines": [
+        39,
+        85
+      ]
+    },
+    "dist/core/settings-manager.js": {
+      "sha256": "5368b155ec26d88374cec9e66b8e588b5041a0fb0047414f70b34e13892c4f48",
+      "lock_lines": [
+        70
+      ]
+    },
+    "dist/modes/rpc/rpc-mode.js": {
+      "sha256": "bdd94e753e6d19731d9fb9ea370462d095d64f1e78bddd7651320663fa57c4ff"
+    }
+  },
+  "config_or_credentials_read": false
+}

@@ -1,0 +1,120 @@
+{
+  "run_id": "20261014-090103-claude-mybrowse-native-ipc",
+  "target": "claude",
+  "session_id": "7b5c7bc2-add2-412b-a385-ca46b4c4ea15",
+  "project": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse",
+  "created_at": "2026-10-14T00:01:03Z",
+  "last_activity": "2026-10-14T00:24:22Z",
+  "state": "closed",
+  "expires_at": "2026-10-17T00:24:22Z",
+  "ttl_days": 7,
+  "turns": 3,
+  "collected_turn": 3,
+  "staged": {
+    "specs/task-3.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-3.md",
+      "sha256": "16a5ab04e72ae544dc8cc3ca66c975bf05efe7e4d026a7b4d1c47fb6707b1c9c"
+    },
+    "specs/task-7.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-7.md",
+      "sha256": "5323d83fba80b630661693f8a1d976bd8848d227ac626fc519598757679592be"
+    },
+    "specs/contracts.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/contracts.md",
+      "sha256": "bd119c1a639b223b22e8db71f0a061fe278df8374ae891ef769d7e945412c893"
+    },
+    "specs/task-6.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-6.md",
+      "sha256": "59d3a2bdc97416e7e357723168c7ac32ad2f911bec7c7ff4ea9e9168124c50cb"
+    },
+    "specs/task-2.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-2.md",
+      "sha256": "fedd7bb1b1b23a489738fe7023a6c0d53f02bfbd042ed31fedfcc7190f148328"
+    },
+    "specs/task-8.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-8.md",
+      "sha256": "f256681b7f14757b1d3575300696910ff9b28391a4b8a7057abc926f93152a4c"
+    },
+    "specs/webui-ipc.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/webui-ipc.md",
+      "sha256": "7d94c68d918788ae9ef1408f12de6bc46524d4a084dd3dd42a2a7d2d420ec285"
+    },
+    "specs/task-5.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-5.md",
+      "sha256": "1175d4263d7f242b296887f2a78a8409e04d8ced863477385d402514a8736d87"
+    },
+    "specs/task-1.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-1.md",
+      "sha256": "ba5508f59be05c1bfb44bac75a92c4e6e6f87acf19d103bbb1ff0f0e0e84feb0"
+    },
+    "specs/native-ipc-client.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/native-ipc-client.md",
+      "sha256": "8323273ee646785089da5649f5fd0b5407bc84c199cfbafd074ea930718839eb"
+    },
+    "specs/task-4.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/task-4.md",
+      "sha256": "73239d1c87faf7c9ce66326e687bf3904a10dae738e89e843cb37d184fbc409a"
+    },
+    "src/ipc.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/ipc.mjs",
+      "sha256": "6e1ec295f06ab4b8eb6414d51eec83c537362489576061dbd83ca468098e4a8c"
+    },
+    "src/instance-lock.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/instance-lock.mjs",
+      "sha256": "42e3c56ad4640edb6e9c3802503f2b9e7a75aff32d607720bde289c7fd9392aa"
+    },
+    "src/store.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/store.mjs",
+      "sha256": "5357409c95ff2dc6397ca9f385644cb6cd74083aee98a561fea372530c783a0a"
+    },
+    "src/main.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/main.mjs",
+      "sha256": "bd87629c1a297802f17de57cc99b96d5f23b9f57c10e89702beaa1a2c230b388"
+    },
+    "src/protocol.d.ts": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/protocol.d.ts",
+      "sha256": "cbc740f7346b9977d0f80fbfbf631cdf1b5c694abdb4086e6f72b3e5ac4d45bb"
+    },
+    "src/service.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/service.mjs",
+      "sha256": "fd897b01316bc5af1650d6b229d84c0764a16d49771c29148bea3d305ab8f250"
+    },
+    "src/cli.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/cli.mjs",
+      "sha256": "95c62fac27d150d8f38b649980b09bfa4b01e922184d0f1c26449a5af913798c"
+    },
+    "src/http.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/http.mjs",
+      "sha256": "24078be0bd310cabc52453c3aa00ba9d82c90a997c385300782e0e08b88b697b"
+    },
+    "src/broker.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/broker.mjs",
+      "sha256": "cb16f16b77550b9ce8638683a1da322dc57e02660c06739ee40645e096007790"
+    },
+    "src/engines/rpc.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/rpc.mjs",
+      "sha256": "1198d2ebe79a5d9f8399fbeb4bb293d4981ccbf49095398c9e587fafc7a034b5"
+    },
+    "src/engines/codex.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/codex.mjs",
+      "sha256": "9353547fcbe1089cc4cc2a63fb82a8150d4039bf2282f2fb476a8db3a77db23a"
+    },
+    "src/engines/environment.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/environment.mjs",
+      "sha256": "f4898113120fd99cfc8d88e322f443fd8627cb43914275b06003ffc0fe4c6551"
+    },
+    "src/engines/claude.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/src/engines/claude.mjs",
+      "sha256": "0f49271ccee94f270ff83b8dd6e491489e5c7ed92e32485c6b74da36e2f72bbe"
+    },
+    "ipc.test.mjs": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/test/ipc.test.mjs",
+      "sha256": "92aa49fc2ba41a61c27c72f3d9eabb1d9cbf949c6c4e18bc47a4595ff7d4c54e"
+    },
+    "webui-ipc.md": {
+      "source": "/Users/jjbyun/Documents/Codex/2026-10-13/https-github-com-morluto-rea-https/outputs/mybrowse/specs/webui-ipc.md",
+      "sha256": "60cd000c5aec5724ec8c0c49c85e19e537f0abb5bbb33721aee79c42217b0095"
+    }
+  },
+  "closed_at": "2026-10-14T00:24:22Z"
+}

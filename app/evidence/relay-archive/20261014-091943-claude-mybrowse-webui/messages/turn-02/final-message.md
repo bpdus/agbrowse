@@ -1,0 +1,1 @@
+PARTIAL: 지정한 6개 WebUI 리소스(`BUILD.gn`, `mybrowse.html`, `style.css`, `app.ts`, `bridge.ts`, `selection.ts`)를 현재 mojom 기준으로 작성했다. tsc 타입 검사는 명령 검사기에 막혀 실행하지 못했고, Chromium 컴파일과 GUI도 미검증이다. 네이티브 코드의 `chrome://mybrowse/sidebar.html` 상수는 이번 범위(단일 `mybrowse.html`)와 달라서, root가 상수를 `?surface=sidebar`로 바꾸거나 `sidebar.html`을 추가해야 한다.

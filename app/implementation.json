@@ -1,0 +1,807 @@
+{
+  "schema_version": 2,
+  "work_id": "2026-10-13-mybrowse-architecture",
+  "status": "BLOCKED",
+  "summary": "로컬 CLI·데몬·대화·빌드 도구·내부 IPC와 네이티브 화면 overlay를 구현했습니다. Pi 실행기 파일과 로컬 시험 제공자 왕복을 검증했습니다. 원본 Chromium arm64 빌드와 기본 실행 검사는 성공했습니다. MyBrowse overlay는 이 앱에 아직 적용하지 않았습니다. Pi 공유 런타임 활성화·실제 제공자·스토어·브라우저 MCP·배포 수락 기준은 아직 미충족입니다.",
+  "plan_path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/plan.json",
+  "tasks": [
+    {
+      "task_id": 1,
+      "status": "DONE_WITH_CONCERNS",
+      "changed_files": [
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/scripts/preflight.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/docs/chromium-gates.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/chromium.lock.json"
+      ]
+    },
+    {
+      "task_id": 2,
+      "status": "DONE",
+      "changed_files": [
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/store.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/broker.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/service.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/http.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/instance-lock.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/core.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/http.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/instance-lock.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/ipc.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/ipc.test.mjs"
+      ]
+    },
+    {
+      "task_id": 3,
+      "status": "DONE_WITH_CONCERNS",
+      "changed_files": [
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/environment.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/rpc.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/codex.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/claude.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/engines.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/codex-lifecycle.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/pi.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/pi-rpc.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/pi-engine.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/pi-rpc.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/pi-driver.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/pi-shared-runtime.md"
+      ]
+    },
+    {
+      "task_id": 4,
+      "status": "DONE_WITH_CONCERNS",
+      "changed_files": [
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/main.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/cli.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/cli.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/docs/muse-contract.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/main-lifecycle.test.mjs"
+      ]
+    },
+    {
+      "task_id": 5,
+      "status": "DONE",
+      "changed_files": [
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/ui/index.html",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/ui/style.css",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/ui/app.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/ui/selection.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/ui-selection.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/protocol.d.ts",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/docs/ui-port.md"
+      ]
+    },
+    {
+      "task_id": 6,
+      "status": "BLOCKED",
+      "changed_files": [
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/build.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/build-spec.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/test/build.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/ipc_client_mac.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/ipc_client_mac.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/ipc_client_test.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/test/ipc-client.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/test/ipc-daemon.test.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/webui-ipc.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/native-ipc-client.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/native-webui.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/CHROMIUM-LICENSE",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/patches/native-webui.json",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/ipc_client_mac.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/BUILD.gn",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_page_handler.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/ipc_client_mac.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_bookmarks.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_ui.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_agent_files.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_tab_service.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_agent_client.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_agent_client.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_bookmarks.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_window_context.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_request.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_tab_service.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_ui.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse.mojom",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_window_context.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_constants.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_request.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_agent_files.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_page_handler.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/views/mybrowse/mybrowse_sidebar_web_view.cc",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/views/mybrowse/BUILD.gn",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/views/mybrowse/mybrowse_sidebar_web_view.h",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/BUILD.gn",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/selection.ts",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/app.ts",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/bridge.ts",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/style.css",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/mybrowse.html"
+      ]
+    },
+    {
+      "task_id": 7,
+      "status": "BLOCKED",
+      "changed_files": []
+    },
+    {
+      "task_id": 8,
+      "status": "DONE_WITH_CONCERNS",
+      "changed_files": [
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/README.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/package.json",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/scripts/check.mjs",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/review-resolution.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/verification.md",
+        "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/pi-review-resolution.md"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/resource/plans/imported-2026-10-13/mybrowse-plan-2026-10-13.md",
+      "sha256": "7543eae290c06d6feec7bed74eeafdc4afce5a3ca3ecfe6f9d20bc8d67364076"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/resource/plans/imported-2026-10-13/mybrowse-plan.json",
+      "sha256": "5afdb7ed5d36919a8cc09fdaa906c547449c04b1125279b15f0338b60a25d17c"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/.gitignore",
+      "sha256": "5d412febecf791ab1e7363e61025163000b3ce34959296cef7caa096f097adb4"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/README.md",
+      "sha256": "16d67e54e0b00176ff72bd37cfac083df59371095ba41c3f3fbb6bd39239092a"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/CHROMIUM-LICENSE",
+      "sha256": "368cca1106be99d39ecd32a38d8305585d802a475effb66380b91ffc9bcf709b"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/build-spec.md",
+      "sha256": "3a085cf75117982fb87caf8876ec298e339e0b361247c24a9bd5911f8550755f"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/build.mjs",
+      "sha256": "81167cf128ca59f031a2aee03028317751af98e2d035aeacb38aeaf67ba993e0"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/chromium.lock.json",
+      "sha256": "60811bf29b400e64a89dbcd7d763b1544216e791f8d77e57e617621a4cf93089"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/ipc_client_mac.cc",
+      "sha256": "9c6acd708633449abe8e5388f9342b5be6a4d9d54db0d995d9652fcc676e082e"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/ipc_client_mac.h",
+      "sha256": "201bcb9c34165002cfe8c1d47e01d64050564f6bdaece1255b85ad0a2c27a0c4"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/ipc_client_test.cc",
+      "sha256": "042be17709c9a87fda7a0dc50dc3427927460e3520458800e1c72cb6bdcea344"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/test/ipc-client.test.mjs",
+      "sha256": "07cc13f6895052b86cc36708e65e131e90018438f31fcdf7a6764251248a3b84"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/native/test/ipc-daemon.test.mjs",
+      "sha256": "3819f7ce43d74fdf3164ee8c56e5d9dafd3e4a89907f57ad3c058eebcd59d28b"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/BUILD.gn",
+      "sha256": "01c7f9384cb509c038ffe477092e539bf579763d8e24fa4fa701e09a4cbfdb76"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/app.ts",
+      "sha256": "cd6132c808b22b7f43c2db75b74d75fc47c68fce4208b68ceacca3c07665e6bc"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/bridge.ts",
+      "sha256": "a6429dff5b8c0c97b04c161d2a9a48b5eda655771f5ffd027b14618738aadbd6"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/mybrowse.html",
+      "sha256": "d6d7e1a987c241d31054ce389bd1db39b48888af156505fbfa6b071cd75ba949"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/selection.ts",
+      "sha256": "c3dedf683247781e18a0bead51baed77f078aa2ce4ff2c827f95953b4c43a8c0"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/resources/mybrowse/style.css",
+      "sha256": "71fcceea9a900f1dee23c2a75cf00e505d880b0e82a29ac66de7cb98b7f8a221"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/views/mybrowse/BUILD.gn",
+      "sha256": "f5d5d325e54440adb1c6839ca00a4652672cd38a005a0b893d88d96fe0701023"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/views/mybrowse/mybrowse_sidebar_web_view.cc",
+      "sha256": "a401600ada599cf7cbe99521381ed3416d671e6428f166afd9390c3026768f08"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/views/mybrowse/mybrowse_sidebar_web_view.h",
+      "sha256": "c1d7e602ca8ec8b110f56a04caf1cb0201e62de74cce3a23a70d2cd193f218fd"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/BUILD.gn",
+      "sha256": "b29b57f727f2fdc9420188cd8b62ad85543d64dd1c7a55736d591829668d6827"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/ipc_client_mac.cc",
+      "sha256": "8677d3b8af73614a0536df12e4f0e8b485f813771c478698120b8cca347309b0"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/ipc_client_mac.h",
+      "sha256": "8e3b0764ed74c40cf8600ec4ddbff04ccdae62cb3a7560b02552e760a2953ece"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse.mojom",
+      "sha256": "e8cac8dfb23ca751c0199cc193fb3246d9a00f7c22eeb60ab9d2ad49db64da0a"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_agent_client.cc",
+      "sha256": "ce501c3e513380b3bb0a1011077b6ca48a00610705aa6817e31c43cbc1c5e384"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_agent_client.h",
+      "sha256": "e126ee57ae6a15eefb5ce2aeb296713c6afe44e74df70c5d765c843898c86e76"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_agent_files.cc",
+      "sha256": "71f78c01df91f5881f81f9206d1ca9f7e8276fb5311e0713bfa89506c2e2d2c4"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_agent_files.h",
+      "sha256": "46e07066f28f77e19809ebda7be82e7f6c08324b8a70e0f8419d94964093d819"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_bookmarks.cc",
+      "sha256": "cd8640905e9a4580b9eba8fdd330685fc223a9c78f43ae8b182564b6513f9545"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_bookmarks.h",
+      "sha256": "8c79a7d36f5af8694bb34a74e99dbfcbc123d9d277827825f30ee755ec9433ed"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_constants.h",
+      "sha256": "da291f911a388764d5b60b2075d19bfde3c557975bb8dc02ae72e92417bff2cc"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_page_handler.cc",
+      "sha256": "73237d34e801c27ebde7cb2f7b1c6a3ebb301c4fe79a7b585013d0d69dc83c2f"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_page_handler.h",
+      "sha256": "7f46fb7f5b92e76e92fa5339a8ec90d01fae40233eba004c9f500334992b517a"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_request.cc",
+      "sha256": "1945e7ea823c9322aaff95d25e10ccb7a0e290a4e8d9503614ca6bf3c1a85e7e"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_request.h",
+      "sha256": "51b7307fa7e23cd80bc1d69f6720131c5d6ffc81754f7b14237d8abdb7f0a3bc"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_tab_service.cc",
+      "sha256": "7064ef44f05048dcbe3a3ab39bd8d5f74e14492f65364eb3f9766e0b30424938"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_tab_service.h",
+      "sha256": "6852a05b6b2fb82ad5e0cc48c081892cfb47f4f304e3be1ea199780f9fdbc1d8"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_ui.cc",
+      "sha256": "91be29ac37703db7c3f17802a355853eede25122d9ad2938207baee46d42349d"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_ui.h",
+      "sha256": "10117e4dcf1d3e03cf05ffe4339415a7b3a3fa89c3e5b84505baef756c1cc0d8"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_window_context.cc",
+      "sha256": "c5f1be8e1d0ffed16424c30f024cecd85c1be536e3759a708fc12aa28a325fcd"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/overlay/chrome/browser/ui/webui/mybrowse/mybrowse_window_context.h",
+      "sha256": "3aeb1e71bb396531f486d1195cb62c8e7301508e86da41a2f0032e1a14236857"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/patches/native-webui.json",
+      "sha256": "ec48472bc0ad83fdc1f9b95c4864d872e5ff215e810fe66ea6ec2c155a694639"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/browser/test/build.test.mjs",
+      "sha256": "766c30fb7709379b8ef9eb9c7fb20f8ff322d6e838c62ed320e7441806afbddc"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/docs/chromium-gates.md",
+      "sha256": "3e8eb6d46fd3d27998263c5830ff6fb01e33aada2eca1c339e87c01d6471cbcd"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/docs/muse-contract.md",
+      "sha256": "a48a7ca1e0dd9c61f3e866025be0278b4b96321a21929e93c22015598e846316"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/docs/ui-port.md",
+      "sha256": "b92f0e03fac9a6578c70e8fb78636b4a1995511419ab625941b6c1c2eba3442e"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/pi-review-resolution.md",
+      "sha256": "beb5a222fe8acd4dced374655332e66cd00a49ab457ea0d79246313fd0c49815"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/review-resolution.md",
+      "sha256": "69041dfa96db63bc1e4d3c098958732f872e3200751a22fd221a570c0bf065a8"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/verification.md",
+      "sha256": "293293f8f149360cb22f9047a3ceaa8419fbf1078e8cf01b4b43ee084051f1cf"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/package.json",
+      "sha256": "c952772dabf3f651732c6a10b620e508fc394d0a70a0dab5389d902d84f82d30"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/plan.json",
+      "sha256": "5afdb7ed5d36919a8cc09fdaa906c547449c04b1125279b15f0338b60a25d17c"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/scripts/check.mjs",
+      "sha256": "8140dd338c34687c2c33b2b09ec5405a78f3d53058df106ead1afcd62ec85372"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/scripts/preflight.mjs",
+      "sha256": "032f47352b2b6425b12b367a893f64f176e5916e872185111ebef592942c7b54"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/contracts.md",
+      "sha256": "d1d1ca355e72e816b3f55e37f9e61ce29949bf0cebf4c46becfee05635e2d3d0"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/native-ipc-client.md",
+      "sha256": "8323273ee646785089da5649f5fd0b5407bc84c199cfbafd074ea930718839eb"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/native-webui.md",
+      "sha256": "fb3c7905b7427d50d4699128c41611f5bb04aab3ff90e764d4691a68d97c27a9"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/pi-driver.md",
+      "sha256": "29859f2e42bf768d103169f825afed97d552566cfd6282c7dd288aa60f7fe11a"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/pi-shared-runtime.md",
+      "sha256": "bef107dbca4ae4042252e99dda81a176bf71a0323720a5a440f602a932d4779e"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/task-1.md",
+      "sha256": "b0b372e517943f0bdc2a79051f1d298991f69c70d23e4c9853abc1eb136bcd07"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/task-2.md",
+      "sha256": "b60c6c52442ab050fe5566ecf61734537089f91d94fcdcd4ae2c2dc99ef62884"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/task-3.md",
+      "sha256": "1c4a53e31805d227d2cee7a10eec9ecc7873a0e19e3bf52b7ec1797b3ac7252c"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/task-4.md",
+      "sha256": "94e3d54ede1cfa74987cab543374d2d765051ebc75dbf38b1a8b80c0cdcdafd3"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/task-5.md",
+      "sha256": "57a733cf7816a745844e206121ce807836cbaa68ec7af3c2cc1009b03669290a"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/task-6.md",
+      "sha256": "ecf8d6324ff167efb05773369a5b8e395a4289906c905cbec49775aa2d24ffb6"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/task-7.md",
+      "sha256": "5d1b91c6efe41029dba2651fa0a51271a64b4299c47411c6ce93493658028a22"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/task-8.md",
+      "sha256": "79ce9e736b71fe31add371656a41f18e197b22be31feaad5c212b467dbeed54f"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/specs/webui-ipc.md",
+      "sha256": "cbbce78e664d7ce7908e6d9048c68d55f85fa6bf4221aacd1698e9bcff164c96"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/broker.mjs",
+      "sha256": "cb16f16b77550b9ce8638683a1da322dc57e02660c06739ee40645e096007790"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/cli.mjs",
+      "sha256": "95c62fac27d150d8f38b649980b09bfa4b01e922184d0f1c26449a5af913798c"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/claude.mjs",
+      "sha256": "0f49271ccee94f270ff83b8dd6e491489e5c7ed92e32485c6b74da36e2f72bbe"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/codex.mjs",
+      "sha256": "9353547fcbe1089cc4cc2a63fb82a8150d4039bf2282f2fb476a8db3a77db23a"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/environment.mjs",
+      "sha256": "f4898113120fd99cfc8d88e322f443fd8627cb43914275b06003ffc0fe4c6551"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/pi-rpc.mjs",
+      "sha256": "a77237e75d573f02c38298651988a38014feca39dafcb94eea4cd1dbc394b2bb"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/pi.mjs",
+      "sha256": "af4e4961ce1889b2567232c1c3375979dbc22c3bcb17c5360faf74275532807b"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/engines/rpc.mjs",
+      "sha256": "1198d2ebe79a5d9f8399fbeb4bb293d4981ccbf49095398c9e587fafc7a034b5"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/http.mjs",
+      "sha256": "24078be0bd310cabc52453c3aa00ba9d82c90a997c385300782e0e08b88b697b"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/instance-lock.mjs",
+      "sha256": "42e3c56ad4640edb6e9c3802503f2b9e7a75aff32d607720bde289c7fd9392aa"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/ipc.mjs",
+      "sha256": "6e1ec295f06ab4b8eb6414d51eec83c537362489576061dbd83ca468098e4a8c"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/main.mjs",
+      "sha256": "7dcb7551e877e001583be4475e352ccbe22a62442f13234308d14443e5734cf5"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/protocol.d.ts",
+      "sha256": "cbc740f7346b9977d0f80fbfbf631cdf1b5c694abdb4086e6f72b3e5ac4d45bb"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/service.mjs",
+      "sha256": "fd897b01316bc5af1650d6b229d84c0764a16d49771c29148bea3d305ab8f250"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/src/store.mjs",
+      "sha256": "5357409c95ff2dc6397ca9f385644cb6cd74083aee98a561fea372530c783a0a"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/cli.test.mjs",
+      "sha256": "b8016c3be0ebf039515f02741e6d3ce0432d7355d19f80a87b41a25e694f2c84"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/codex-lifecycle.test.mjs",
+      "sha256": "86641adfb79a7f31e7a479ac427f26c9ab09877813554a25782af504e0aec737"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/core.test.mjs",
+      "sha256": "49a1c8fd4adbc7e2faa0ade486041f337a7053f129a9c8b7f806dcc152fc8a9f"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/engines.test.mjs",
+      "sha256": "cddf78a6f8a580e1282311825b915309a6bc06fa66c0cf5218c42802c032e576"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/http.test.mjs",
+      "sha256": "1f4f9b6de2bf37575b40cd467adfc440481394f9cc77f084c56b4d1c7ad8f8d6"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/instance-lock.test.mjs",
+      "sha256": "4c5c60d13f64e85a5554e2bc37a41c4a2c1ccc9b8b88d34d9cea574d249f1392"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/ipc.test.mjs",
+      "sha256": "37f75dd4a5c68616a7297b70bdf3b46badc9eb403cbe635edb5c050497fb4c4e"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/main-lifecycle.test.mjs",
+      "sha256": "93e9ddbc965bc6fd925e62ebadde43ebdc518db7dfa239f3d95fcdaa8ea61525"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/pi-engine.test.mjs",
+      "sha256": "625fe65c43189153108fa2774833c2a40fe55356b9a137c3871c1e1c43c638ea"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/pi-rpc.test.mjs",
+      "sha256": "56589f8bf1d0124e1fe787d25058ea9163709318bc8627379cf0a536484177d8"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/test/ui-selection.test.mjs",
+      "sha256": "ff2fd742ae2d7e9f75817986ee61daefdc36e52761d19efea2457f98713a5b6f"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/ui/app.mjs",
+      "sha256": "833c696e7e7e06fdd21818dff1dc812d1e6b763673feacdb66c247d1e0f61284"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/ui/index.html",
+      "sha256": "1874234be2844948e820d73d91f6a9aed5481457805705b354952549a51d5d67"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/ui/selection.mjs",
+      "sha256": "4d199b89fb024793de5a9f879fc6bbb6051480374732534d4bb859de553f6d7c"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/ui/style.css",
+      "sha256": "66736f74d1c00c02cb1406f8759ea5976072ffde0149e4fbf1ece0e2bc96fdb1"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/chromium-native-smoke.json",
+      "sha256": "228ecda12cb51daa7a882a9478df5a1e1c4502be0e8da1703f23ef89a89eef65"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/chromium-native-smoke.jpg",
+      "sha256": "5df0bfa0e0fb84705f599bb54b8a70aaaf292aeb9e217a9c74217346b313c2fc"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/chromium-native-version-ax.txt",
+      "sha256": "d60e829d38091793247de8f0726928e3e6ea6adba1f28ea616f7d700b1df8ea6"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/chromium-native-example-ax.txt",
+      "sha256": "3a56b73b2f208d83e50afc9aaa30b6e374b12f0f6f67dfb229dc8c124c379c60"
+    },
+    {
+      "path": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/chromium-build-arm64.log",
+      "sha256": "d42fe5807df55f41ccccf5651595b622e959614a3a5b85fa1e46ea6a5b62274a"
+    }
+  ],
+  "checks": [
+    {
+      "name": "tests",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/tests.log",
+      "evidence_sha256": "1bf4bcd29851dd37678eae6973268e9538670fcbe12f3ff59f725e02eba4d9f0"
+    },
+    {
+      "name": "verification",
+      "status": "FAIL",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/verification.md",
+      "evidence_sha256": "293293f8f149360cb22f9047a3ceaa8419fbf1078e8cf01b4b43ee084051f1cf"
+    },
+    {
+      "name": "self_review",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/review-resolution.md",
+      "evidence_sha256": "69041dfa96db63bc1e4d3c098958732f872e3200751a22fd221a570c0bf065a8"
+    },
+    {
+      "name": "syntax",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/syntax.log",
+      "evidence_sha256": "fd5f0ed677c00cc414d3fa7dff1c6b270195f86ee6c725ac2919c5e214fd4c0a"
+    },
+    {
+      "name": "live_queue",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/live-codex-queue.json",
+      "evidence_sha256": "f3e0bdeb7cfb826b9d06f4e8bf4c06b9393a4bd346e347ae00bcd1f784aa80f3"
+    },
+    {
+      "name": "browser_build_tests",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/browser-build-tests.log",
+      "evidence_sha256": "ebd05999a217970c738ca46eb804c7e125a4db1de930cfebd5e1bbebd433aa34"
+    },
+    {
+      "name": "native_ipc_tests",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/native-ipc-tests.log",
+      "evidence_sha256": "d7918b8fe247d19e5d244af4b0643c74beb573f45d489d4d05c3135ccc76dbc7"
+    },
+    {
+      "name": "imac_native_tests",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/native-ipc-tests-imac.log",
+      "evidence_sha256": "3777d758029212d36e8bbf20e6965b23ed31c41266eb79d253d42302f1289dcd"
+    },
+    {
+      "name": "ipc_self_review",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/native-ipc-review-resolution.md",
+      "evidence_sha256": "c66de34e85050537f1a66c145cb05f1d1ec84a9842f4277d1098e10c94115475"
+    },
+    {
+      "name": "live_ipc",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/live-ipc-codex.json",
+      "evidence_sha256": "0cbad4e2d622f38d67f8123855e2310ac66559cecb34d5b121bde2fbcf9735e8"
+    },
+    {
+      "name": "syntax_with_ipc",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/syntax-with-ipc.log",
+      "evidence_sha256": "7fcd07c47b631c0ce46390daedd2d4935acfbd96eab05327999b6c02ad8d1a30"
+    },
+    {
+      "name": "tests_with_ipc",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/tests-with-ipc.log",
+      "evidence_sha256": "a09e75c318ed00afb015a8c681bd7c631ad23e05070edb56a820470ec3c74e16"
+    },
+    {
+      "name": "pi_startup_rpc",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/pi-rpc-probe.json",
+      "evidence_sha256": "ebcacf622782924f5d35d5771b4ec83749bfbada631a61e342f41265deba58f2"
+    },
+    {
+      "name": "pi_local_synthetic_provider",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/pi-local-provider-probe.json",
+      "evidence_sha256": "e4a155a55aca0a0cd18f47e0bc98e436fd8518aa8e87456f09883bb39e356d4a"
+    },
+    {
+      "name": "pi_driver_tests",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/pi-driver-tests.log",
+      "evidence_sha256": "f0cc4bb2f43b611d8fef6d62c772bcf5a7033d8925fc3b6d48abb368b8db36a2"
+    },
+    {
+      "name": "pi_driver_local_synthetic_provider",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/pi-driver-local-probe.json",
+      "evidence_sha256": "5187eaacf6ba25e9c3c0b886e898135a04487296b7e85dd93fb6f7ddf10b4538"
+    },
+    {
+      "name": "tests_with_pi_all",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/tests-with-pi-all.log",
+      "evidence_sha256": "4b4f1bce88d27edf46e85b0ca6b406f86aa1bfcf3dc39e49259d8ef27036ed0c"
+    },
+    {
+      "name": "syntax_with_pi",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/syntax-with-pi.log",
+      "evidence_sha256": "6b8ff0b3f44ec9927c6e36d48ef37407a6ae026cf1ed18d266bf8b8b3922c4f5"
+    },
+    {
+      "name": "pi_implementation_review",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/pi-review-resolution.md",
+      "evidence_sha256": "beb5a222fe8acd4dced374655332e66cd00a49ab457ea0d79246313fd0c49815"
+    },
+    {
+      "name": "native_webui_gn",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/webui-shadow-gn.log",
+      "evidence_sha256": "0b3cbf81b7374b3ff8225d5e321b08ecee2224ba7ca5896493c391fcc347bfe3"
+    },
+    {
+      "name": "native_webui_gn_check",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/webui-shadow-gn-check.log",
+      "evidence_sha256": "758efd67ba4374faadfea3be2227cf65809c7c37f9e1e304dda137f152db50ed"
+    },
+    {
+      "name": "native_webui_views_gn_check",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/webui-shadow-views-check.log",
+      "evidence_sha256": "758efd67ba4374faadfea3be2227cf65809c7c37f9e1e304dda137f152db50ed"
+    },
+    {
+      "name": "native_webui_typescript",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/webui-shadow-typescript.log",
+      "evidence_sha256": "2537544d7832ec670f65df6db0ad854478ce1bd85ac1d97510cad2e68f456d8e"
+    },
+    {
+      "name": "native_webui_resources",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/webui-shadow-resources-v4.log",
+      "evidence_sha256": "ad1373dca0074ed64f8da1a96b358ee88e52ff724ef93b4f6d025bb99a97cf48"
+    },
+    {
+      "name": "native_webui_cpp_syntax",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/webui-shadow-cxx-syntax.json",
+      "evidence_sha256": "6a835a0508e469bd209e53b6c74d5e7c4998ed84b9fe5ee718d4bbc0f1fa4bc7"
+    },
+    {
+      "name": "chromium_baseline_native_smoke",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/chromium-native-smoke.json",
+      "evidence_sha256": "228ecda12cb51daa7a882a9478df5a1e1c4502be0e8da1703f23ef89a89eef65"
+    },
+    {
+      "name": "project_migration",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/bpbrowser-migration.json",
+      "evidence_sha256": "a96502ec27cccba7de2e25f058b19d219652bc1f7fd7a81db48317eff3927723"
+    },
+    {
+      "name": "migration_tests_compat",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/migration-tests-compat.log",
+      "evidence_sha256": "c862200b1563dcc708a2c3c1474fcef47086859400313d9400ba79ae770206f0"
+    },
+    {
+      "name": "migration_build_status",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/migration-build-status.json",
+      "evidence_sha256": "6a8bf02684a8282767dc3990257915bdebf80f341696cb56705b91b2b9ddf679"
+    },
+    {
+      "name": "old_path_removal",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/old-path-removal.json",
+      "evidence_sha256": "55a48d8caf856cf1782e183fe2d1062ad5efd724b1f10bebe83065f391fc5673"
+    },
+    {
+      "name": "canonical_non_ipc_after_cleanup",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/old-path-removal-canonical-tests.log",
+      "evidence_sha256": "ebfa3fb3e58e806254adc9e25d8db27e13a09182688275ddfa649f6d9a1aabf0"
+    },
+    {
+      "name": "canonical_ipc_after_cleanup",
+      "status": "PASS",
+      "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/old-path-removal-ipc-tests.log",
+      "evidence_sha256": "f5b290246392e8ad2dd50ebd85b94bc287f8ecb871506384142782c849c0b6bd"
+    }
+  ],
+  "concerns": [
+    "The pinned arm64 Chromium baseline built and passed basic native launch/page/tab checks. MyBrowse overlay, Store, Bitwarden, WebUI/Mojo integration and browser MCP gates remain unverified.",
+    "The x64 standalone C++ socket client passed actual iMac checks. The complete x64 app, bundled Node24 runtime and live agent on iMac remain unverified.",
+    "Muse remote pairing, opencodex routing, signing, notarization, update and final app installation are not integrated.",
+    "The peer UID negative case for another user and repeated native client FD-leak checks have not run.",
+    "CLIrelay re-reviewed the build driver and IPC changes as PASS. This is a source review and does not certify the native app.",
+    "Pi driver tests and a local synthetic provider round trip passed. Shared runtime caching, actual provider auth, safe public error projection, service/UI registration and MCP remain unqualified; Pi is not enabled in the service."
+  ],
+  "execution_state": {
+    "phase": "chromium_baseline_arm64",
+    "state": "completed",
+    "release_ready": false,
+    "note": "BLOCKED는 전체 앱 수락 기준이 아직 미충족이라는 뜻입니다. Xcode 부재 상태가 아닙니다.",
+    "baseline_smoke_verified": true
+  },
+  "pi_integration": {
+    "driver_implemented": true,
+    "standalone_tests_passed": 48,
+    "whole_node_suite_passed": 123,
+    "real_pi_local_synthetic_provider_verified": true,
+    "real_credentials_read": false,
+    "global_pi_configuration_modified": false,
+    "runtime_cache_implemented": false,
+    "service_registered": false,
+    "live_provider_verified": false,
+    "browser_mcp_connected": false,
+    "automatic_update_activated": false
+  },
+  "native_webui": {
+    "overlay_implemented": true,
+    "shadow_gn_verified": true,
+    "resources_verified": true,
+    "custom_cpp_syntax_verified": 9,
+    "sidebar_cpp_syntax_verified": true,
+    "parent_cpp_generated_headers_pending": 3,
+    "full_native_app_built": false
+  },
+  "chromium_baseline": {
+    "arm64_built": true,
+    "native_smoke_verified": true,
+    "mybrowse_overlay_applied": false,
+    "completed_at": "2026-10-14T04:05:01.485Z",
+    "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/chromium-native-smoke.json"
+  },
+  "migration": {
+    "project_name": "bpbrowser",
+    "root": "/Users/jjbyun/SynologyDrive/bpbrowser",
+    "evidence_file": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/bpbrowser-migration.json",
+    "compatibility_paths_retained": false,
+    "canonical_ipc_test_fixture_needs_portability_fix": true,
+    "old_directory_removed": true,
+    "cleanup_evidence": "/Users/jjbyun/SynologyDrive/bpbrowser/app/evidence/old-path-removal.json"
+  }
+}

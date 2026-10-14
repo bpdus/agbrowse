@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MyBrowse</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div id="notice" role="status" class="notice hidden"></div>
+
+  <!-- surface=sidebar: bookmarks and chats only. -->
+  <nav id="sidebar" class="sidebar hidden" aria-label="MyBrowse">
+    <button id="side-home" class="brand" type="button"><span class="brand-mark">m</span> mybrowse</button>
+    <div class="section-heading"><span>북마크</span><button id="side-new-tab" type="button" aria-label="새 탭">＋</button></div>
+    <div id="side-bookmarks" class="side-list"></div>
+    <div class="section-heading"><span>대화</span><button id="side-new-chat" type="button" aria-label="새 대화">＋</button></div>
+    <div id="side-chats" class="side-list chat-list"></div>
+    <div class="host-status"><span class="dot"></span><span id="side-host">로컬 연결 확인</span></div>
+  </nav>
+
+  <!-- surface=home: Search/Ask and recent work. -->
+  <main id="home" class="home-view hidden">
+    <div class="hero">
+      <div class="hero-mark">m</div>
+      <h1>어디서 시작할까요?</h1>
+      <p class="hero-subtitle">웹을 둘러보고, 생각을 이어가세요.</p>
+    </div>
+    <form id="composer" class="composer">
+      <label class="sr-only" for="prompt">검색 또는 질문 입력</label>
+      <textarea id="prompt" rows="2" placeholder="무엇을 도와드릴까요?"></textarea>
+      <div class="composer-bottom">
+        <div class="mode-switch" role="group" aria-label="입력 방식">
+          <button type="button" id="mode-search" aria-pressed="false">Search</button>
+          <button type="button" id="mode-ask" aria-pressed="true">Ask</button>
+        </div>
+        <select id="engine" aria-label="실행기">
+          <option value="codex">Codex CLI</option>
+          <option value="claude">Claude Code</option>
+          <option value="opencodex" disabled>opencodex · 프로필 설정 전</option>
+        </select>
+        <select id="mode" aria-label="작업 종류">
+          <option value="chat">대화</option>
+          <option value="browser" id="mode-browser-option">브라우저 작업</option>
+        </select>
+        <button class="submit" type="submit" id="submit">Ask</button>
+      </div>
+      <p id="capability" class="subtle"></p>
+    </form>
+    <div class="recent-heading"><h2>최근 작업</h2><span id="task-count">0개의 대화</span></div>
+    <div id="recent-tasks" class="recent-grid"></div>
+  </main>
+
+  <!-- ?session=<uuid>: conversation view. -->
+  <section id="conversation" class="conversation hidden">
+    <div class="conversation-heading">
+      <div><p class="eyebrow" id="session-meta">LOCAL SESSION</p><h1 id="session-title">대화</h1></div>
+      <span id="session-status" class="status-badge"></span>
+    </div>
+    <div id="timeline" aria-live="polite"></div>
+    <form id="followup" class="followup">
+      <label class="sr-only" for="followup-text">추가 지시</label>
+      <textarea id="followup-text" rows="2" placeholder="추가 지시를 입력하세요"></textarea>
+      <div class="followup-buttons">
+        <button type="button" data-action="stop">중단</button>
+        <button type="button" data-action="steer">중간 지시</button>
+        <button type="button" data-action="queue">다음 턴 예약</button>
+        <button type="submit" class="submit">이어하기</button>
+      </div>
+    </form>
+  </section>
+</body>
+</html>
