@@ -71,8 +71,12 @@ Worktree directories and branch metadata are created by `/project-branch create-
 
 ```sh
 cd /Users/jjbyun/SynologyDrive/bpbrowser/app
-npm test
+npm run check
 node browser/build.mjs status --work-root /Users/jjbyun/SynologyDrive/bpbrowser/work --json
 ```
 
 Chromium 작업 폴더를 지정하려면 `--work-root`를 사용합니다. 기반 앱을 다시 빌드해도 MyBrowse overlay가 자동으로 적용되지는 않습니다.
+
+현재 기본 경로에서는 npm test 전에 CHORE-02의 IPC 경로 fixture를 수정합니다.
+전체 검사 123개 중 기존 경로 가정 검사 하나를 제외한 122개를 확인했습니다.
+다음 세션의 실행 순서는 app/docs/handoff-2026-10-14.md에 있습니다.

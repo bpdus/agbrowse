@@ -11,8 +11,8 @@ Use this file to find the right local project files. It points to policy and que
 
 - Workspace intent: Use this workspace to move bpbrowser forward through 기존 브라우저 작업 이전 및 저장소 이름 변경.
 - Project intent: Chromium 기반 Mac 브라우저에 좌측 탭과 자율 에이전트 대화를 통합한다. 두 Mac과 Pi 공유 설정을 지원한다.
-- Current active ticket: 없음. 다음 구현 티켓은 FEAT-01입니다.
-- Current next action: FEAT-01의 작업환경에서 Chromium 제품 화면 통합을 이어갑니다.
+- Current active ticket: 없음. 다음 작업은 CHORE-02이며 제품 구현은 FEAT-01입니다.
+- Current next action: CHORE-02의 검사 경로를 수정한 뒤 FEAT-01의 실제 화면 통합을 이어갑니다.
 
 ## Read In This Order
 
@@ -40,7 +40,7 @@ Use this file to find the right local project files. It points to policy and que
 
 After reading the files above, start with:
 
-1. `agent_board.md`에서 FEAT-01과 검증 상태를 확인합니다.
+1. `app/docs/handoff-2026-10-14.md`와 `agent_board.md`에서 CHORE-02 및 FEAT-01의 검증 상태를 확인합니다.
 
 ## Notes
 
@@ -59,3 +59,10 @@ After reading the files above, start with:
 - `resource/plans/imported-2026-10-13/`: 원본 계획 파일입니다.
 
 브라우저 제품 코드는 `app/`에서 실행합니다. 루트의 기존 패키지는 이전 저장소의 브라우저 도구입니다.
+
+## 새 세션 진입점
+
+- `app/docs/handoff-2026-10-14.md`: 확인한 상태와 다음 작업 순서입니다.
+- `resource/plans/resume-2026-10-14.md`: 새 세션에 붙여 넣을 프롬프트입니다.
+- `handoffs/active/2026-10-14-bpbrowser-continuation.md`: 병합 결과와 로컬 실행 환경 기록입니다.
+- `app/browser/branding/`: 원본 아이콘과 다시 적용할 도구입니다.
